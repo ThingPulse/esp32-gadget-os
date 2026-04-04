@@ -5,6 +5,9 @@
 
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
+#elif defined(ARDUINO) && defined(ESP_PLATFORM)
+#include <ColorKitGrande.h>
+static ColorKitGrande lcd;
 #elif defined(ESP_PLATFORM) && !defined(ARDUINO)
 #include <esp_timer.h>
 static LGFX lcd;
@@ -26,6 +29,19 @@ static void lvgl_flush(lv_display_t *d, const lv_area_t *area, uint8_t *px_map)
   lv_display_flush_ready(d);
 }
 
+#if defined(LV_TICK_CUSTOM) && LV_TICK_CUSTOM
+static uint32_t get_tick_ms(void)
+{
+#if defined(ARDUINO)
+  return millis();
+#elif defined(ESP_PLATFORM)
+  return (uint32_t)(esp_timer_get_time() / 1000ULL);
+#else
+  return SDL_GetTicks();
+#endif
+}
+#endif
+
 void setup(void)
 {
   lcd.init();
@@ -37,6 +53,10 @@ void setup(void)
   lv_display_set_buffers(disp, draw_buf, nullptr, sizeof(draw_buf),
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
 
+#if defined(LV_TICK_CUSTOM) && LV_TICK_CUSTOM
+  lv_tick_set_cb(get_tick_ms);
+#endif
+
   lv_obj_t *btn = lv_button_create(lv_screen_active());
   lv_obj_center(btn);
   lv_obj_t *label = lv_label_create(btn);
@@ -45,6 +65,7 @@ void setup(void)
 
 void loop(void)
 {
+#if !defined(LV_TICK_CUSTOM) || !LV_TICK_CUSTOM
   static uint32_t prev_ms = 0;
 #if defined(SDL_h_)
   uint32_t cur_ms = SDL_GetTicks();
@@ -57,6 +78,7 @@ void loop(void)
 #endif
   lv_tick_inc(cur_ms - prev_ms);
   prev_ms = cur_ms;
+#endif
   lv_task_handler();
 }
 
