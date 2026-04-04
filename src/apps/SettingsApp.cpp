@@ -1,5 +1,6 @@
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"
+#include "services/ConfigStoreService.h"
 #include <lvgl.h>
 
 APP_REGISTER("Settings", LV_SYMBOL_SETTINGS, settings_launch);
@@ -53,8 +54,27 @@ static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target
 struct WifiCtx {
   lv_obj_t *content;
   lv_obj_t *kb;
+  lv_obj_t *ssid_input;
+  lv_obj_t *pass_input;
+  lv_obj_t *settings_scr;
 };
 static WifiCtx wifi_ctx;
+
+static void wifi_save_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  if (cfg.load("wifi")) {
+    cfg.set("ssid", std::string(lv_textarea_get_text(wifi_ctx.ssid_input)));
+    const char *password = lv_textarea_get_text(wifi_ctx.pass_input);
+    if (password[0] != '\0')
+      cfg.set("password", std::string(password));
+    cfg.save();
+  }
+
+  lv_screen_load_anim(wifi_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+}
 
 static void wifi_ta_event(lv_event_t *e)
 {
@@ -132,10 +152,19 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  if (cfg.load("wifi")) {
+    std::string ssid = cfg.get("ssid", "");
+    std::string password = cfg.get("password", "");
+    lv_textarea_set_text(ssid_input, ssid.c_str());
+    if (!password.empty())
+      lv_textarea_set_placeholder_text(pass_input, "Saved password");
+  }
+
   lv_obj_t *save_btn = lv_button_create(content);
   lv_obj_set_width(save_btn, lv_pct(100));
   lv_obj_set_height(save_btn, 44);
-  lv_obj_add_event_cb(save_btn, nav_to_target_screen, LV_EVENT_CLICKED, settings_scr);
+  lv_obj_add_event_cb(save_btn, wifi_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
   lv_label_set_text(save_label, "Save");
@@ -151,6 +180,9 @@ static void open_wifi_screen(lv_event_t *e)
 
   wifi_ctx.content = content;
   wifi_ctx.kb = kb;
+  wifi_ctx.ssid_input = ssid_input;
+  wifi_ctx.pass_input = pass_input;
+  wifi_ctx.settings_scr = settings_scr;
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }
