@@ -3,6 +3,7 @@
 #include <LGFX_AUTODETECT.hpp>
 #include <lvgl.h>
 #include "AppRegistry.h"
+#include "ServiceRegistry.h"
 
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
@@ -129,6 +130,8 @@ static uint32_t get_tick_ms(void)
 
 void setup(void)
 {
+  ServiceRegistry::instance().begin_all();
+
   lcd.init();
   lv_init();
 
