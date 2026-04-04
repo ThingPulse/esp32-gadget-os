@@ -2,7 +2,6 @@
 #include <LovyanGFX.h>
 #include <LGFX_AUTODETECT.hpp>
 #include <lvgl.h>
-#include <cstring>
 
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
@@ -18,7 +17,6 @@ static LGFX lcd;
 
 static lv_display_t *disp;
 static uint8_t draw_buf[320 * 20 * 2];
-static lv_obj_t *g_label;
 
 #if defined(SDL_h_) || (defined(ARDUINO) && defined(ESP_PLATFORM))
 static void touch_read(lv_indev_t *indev, lv_indev_data_t *data)
@@ -31,16 +29,62 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data)
 }
 #endif
 
-static void button_event_handler(lv_event_t *e)
+static void create_home_screen(void)
 {
-  if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-    const char *current_text = lv_label_get_text(g_label);
-    if (strcmp(current_text, "Hello") == 0) {
-      lv_label_set_text(g_label, "You");
-    } else {
-      lv_label_set_text(g_label, "Hello");
-    }
-  }
+  lv_obj_t *scr = lv_screen_active();
+  lv_obj_set_style_pad_all(scr, 0, 0);
+  lv_obj_set_style_border_width(scr, 0, 0);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+
+  /* System bar */
+  lv_obj_t *bar = lv_obj_create(scr);
+  lv_obj_set_size(bar, lv_pct(100), 30);
+  lv_obj_set_pos(bar, 0, 0);
+  lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(bar, lv_color_hex(0x14162a), 0);
+  lv_obj_set_style_border_width(bar, 0, 0);
+  lv_obj_set_style_radius(bar, 0, 0);
+  lv_obj_set_style_pad_all(bar, 0, 0);
+
+  lv_obj_t *bar_label = lv_label_create(bar);
+  lv_label_set_text(bar_label, "esp32-gadget-os");
+  lv_obj_set_style_text_color(bar_label, lv_color_white(), 0);
+  lv_obj_align(bar_label, LV_ALIGN_CENTER, 0, 0);
+
+  /* App grid */
+  lv_obj_t *grid = lv_obj_create(scr);
+  lv_obj_set_pos(grid, 0, 30);
+  lv_obj_set_size(grid, lv_pct(100), 450);
+  lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(grid, 0, 0);
+  lv_obj_set_style_pad_all(grid, 10, 0);
+  lv_obj_set_layout(grid, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
+  lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+  /* Settings tile: transparent container holding the icon button + name label */
+  lv_obj_t *tile = lv_obj_create(grid);
+  lv_obj_set_size(tile, 96, 112);
+  lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(tile, 0, 0);
+  lv_obj_set_style_pad_all(tile, 4, 0);
+
+  lv_obj_t *icon_btn = lv_button_create(tile);
+  lv_obj_set_size(icon_btn, 74, 74);
+  lv_obj_align(icon_btn, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_set_style_radius(icon_btn, 18, 0);
+
+  lv_obj_t *icon_label = lv_label_create(icon_btn);
+  lv_label_set_text(icon_label, LV_SYMBOL_SETTINGS);
+  lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_24, 0);
+  lv_obj_center(icon_label);
+
+  lv_obj_t *name_label = lv_label_create(tile);
+  lv_label_set_text(name_label, "Settings");
+  lv_obj_set_style_text_color(name_label, lv_color_white(), 0);
+  lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, 0);
 }
 
 static void lvgl_flush(lv_display_t *d, const lv_area_t *area, uint8_t *px_map)
@@ -82,17 +126,13 @@ void setup(void)
   lv_tick_set_cb(get_tick_ms);
 #endif
 
-  lv_obj_t *btn = lv_button_create(lv_screen_active());
-  lv_obj_center(btn);
-  g_label = lv_label_create(btn);
-  lv_label_set_text(g_label, "Hello");
-  lv_obj_add_event_cb(btn, button_event_handler, LV_EVENT_CLICKED, nullptr);
-
 #if defined(SDL_h_) || (defined(ARDUINO) && defined(ESP_PLATFORM))
   lv_indev_t *touch = lv_indev_create();
   lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
   lv_indev_set_read_cb(touch, touch_read);
 #endif
+
+  create_home_screen();
 }
 
 void loop(void)
