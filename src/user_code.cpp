@@ -2,6 +2,7 @@
 #include <LovyanGFX.h>
 #include <LGFX_AUTODETECT.hpp>
 #include <lvgl.h>
+#include <cstring>
 
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
@@ -17,6 +18,30 @@ static LGFX lcd;
 
 static lv_display_t *disp;
 static uint8_t draw_buf[320 * 20 * 2];
+static lv_obj_t *g_label;
+
+#if defined(SDL_h_) || (defined(ARDUINO) && defined(ESP_PLATFORM))
+static void touch_read(lv_indev_t *indev, lv_indev_data_t *data)
+{
+  lgfx::touch_point_t tp;
+  bool pressed = lcd.getTouch(&tp);
+  data->point.x = tp.x;
+  data->point.y = tp.y;
+  data->state = pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+#endif
+
+static void button_event_handler(lv_event_t *e)
+{
+  if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    const char *current_text = lv_label_get_text(g_label);
+    if (strcmp(current_text, "Hello") == 0) {
+      lv_label_set_text(g_label, "You");
+    } else {
+      lv_label_set_text(g_label, "Hello");
+    }
+  }
+}
 
 static void lvgl_flush(lv_display_t *d, const lv_area_t *area, uint8_t *px_map)
 {
@@ -59,8 +84,15 @@ void setup(void)
 
   lv_obj_t *btn = lv_button_create(lv_screen_active());
   lv_obj_center(btn);
-  lv_obj_t *label = lv_label_create(btn);
-  lv_label_set_text(label, "Hello");
+  g_label = lv_label_create(btn);
+  lv_label_set_text(g_label, "Hello");
+  lv_obj_add_event_cb(btn, button_event_handler, LV_EVENT_CLICKED, nullptr);
+
+#if defined(SDL_h_) || (defined(ARDUINO) && defined(ESP_PLATFORM))
+  lv_indev_t *touch = lv_indev_create();
+  lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
+  lv_indev_set_read_cb(touch, touch_read);
+#endif
 }
 
 void loop(void)
