@@ -2,6 +2,7 @@
 #include <LovyanGFX.h>
 #include <LGFX_AUTODETECT.hpp>
 #include <lvgl.h>
+#include "AppRegistry.h"
 
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
@@ -28,6 +29,15 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data)
   data->state = pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 #endif
+
+static void app_icon_clicked(lv_event_t *e)
+{
+  if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    const App *app = &AppRegistry::instance().apps()[idx];
+    if (app->on_launch) app->on_launch();
+  }
+}
 
 static void create_home_screen(void)
 {
@@ -63,28 +73,34 @@ static void create_home_screen(void)
   lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-  /* Settings tile: transparent container holding the icon button + name label */
-  lv_obj_t *tile = lv_obj_create(grid);
-  lv_obj_set_size(tile, 96, 112);
-  lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(tile, 0, 0);
-  lv_obj_set_style_pad_all(tile, 4, 0);
+  /* App tiles from registry */
+  const AppRegistry &reg = AppRegistry::instance();
+  for (int i = 0; i < reg.count(); i++) {
+    const App &app = reg.apps()[i];
 
-  lv_obj_t *icon_btn = lv_button_create(tile);
-  lv_obj_set_size(icon_btn, 74, 74);
-  lv_obj_align(icon_btn, LV_ALIGN_TOP_MID, 0, 0);
-  lv_obj_set_style_radius(icon_btn, 18, 0);
+    lv_obj_t *tile = lv_obj_create(grid);
+    lv_obj_set_size(tile, 96, 112);
+    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(tile, 0, 0);
+    lv_obj_set_style_pad_all(tile, 4, 0);
 
-  lv_obj_t *icon_label = lv_label_create(icon_btn);
-  lv_label_set_text(icon_label, LV_SYMBOL_SETTINGS);
-  lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_24, 0);
-  lv_obj_center(icon_label);
+    lv_obj_t *icon_btn = lv_button_create(tile);
+    lv_obj_set_size(icon_btn, 74, 74);
+    lv_obj_align(icon_btn, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_radius(icon_btn, 18, 0);
+    lv_obj_add_event_cb(icon_btn, app_icon_clicked, LV_EVENT_CLICKED, (void*)(intptr_t)i);
 
-  lv_obj_t *name_label = lv_label_create(tile);
-  lv_label_set_text(name_label, "Settings");
-  lv_obj_set_style_text_color(name_label, lv_color_white(), 0);
-  lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_t *icon_label = lv_label_create(icon_btn);
+    lv_label_set_text(icon_label, app.symbol);
+    lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_24, 0);
+    lv_obj_center(icon_label);
+
+    lv_obj_t *name_label = lv_label_create(tile);
+    lv_label_set_text(name_label, app.name);
+    lv_obj_set_style_text_color(name_label, lv_color_white(), 0);
+    lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+  }
 }
 
 static void lvgl_flush(lv_display_t *d, const lv_area_t *area, uint8_t *px_map)
