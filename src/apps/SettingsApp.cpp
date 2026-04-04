@@ -4,11 +4,84 @@
 
 APP_REGISTER("Settings", LV_SYMBOL_SETTINGS, settings_launch);
 
+// ── Shared helpers ────────────────────────────────────────────────────────
+
 static void nav_to_target_screen(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
     lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+  }
+}
+
+static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target)
+{
+  lv_obj_t *bar = lv_obj_create(scr);
+  lv_obj_set_size(bar, lv_pct(100), 44);
+  lv_obj_set_pos(bar, 0, 0);
+  lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(bar, lv_color_hex(0x14162a), 0);
+  lv_obj_set_style_border_width(bar, 0, 0);
+  lv_obj_set_style_radius(bar, 0, 0);
+  lv_obj_set_style_pad_all(bar, 0, 0);
+
+  lv_obj_t *back_btn = lv_button_create(bar);
+  lv_obj_set_size(back_btn, 44, 36);
+  lv_obj_align(back_btn, LV_ALIGN_LEFT_MID, 4, 0);
+  lv_obj_set_style_bg_opa(back_btn, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_shadow_width(back_btn, 0, 0);
+  lv_obj_set_style_border_width(back_btn, 0, 0);
+  lv_obj_add_event_cb(back_btn, nav_to_target_screen, LV_EVENT_CLICKED, back_target);
+
+  lv_obj_t *back_label = lv_label_create(back_btn);
+  lv_label_set_text(back_label, LV_SYMBOL_LEFT);
+  lv_obj_set_style_text_color(back_label, lv_color_white(), 0);
+  lv_obj_center(back_label);
+
+  lv_obj_t *lbl = lv_label_create(bar);
+  lv_label_set_text(lbl, title);
+  lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
+  lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+}
+
+// ── WiFi screen ───────────────────────────────────────────────────────────
+
+#define WIFI_KB_HEIGHT 200
+#define WIFI_BAR_HEIGHT 44
+#define WIFI_SCREEN_H 480
+
+struct WifiCtx {
+  lv_obj_t *content;
+  lv_obj_t *kb;
+};
+static WifiCtx wifi_ctx;
+
+static void wifi_ta_event(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *ta = (lv_obj_t *)lv_event_get_target(e);
+
+  if (code == LV_EVENT_FOCUSED) {
+    lv_obj_clear_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(wifi_ctx.kb, ta);
+    lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT - WIFI_KB_HEIGHT);
+    lv_obj_scroll_to_view(ta, LV_ANIM_ON);
+  } else if (code == LV_EVENT_DEFOCUSED) {
+    lv_obj_add_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(wifi_ctx.kb, nullptr);
+    lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  }
+}
+
+static void wifi_kb_event(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+    lv_obj_t *ta = lv_keyboard_get_textarea(wifi_ctx.kb);
+    if (ta) lv_obj_clear_state(ta, LV_STATE_FOCUSED);
+    lv_keyboard_set_textarea(wifi_ctx.kb, nullptr);
+    lv_obj_add_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
 }
 
@@ -24,36 +97,11 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  lv_obj_t *bar = lv_obj_create(scr);
-  lv_obj_set_size(bar, lv_pct(100), 44);
-  lv_obj_set_pos(bar, 0, 0);
-  lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(bar, lv_color_hex(0x14162a), 0);
-  lv_obj_set_style_border_width(bar, 0, 0);
-  lv_obj_set_style_radius(bar, 0, 0);
-  lv_obj_set_style_pad_all(bar, 0, 0);
-
-  lv_obj_t *back_btn = lv_button_create(bar);
-  lv_obj_set_size(back_btn, 44, 36);
-  lv_obj_align(back_btn, LV_ALIGN_LEFT_MID, 4, 0);
-  lv_obj_set_style_bg_opa(back_btn, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_shadow_width(back_btn, 0, 0);
-  lv_obj_set_style_border_width(back_btn, 0, 0);
-  lv_obj_add_event_cb(back_btn, nav_to_target_screen, LV_EVENT_CLICKED, settings_scr);
-
-  lv_obj_t *back_label = lv_label_create(back_btn);
-  lv_label_set_text(back_label, LV_SYMBOL_LEFT);
-  lv_obj_set_style_text_color(back_label, lv_color_white(), 0);
-  lv_obj_center(back_label);
-
-  lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "WiFi");
-  lv_obj_set_style_text_color(title, lv_color_white(), 0);
-  lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
+  make_top_bar(scr, "WiFi", settings_scr);
 
   lv_obj_t *content = lv_obj_create(scr);
-  lv_obj_set_pos(content, 0, 44);
-  lv_obj_set_size(content, lv_pct(100), 436);
+  lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
+  lv_obj_set_size(content, lv_pct(100), WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(content, 0, 0);
   lv_obj_set_style_pad_all(content, 16, 0);
@@ -69,6 +117,8 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_width(ssid_input, lv_pct(100));
   lv_textarea_set_one_line(ssid_input, true);
   lv_textarea_set_placeholder_text(ssid_input, "Enter SSID");
+  lv_obj_add_event_cb(ssid_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
+  lv_obj_add_event_cb(ssid_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
   lv_obj_t *pass_label = lv_label_create(content);
   lv_label_set_text(pass_label, "Password");
@@ -79,6 +129,8 @@ static void open_wifi_screen(lv_event_t *e)
   lv_textarea_set_one_line(pass_input, true);
   lv_textarea_set_password_mode(pass_input, true);
   lv_textarea_set_placeholder_text(pass_input, "Enter password");
+  lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
+  lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
   lv_obj_t *save_btn = lv_button_create(content);
   lv_obj_set_width(save_btn, lv_pct(100));
@@ -88,6 +140,17 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_t *save_label = lv_label_create(save_btn);
   lv_label_set_text(save_label, "Save");
   lv_obj_center(save_label);
+
+  /* On-screen keyboard — hidden until a textarea is focused */
+  lv_obj_t *kb = lv_keyboard_create(scr);
+  lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
+  lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_event_cb(kb, wifi_kb_event, LV_EVENT_READY, nullptr);
+  lv_obj_add_event_cb(kb, wifi_kb_event, LV_EVENT_CANCEL, nullptr);
+
+  wifi_ctx.content = content;
+  wifi_ctx.kb = kb;
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }
@@ -102,33 +165,7 @@ void settings_launch(void)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  /* Top bar with back button and title */
-  lv_obj_t *bar = lv_obj_create(scr);
-  lv_obj_set_size(bar, lv_pct(100), 44);
-  lv_obj_set_pos(bar, 0, 0);
-  lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(bar, lv_color_hex(0x14162a), 0);
-  lv_obj_set_style_border_width(bar, 0, 0);
-  lv_obj_set_style_radius(bar, 0, 0);
-  lv_obj_set_style_pad_all(bar, 0, 0);
-
-  lv_obj_t *back_btn = lv_button_create(bar);
-  lv_obj_set_size(back_btn, 44, 36);
-  lv_obj_align(back_btn, LV_ALIGN_LEFT_MID, 4, 0);
-  lv_obj_set_style_bg_opa(back_btn, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_shadow_width(back_btn, 0, 0);
-  lv_obj_set_style_border_width(back_btn, 0, 0);
-  lv_obj_add_event_cb(back_btn, nav_to_target_screen, LV_EVENT_CLICKED, home_scr);
-
-  lv_obj_t *back_label = lv_label_create(back_btn);
-  lv_label_set_text(back_label, LV_SYMBOL_LEFT);
-  lv_obj_set_style_text_color(back_label, lv_color_white(), 0);
-  lv_obj_center(back_label);
-
-  lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "Settings");
-  lv_obj_set_style_text_color(title, lv_color_white(), 0);
-  lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
+  make_top_bar(scr, "Settings", home_scr);
 
   /* Settings list */
   lv_obj_t *list = lv_obj_create(scr);
