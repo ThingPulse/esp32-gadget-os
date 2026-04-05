@@ -5,6 +5,7 @@
 #include "AppRegistry.h"
 #include "ServiceRegistry.h"
 #include "apps/CalculatorApp.h"
+#include "apps/PlanesApp.h"
 #include "apps/SettingsApp.h"
 #include "apps/WeatherApp.h"
 #include "apps/WeatherIconTestApp.h"
@@ -45,7 +46,7 @@ static void launch_route(const std::string &route)
     return;
   }
 
-  if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather") {
+  if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes") {
     settings_launch_with_route(route.c_str());
     return;
   }
@@ -57,6 +58,11 @@ static void launch_route(const std::string &route)
 
   if (route == "weather_icon_test") {
     weather_icon_test_app_launch();
+    return;
+  }
+
+  if (route == "planes") {
+    planes_app_launch();
     return;
   }
 
@@ -100,6 +106,8 @@ static void app_icon_clicked(lv_event_t *e)
       UiSessionState::set_route("weather");
     } else if (std::strcmp(app->name, "Weather Icons") == 0) {
       UiSessionState::set_route("weather_icon_test");
+    } else if (std::strcmp(app->name, "Planes") == 0) {
+      UiSessionState::set_route("planes");
     } else if (std::strcmp(app->name, "Calculator") == 0) {
       UiSessionState::set_route("calculator");
     }
@@ -230,9 +238,10 @@ void setup(void)
   UiSessionState::begin();
   create_home_screen();
 
-  const std::string route = UiSessionState::current_route();
-  if (route != "home")
-    launch_route(route);
+  // DISABLED: Route persistence - testing if this causes crashes
+  // const std::string route = UiSessionState::current_route();
+  // if (route != "home")
+  //   launch_route(route);
 }
 
 void loop(void)

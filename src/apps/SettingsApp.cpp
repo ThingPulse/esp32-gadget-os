@@ -1,6 +1,7 @@
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"
 #include "services/ConfigStoreService.h"
+#include "services/PlanesService.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
 #include "services/WifiService.h"
@@ -114,6 +115,17 @@ struct WeatherCtx {
   lv_obj_t *guess_result_label;
 };
 static WeatherCtx weather_ctx;
+
+struct PlanesCtx {
+  lv_obj_t *content;
+  lv_obj_t *kb;
+  lv_obj_t *settings_scr;
+  lv_obj_t *lat_input;
+  lv_obj_t *lon_input;
+  lv_obj_t *range_input;
+  lv_obj_t *status_label;
+};
+static PlanesCtx planes_ctx;
 
 static const char *weather_coord_kb_map[] = {
   "1", "2", "3", LV_SYMBOL_BACKSPACE, "\n",
@@ -257,6 +269,7 @@ static void wifi_save_event(lv_event_t *e)
   }
 
   UiSessionState::set_route("settings");
+  if (!wifi_ctx.settings_scr || !lv_obj_is_valid(wifi_ctx.settings_scr)) return;
   lv_screen_load_anim(wifi_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
 }
 
@@ -266,11 +279,15 @@ static void wifi_ta_event(lv_event_t *e)
   lv_obj_t *ta = (lv_obj_t *)lv_event_get_target(e);
 
   if (code == LV_EVENT_FOCUSED) {
+    if (!wifi_ctx.kb || !lv_obj_is_valid(wifi_ctx.kb)) return;
+    if (!wifi_ctx.content || !lv_obj_is_valid(wifi_ctx.content)) return;
     lv_obj_clear_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
     lv_keyboard_set_textarea(wifi_ctx.kb, ta);
     lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT - WIFI_KB_HEIGHT);
     lv_obj_scroll_to_view(ta, LV_ANIM_ON);
   } else if (code == LV_EVENT_DEFOCUSED) {
+    if (!wifi_ctx.kb || !lv_obj_is_valid(wifi_ctx.kb)) return;
+    if (!wifi_ctx.content || !lv_obj_is_valid(wifi_ctx.content)) return;
     lv_obj_add_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
     lv_keyboard_set_textarea(wifi_ctx.kb, nullptr);
     lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
@@ -281,6 +298,8 @@ static void wifi_kb_event(lv_event_t *e)
 {
   lv_event_code_t code = lv_event_get_code(e);
   if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+    if (!wifi_ctx.kb || !lv_obj_is_valid(wifi_ctx.kb)) return;
+    if (!wifi_ctx.content || !lv_obj_is_valid(wifi_ctx.content)) return;
     lv_obj_t *ta = lv_keyboard_get_textarea(wifi_ctx.kb);
     if (ta) lv_obj_clear_state(ta, LV_STATE_FOCUSED);
     lv_keyboard_set_textarea(wifi_ctx.kb, nullptr);
@@ -383,6 +402,7 @@ static void time_save_event(lv_event_t *e)
   TimeService::instance().save_preferences(time_ctx.selected_tz_index, use_24h);
 
   UiSessionState::set_route("settings");
+  if (!time_ctx.settings_scr || !lv_obj_is_valid(time_ctx.settings_scr)) return;
   lv_screen_load_anim(time_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
 }
 
@@ -541,11 +561,15 @@ static void weather_ta_event(lv_event_t *e)
   lv_obj_t *ta = (lv_obj_t *)lv_event_get_target(e);
 
   if (code == LV_EVENT_FOCUSED) {
+    if (!weather_ctx.kb || !lv_obj_is_valid(weather_ctx.kb)) return;
+    if (!weather_ctx.content || !lv_obj_is_valid(weather_ctx.content)) return;
     lv_obj_clear_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
     lv_keyboard_set_textarea(weather_ctx.kb, ta);
     lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT - WIFI_KB_HEIGHT);
     lv_obj_scroll_to_view(ta, LV_ANIM_ON);
   } else if (code == LV_EVENT_DEFOCUSED) {
+    if (!weather_ctx.kb || !lv_obj_is_valid(weather_ctx.kb)) return;
+    if (!weather_ctx.content || !lv_obj_is_valid(weather_ctx.content)) return;
     lv_obj_add_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
     lv_keyboard_set_textarea(weather_ctx.kb, nullptr);
     lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
@@ -556,6 +580,8 @@ static void weather_kb_event(lv_event_t *e)
 {
   lv_event_code_t code = lv_event_get_code(e);
   if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+    if (!weather_ctx.kb || !lv_obj_is_valid(weather_ctx.kb)) return;
+    if (!weather_ctx.content || !lv_obj_is_valid(weather_ctx.content)) return;
     lv_obj_t *ta = lv_keyboard_get_textarea(weather_ctx.kb);
     if (ta) lv_obj_clear_state(ta, LV_STATE_FOCUSED);
     lv_keyboard_set_textarea(weather_ctx.kb, nullptr);
@@ -578,6 +604,7 @@ static void weather_save_event(lv_event_t *e)
   }
 
   UiSessionState::set_route("settings");
+  if (!weather_ctx.settings_scr || !lv_obj_is_valid(weather_ctx.settings_scr)) return;
   lv_screen_load_anim(weather_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
 }
 
@@ -709,6 +736,169 @@ static void open_weather_screen(lv_event_t *e)
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }
 
+static void planes_ta_event(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *ta = (lv_obj_t *)lv_event_get_target(e);
+
+  if (code == LV_EVENT_FOCUSED) {
+    if (!planes_ctx.kb || !lv_obj_is_valid(planes_ctx.kb)) return;
+    if (!planes_ctx.content || !lv_obj_is_valid(planes_ctx.content)) return;
+    lv_obj_clear_flag(planes_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(planes_ctx.kb, ta);
+    lv_obj_set_height(planes_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT - WIFI_KB_HEIGHT);
+    lv_obj_scroll_to_view(ta, LV_ANIM_ON);
+  } else if (code == LV_EVENT_DEFOCUSED) {
+    if (!planes_ctx.kb || !lv_obj_is_valid(planes_ctx.kb)) return;
+    if (!planes_ctx.content || !lv_obj_is_valid(planes_ctx.content)) return;
+    lv_obj_add_flag(planes_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(planes_ctx.kb, nullptr);
+    lv_obj_set_height(planes_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  }
+}
+
+static void planes_kb_event(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+    if (!planes_ctx.kb || !lv_obj_is_valid(planes_ctx.kb)) return;
+    if (!planes_ctx.content || !lv_obj_is_valid(planes_ctx.content)) return;
+    lv_obj_t *ta = lv_keyboard_get_textarea(planes_ctx.kb);
+    if (ta) lv_obj_clear_state(ta, LV_STATE_FOCUSED);
+    lv_keyboard_set_textarea(planes_ctx.kb, nullptr);
+    lv_obj_add_flag(planes_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_height(planes_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  }
+}
+
+static void planes_save_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  if (cfg.load("planes")) {
+    cfg.set("center_latitude", normalize_coord_text(lv_textarea_get_text(planes_ctx.lat_input)));
+    cfg.set("center_longitude", normalize_coord_text(lv_textarea_get_text(planes_ctx.lon_input)));
+    cfg.set("range_km", normalize_coord_text(lv_textarea_get_text(planes_ctx.range_input)));
+    cfg.save();
+    PlanesService::instance().reload_from_config();
+  }
+
+  UiSessionState::set_route("settings");
+  if (!planes_ctx.settings_scr || !lv_obj_is_valid(planes_ctx.settings_scr)) return;
+  lv_screen_load_anim(planes_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+}
+
+static void open_planes_screen(lv_event_t *e)
+{
+  lv_obj_t *settings_scr = nullptr;
+  if (e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  } else {
+    settings_scr = route_restore_settings_screen;
+  }
+  if (!settings_scr) return;
+
+  UiSessionState::set_route("settings_planes");
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(scr, 0, 0);
+  lv_obj_set_style_border_width(scr, 0, 0);
+
+  make_top_bar(scr, "Planes", settings_scr, false);
+
+  lv_obj_t *content = lv_obj_create(scr);
+  lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
+  lv_obj_set_size(content, lv_pct(100), WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(content, 0, 0);
+  lv_obj_set_style_pad_all(content, 16, 0);
+  lv_obj_set_style_pad_row(content, 12, 0);
+  lv_obj_set_layout(content, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+
+  lv_obj_t *lat_label = lv_label_create(content);
+  lv_label_set_text(lat_label, "Center Latitude");
+  lv_obj_set_style_text_color(lat_label, lv_color_white(), 0);
+
+  lv_obj_t *lat_input = lv_textarea_create(content);
+  lv_obj_set_width(lat_input, lv_pct(100));
+  lv_textarea_set_one_line(lat_input, true);
+  lv_textarea_set_accepted_chars(lat_input, "0123456789-.,");
+  lv_textarea_set_placeholder_text(lat_input, "47.37");
+  lv_obj_add_event_cb(lat_input, planes_ta_event, LV_EVENT_FOCUSED, nullptr);
+  lv_obj_add_event_cb(lat_input, planes_ta_event, LV_EVENT_DEFOCUSED, nullptr);
+
+  lv_obj_t *lon_label = lv_label_create(content);
+  lv_label_set_text(lon_label, "Center Longitude");
+  lv_obj_set_style_text_color(lon_label, lv_color_white(), 0);
+
+  lv_obj_t *lon_input = lv_textarea_create(content);
+  lv_obj_set_width(lon_input, lv_pct(100));
+  lv_textarea_set_one_line(lon_input, true);
+  lv_textarea_set_accepted_chars(lon_input, "0123456789-.,");
+  lv_textarea_set_placeholder_text(lon_input, "8.54");
+  lv_obj_add_event_cb(lon_input, planes_ta_event, LV_EVENT_FOCUSED, nullptr);
+  lv_obj_add_event_cb(lon_input, planes_ta_event, LV_EVENT_DEFOCUSED, nullptr);
+
+  lv_obj_t *range_label = lv_label_create(content);
+  lv_label_set_text(range_label, "Visibility Range (km)");
+  lv_obj_set_style_text_color(range_label, lv_color_white(), 0);
+
+  lv_obj_t *range_input = lv_textarea_create(content);
+  lv_obj_set_width(range_input, lv_pct(100));
+  lv_textarea_set_one_line(range_input, true);
+  lv_textarea_set_accepted_chars(range_input, "0123456789.,");
+  lv_textarea_set_placeholder_text(range_input, "30");
+  lv_obj_add_event_cb(range_input, planes_ta_event, LV_EVENT_FOCUSED, nullptr);
+  lv_obj_add_event_cb(range_input, planes_ta_event, LV_EVENT_DEFOCUSED, nullptr);
+
+  lv_obj_t *status_label = lv_label_create(content);
+  lv_label_set_text(status_label, "Used to compute OpenSky bounding box.");
+  lv_obj_set_style_text_color(status_label, lv_color_hex(0xb7bdd7), 0);
+
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  if (cfg.load("planes")) {
+    std::string lat = cfg.get("center_latitude", "");
+    std::string lon = cfg.get("center_longitude", "");
+    std::string range = cfg.get("range_km", "30");
+    lv_textarea_set_text(lat_input, lat.c_str());
+    lv_textarea_set_text(lon_input, lon.c_str());
+    lv_textarea_set_text(range_input, range.c_str());
+  }
+
+  lv_obj_t *save_btn = lv_button_create(content);
+  lv_obj_set_width(save_btn, lv_pct(100));
+  lv_obj_set_height(save_btn, 44);
+  lv_obj_add_event_cb(save_btn, planes_save_event, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t *save_label = lv_label_create(save_btn);
+  lv_label_set_text(save_label, "Save");
+  lv_obj_center(save_label);
+
+  lv_obj_t *kb = lv_keyboard_create(scr);
+  lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
+  lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_USER_1, weather_coord_kb_map, weather_coord_kb_ctrl);
+  lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_USER_1);
+  lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_event_cb(kb, planes_kb_event, LV_EVENT_READY, nullptr);
+  lv_obj_add_event_cb(kb, planes_kb_event, LV_EVENT_CANCEL, nullptr);
+
+  planes_ctx.content = content;
+  planes_ctx.kb = kb;
+  planes_ctx.settings_scr = settings_scr;
+  planes_ctx.lat_input = lat_input;
+  planes_ctx.lon_input = lon_input;
+  planes_ctx.range_input = range_input;
+  planes_ctx.status_label = status_label;
+
+  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+}
+
 static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
 {
   lv_obj_t *scr = lv_obj_create(nullptr);
@@ -799,6 +989,29 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_set_style_text_color(weather_chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(weather_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
+  /* Planes row */
+  lv_obj_t *planes_row = lv_obj_create(list);
+  lv_obj_set_size(planes_row, lv_pct(100), 52);
+  lv_obj_clear_flag(planes_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(planes_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(planes_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(planes_row, 0, 0);
+  lv_obj_set_style_radius(planes_row, 10, 0);
+  lv_obj_set_style_pad_hor(planes_row, 16, 0);
+  lv_obj_set_style_pad_ver(planes_row, 0, 0);
+  lv_obj_add_flag(planes_row, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(planes_row, open_planes_screen, LV_EVENT_CLICKED, scr);
+
+  lv_obj_t *planes_label = lv_label_create(planes_row);
+  lv_label_set_text(planes_label, LV_SYMBOL_GPS "  Planes");
+  lv_obj_set_style_text_color(planes_label, lv_color_white(), 0);
+  lv_obj_align(planes_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *planes_chevron = lv_label_create(planes_row);
+  lv_label_set_text(planes_chevron, LV_SYMBOL_RIGHT);
+  lv_obj_set_style_text_color(planes_chevron, lv_color_hex(0x888888), 0);
+  lv_obj_align(planes_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
+
   return scr;
 }
 
@@ -821,6 +1034,8 @@ void settings_launch_with_route(const char *route)
     open_time_screen(nullptr);
   } else if (std::strcmp(route, "settings_weather") == 0) {
     open_weather_screen(nullptr);
+  } else if (std::strcmp(route, "settings_planes") == 0) {
+    open_planes_screen(nullptr);
   } else {
     UiSessionState::set_route("settings");
     lv_screen_load_anim(settings_scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
