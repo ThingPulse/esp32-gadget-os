@@ -7,6 +7,7 @@
 #include "ui/WeatherIconSet.h"
 
 #include <cstdio>
+#include <ctime>
 #include <string>
 
 APP_REGISTER("Weather", LV_SYMBOL_EYE_OPEN, weather_app_launch);
@@ -15,6 +16,7 @@ namespace {
 
 struct WeatherAppCtx {
   lv_obj_t *screen = nullptr;
+  lv_obj_t *date_label = nullptr;
   lv_obj_t *current_icon = nullptr;
   lv_obj_t *condition_label = nullptr;
   lv_obj_t *temp_label = nullptr;
@@ -84,10 +86,7 @@ static std::string weekday_label_from_iso(const std::string &iso)
   int w = weekday_from_ymd(y, m, d);
   if (w < 0 || w > 6) return short_date(iso);
 
-  std::string out = names[w];
-  out += " ";
-  out += short_date(iso);
-  return out;
+  return names[w];
 }
 
 static void nav_back_event(lv_event_t *e)
@@ -107,12 +106,12 @@ static void weather_app_update_ui()
   WeatherService &weather = WeatherService::instance();
 
   if (!weather.has_weather()) {
-    lv_label_set_text(app_ctx.condition_label, "No weather data yet");
-    lv_label_set_text(app_ctx.temp_label, "Set location in Settings > Weather");
-    lv_label_set_text(app_ctx.humidity_label, "Humidity: --");
-    lv_label_set_text(app_ctx.pressure_label, "Pressure: --");
-    lv_label_set_text(app_ctx.precip_label, "Precipitation: --");
-    lv_label_set_text(app_ctx.wind_label, "Wind: --");
+    lv_label_set_text(app_ctx.condition_label, "No weather data");
+    lv_label_set_text(app_ctx.temp_label, "--");
+    lv_label_set_text(app_ctx.humidity_label, "--");
+    lv_label_set_text(app_ctx.pressure_label, "--");
+    lv_label_set_text(app_ctx.precip_label, "--");
+    lv_label_set_text(app_ctx.wind_label, "--");
 
     for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
       if (app_ctx.forecast_rows[i])
@@ -121,38 +120,46 @@ static void weather_app_update_ui()
     return;
   }
 
-  weather_icon_update(app_ctx.current_icon, weather_icon_kind_from_code(weather.weather_code()), 64);
+  char date_buf[64] = {0};
+  time_t now = time(nullptr);
+  struct tm tm_info {};
+  if (localtime_r(&now, &tm_info)) {
+    strftime(date_buf, sizeof(date_buf), "%A, %d.%m.%Y", &tm_info);
+  } else {
+    std::snprintf(date_buf, sizeof(date_buf), "--, --.--.----");
+  }
+  lv_label_set_text(app_ctx.date_label, date_buf);
+
+  weather_icon_update(app_ctx.current_icon, weather_icon_kind_from_code(weather.weather_code()), 56);
   lv_label_set_text(app_ctx.condition_label, weather_text_for_code(weather.weather_code()));
 
-  char temp_buf[64] = {0};
-  std::snprintf(temp_buf, sizeof(temp_buf), "Temperature: %.1f %c", weather.temperature_value(), weather.is_metric() ? 'C' : 'F');
+  char temp_buf[32] = {0};
+  std::snprintf(temp_buf, sizeof(temp_buf), "%.1f°", weather.temperature_value());
   lv_label_set_text(app_ctx.temp_label, temp_buf);
 
-  char humidity_buf[64] = {0};
-  std::snprintf(humidity_buf, sizeof(humidity_buf), "Humidity: %.0f%%", weather.humidity_value());
+  char humidity_buf[32] = {0};
+  std::snprintf(humidity_buf, sizeof(humidity_buf), "%.0f%%", weather.humidity_value());
   lv_label_set_text(app_ctx.humidity_label, humidity_buf);
 
-  char pressure_buf[64] = {0};
-  std::snprintf(pressure_buf, sizeof(pressure_buf), "Pressure: %.0f hPa", weather.pressure_value());
+  char pressure_buf[32] = {0};
+  std::snprintf(pressure_buf, sizeof(pressure_buf), "%.0f hPa", weather.pressure_value());
   lv_label_set_text(app_ctx.pressure_label, pressure_buf);
 
-  char precip_buf[64] = {0};
-  std::snprintf(precip_buf, sizeof(precip_buf), "Precipitation: %.2f %s", weather.precipitation_value(), weather.is_metric() ? "mm" : "in");
+  char precip_buf[32] = {0};
+  std::snprintf(precip_buf, sizeof(precip_buf), "%.1f %s", weather.precipitation_value(), weather.is_metric() ? "mm" : "in");
   lv_label_set_text(app_ctx.precip_label, precip_buf);
 
-  char wind_buf[96] = {0};
+  char wind_buf[32] = {0};
   std::snprintf(wind_buf,
                 sizeof(wind_buf),
-                "Wind: %.1f %s %s (%.0f deg)",
+                "%.1f %s",
                 weather.wind_speed_value(),
-                weather.is_metric() ? "km/h" : "mph",
-                wind_direction_short(weather.wind_direction_degrees()),
-                weather.wind_direction_degrees());
+                weather.is_metric() ? "km/h" : "mph");
   lv_label_set_text(app_ctx.wind_label, wind_buf);
 
   const WeatherForecastDay *forecast = weather.forecast_days();
   int count = weather.forecast_count();
-  for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
+  for (int i = 0; i < 4 && i < WeatherService::FORECAST_DAYS; ++i) {
     if (!app_ctx.forecast_rows[i]) continue;
 
     if (i >= count || !forecast[i].valid) {
@@ -163,15 +170,14 @@ static void weather_app_update_ui()
     lv_obj_clear_flag(app_ctx.forecast_rows[i], LV_OBJ_FLAG_HIDDEN);
     std::string date_text = weekday_label_from_iso(forecast[i].date);
     lv_label_set_text(app_ctx.forecast_day_labels[i], date_text.c_str());
-    weather_icon_update(app_ctx.forecast_icons[i], weather_icon_kind_from_code(forecast[i].weather_code), 30);
+    weather_icon_update(app_ctx.forecast_icons[i], weather_icon_kind_from_code(forecast[i].weather_code), 40);
 
-    char day_temp_buf[64] = {0};
+    char day_temp_buf[48] = {0};
     std::snprintf(day_temp_buf,
                   sizeof(day_temp_buf),
-                  "Min %.1f / Max %.1f %c",
+                  "%.0f-%.0f°",
                   forecast[i].temp_min,
-                  forecast[i].temp_max,
-                  weather.is_metric() ? 'C' : 'F');
+                  forecast[i].temp_max);
     lv_label_set_text(app_ctx.forecast_temp_labels[i], day_temp_buf);
   }
 }
@@ -247,7 +253,7 @@ void weather_app_launch(void)
 
   lv_obj_t *refresh_btn = lv_button_create(bar);
   lv_obj_set_size(refresh_btn, 74, 32);
-  lv_obj_align(refresh_btn, LV_ALIGN_RIGHT_MID, -4, 0);
+  lv_obj_align(refresh_btn, LV_ALIGN_RIGHT_MID, -34, 0);
   lv_obj_add_event_cb(refresh_btn, weather_app_refresh_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *refresh_lbl = lv_label_create(refresh_btn);
@@ -255,7 +261,7 @@ void weather_app_launch(void)
   lv_obj_center(refresh_lbl);
 
   create_time_status_label(bar, 56);
-  create_wifi_status_icon(bar, -8);
+  create_wifi_status_icon(bar, -6);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, 44);
@@ -263,98 +269,147 @@ void weather_app_launch(void)
   lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(content, 0, 0);
   lv_obj_set_style_pad_all(content, 12, 0);
-  lv_obj_set_style_pad_row(content, 10, 0);
+  lv_obj_set_style_pad_row(content, 8, 0);
   lv_obj_set_layout(content, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
-  lv_obj_t *current_row = lv_obj_create(content);
-  lv_obj_set_size(current_row, lv_pct(100), 96);
-  lv_obj_clear_flag(current_row, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(current_row, lv_color_hex(0x2a2d42), 0);
-  lv_obj_set_style_bg_opa(current_row, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(current_row, 0, 0);
-  lv_obj_set_style_radius(current_row, 10, 0);
-  lv_obj_set_style_pad_all(current_row, 10, 0);
+  // Date and time header
+  lv_obj_t *date_label = lv_label_create(content);
+  lv_obj_set_style_text_color(date_label, lv_color_hex(0xb7bdd7), 0);
+  lv_obj_set_style_text_font(date_label, &lv_font_montserrat_14, 0);
 
-  lv_obj_t *current_icon = weather_icon_create(current_row, WeatherIconKind::Cloudy, 64);
+  lv_obj_t *condition_label = lv_label_create(content);
+  lv_obj_set_style_text_color(condition_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(condition_label, &lv_font_montserrat_14, 0);
+
+  // Current temp and metrics section
+  lv_obj_t *current_section = lv_obj_create(content);
+  lv_obj_set_size(current_section, lv_pct(100), 88);
+  lv_obj_clear_flag(current_section, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(current_section, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(current_section, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(current_section, 0, 0);
+  lv_obj_set_style_radius(current_section, 10, 0);
+  lv_obj_set_style_pad_all(current_section, 12, 0);
+
+  // Left: weather icon
+  lv_obj_t *current_icon = weather_icon_create(current_section, WeatherIconKind::Cloudy, 56);
   lv_obj_align(current_icon, LV_ALIGN_LEFT_MID, 0, 0);
 
-  lv_obj_t *condition_label = lv_label_create(current_row);
-  lv_obj_set_style_text_color(condition_label, lv_color_white(), 0);
-  lv_obj_align(condition_label, LV_ALIGN_TOP_LEFT, 80, 8);
+  // Center: large temperature
+  lv_obj_t *temp_label = lv_label_create(current_section);
+  lv_obj_set_style_text_color(temp_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(temp_label, &lv_font_montserrat_24, 0);
+  lv_obj_align(temp_label, LV_ALIGN_CENTER, -40, 0);
 
-  lv_obj_t *temp_label = lv_label_create(current_row);
-  lv_obj_set_style_text_color(temp_label, lv_color_hex(0xd5e2ff), 0);
-  lv_obj_align(temp_label, LV_ALIGN_TOP_LEFT, 80, 38);
+  // Right side metrics in a column
+  lv_obj_t *humidity_label = lv_label_create(current_section);
+  lv_obj_set_style_text_color(humidity_label, lv_color_hex(0xd5e2ff), 0);
+  lv_obj_set_style_text_font(humidity_label, &lv_font_montserrat_14, 0);
+  lv_obj_align(humidity_label, LV_ALIGN_TOP_RIGHT, -4, 0);
 
-  lv_obj_t *metrics_card = lv_obj_create(content);
-  lv_obj_set_size(metrics_card, lv_pct(100), 136);
-  lv_obj_clear_flag(metrics_card, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(metrics_card, lv_color_hex(0x2a2d42), 0);
-  lv_obj_set_style_bg_opa(metrics_card, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(metrics_card, 0, 0);
-  lv_obj_set_style_radius(metrics_card, 10, 0);
-  lv_obj_set_style_pad_all(metrics_card, 10, 0);
-  lv_obj_set_style_pad_row(metrics_card, 6, 0);
-  lv_obj_set_layout(metrics_card, LV_LAYOUT_FLEX);
-  lv_obj_set_flex_flow(metrics_card, LV_FLEX_FLOW_COLUMN);
+  lv_obj_t *pressure_label = lv_label_create(current_section);
+  lv_obj_set_style_text_color(pressure_label, lv_color_hex(0xd5e2ff), 0);
+  lv_obj_set_style_text_font(pressure_label, &lv_font_montserrat_14, 0);
+  lv_obj_align(pressure_label, LV_ALIGN_RIGHT_MID, -4, 0);
 
-  lv_obj_t *humidity_label = lv_label_create(metrics_card);
-  lv_obj_set_style_text_color(humidity_label, lv_color_white(), 0);
+  lv_obj_t *wind_label = lv_label_create(current_section);
+  lv_obj_set_style_text_color(wind_label, lv_color_hex(0xd5e2ff), 0);
+  lv_obj_set_style_text_font(wind_label, &lv_font_montserrat_14, 0);
+  lv_obj_align(wind_label, LV_ALIGN_BOTTOM_RIGHT, -4, 0);
 
-  lv_obj_t *pressure_label = lv_label_create(metrics_card);
-  lv_obj_set_style_text_color(pressure_label, lv_color_white(), 0);
+  lv_obj_t *precip_label = lv_label_create(current_section);
+  lv_obj_set_style_text_color(precip_label, lv_color_hex(0xd5e2ff), 0);
+  lv_obj_set_style_text_font(precip_label, &lv_font_montserrat_14, 0);
+  lv_obj_align(precip_label, LV_ALIGN_BOTTOM_LEFT, 70, 0);
 
-  lv_obj_t *precip_label = lv_label_create(metrics_card);
-  lv_obj_set_style_text_color(precip_label, lv_color_white(), 0);
-
-  lv_obj_t *wind_label = lv_label_create(metrics_card);
-  lv_obj_set_style_text_color(wind_label, lv_color_white(), 0);
-
-  lv_obj_t *forecast_title = lv_label_create(content);
-  lv_label_set_text(forecast_title, "Next 3 Days");
-  lv_obj_set_style_text_color(forecast_title, lv_color_hex(0xd5e2ff), 0);
-
+  // Forecast grid: 4-day layout
   lv_obj_t *forecast_card = lv_obj_create(content);
-  lv_obj_set_size(forecast_card, lv_pct(100), 168);
+  lv_obj_set_size(forecast_card, lv_pct(100), 110);
   lv_obj_clear_flag(forecast_card, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(forecast_card, lv_color_hex(0x2a2d42), 0);
   lv_obj_set_style_bg_opa(forecast_card, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(forecast_card, 0, 0);
   lv_obj_set_style_radius(forecast_card, 10, 0);
   lv_obj_set_style_pad_all(forecast_card, 8, 0);
-  lv_obj_set_style_pad_row(forecast_card, 6, 0);
   lv_obj_set_layout(forecast_card, LV_LAYOUT_FLEX);
-  lv_obj_set_flex_flow(forecast_card, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_flow(forecast_card, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(forecast_card, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
 
-  for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
-    lv_obj_t *row = lv_obj_create(forecast_card);
-    lv_obj_set_size(row, lv_pct(100), 48);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row, 0, 0);
-    lv_obj_set_style_pad_all(row, 0, 0);
+  // Create 4 forecast columns
+  for (int i = 0; i < 4 && i < WeatherService::FORECAST_DAYS; ++i) {
+    lv_obj_t *col = lv_obj_create(forecast_card);
+    lv_obj_set_size(col, 70, 90);
+    lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(col, 0, 0);
+    lv_obj_set_style_pad_all(col, 4, 0);
+    lv_obj_set_layout(col, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t *day_label = lv_label_create(row);
+    lv_obj_t *day_label = lv_label_create(col);
     lv_obj_set_style_text_color(day_label, lv_color_white(), 0);
     lv_obj_set_style_text_font(day_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(day_label, LV_ALIGN_LEFT_MID, 0, 0);
 
-    lv_obj_t *icon = weather_icon_create(row, WeatherIconKind::Cloudy, 30);
-    lv_obj_align(icon, LV_ALIGN_LEFT_MID, 96, 0);
+    lv_obj_t *icon = weather_icon_create(col, WeatherIconKind::Cloudy, 40);
 
-    lv_obj_t *temp = lv_label_create(row);
+    lv_obj_t *temp = lv_label_create(col);
     lv_obj_set_style_text_color(temp, lv_color_hex(0xd5e2ff), 0);
     lv_obj_set_style_text_font(temp, &lv_font_montserrat_14, 0);
-    lv_obj_align(temp, LV_ALIGN_RIGHT_MID, 0, 0);
 
-    app_ctx.forecast_rows[i] = row;
+    app_ctx.forecast_rows[i] = col;
     app_ctx.forecast_day_labels[i] = day_label;
     app_ctx.forecast_icons[i] = icon;
     app_ctx.forecast_temp_labels[i] = temp;
   }
 
+  lv_obj_t *preview_card = lv_obj_create(content);
+  lv_obj_set_size(preview_card, lv_pct(100), 82);
+  lv_obj_clear_flag(preview_card, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(preview_card, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(preview_card, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(preview_card, 0, 0);
+  lv_obj_set_style_radius(preview_card, 10, 0);
+  lv_obj_set_style_pad_all(preview_card, 8, 0);
+  lv_obj_set_layout(preview_card, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(preview_card, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(preview_card, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+  struct PreviewIconSpec {
+    WeatherIconKind kind;
+    const char *label;
+  };
+
+  const PreviewIconSpec preview_icons[] = {
+      {WeatherIconKind::Clear, "Sun"},
+      {WeatherIconKind::Cloudy, "Cloud"},
+      {WeatherIconKind::Rain, "Rain"},
+      {WeatherIconKind::Snow, "Snow"},
+      {WeatherIconKind::Storm, "Storm"},
+      {WeatherIconKind::Fog, "Fog"},
+  };
+
+  for (const PreviewIconSpec &spec : preview_icons) {
+    lv_obj_t *item = lv_obj_create(preview_card);
+    lv_obj_set_size(item, 46, 62);
+    lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(item, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(item, 0, 0);
+    lv_obj_set_style_pad_all(item, 0, 0);
+    lv_obj_set_layout(item, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(item, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(item, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *icon = weather_icon_create(item, spec.kind, 26);
+    lv_obj_t *label = lv_label_create(item);
+    lv_label_set_text(label, spec.label);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xb7bdd7), 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+  }
+
   app_ctx.screen = scr;
+  app_ctx.date_label = date_label;
   app_ctx.current_icon = current_icon;
   app_ctx.condition_label = condition_label;
   app_ctx.temp_label = temp_label;

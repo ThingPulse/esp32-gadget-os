@@ -29,13 +29,31 @@ lv_obj_t *make_circle(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t d
     return obj;
 }
 
+lv_obj_t *make_ray(lv_obj_t *parent,
+                   lv_coord_t center_x,
+                   lv_coord_t center_y,
+                   lv_coord_t length,
+                   lv_coord_t thickness,
+                   int angle_deg_tenths,
+                   lv_color_t color)
+{
+    lv_obj_t *obj = make_rect(parent, center_x - thickness / 2, center_y - length, thickness, length, color);
+    lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_transform_pivot_x(obj, thickness / 2, 0);
+    lv_obj_set_style_transform_pivot_y(obj, length, 0);
+    lv_obj_set_style_transform_rotation(obj, angle_deg_tenths, 0);
+    return obj;
+}
+
 void draw_cloud(lv_obj_t *root, lv_coord_t size, lv_color_t color)
 {
     lv_coord_t y = size * 5 / 16;
     make_circle(root, size * 2 / 16, y + size * 2 / 16, size * 5 / 16, color);
     make_circle(root, size * 5 / 16, y, size * 6 / 16, color);
     make_circle(root, size * 9 / 16, y + size * 2 / 16, size * 5 / 16, color);
-    make_rect(root, size * 3 / 16, y + size * 5 / 16, size * 9 / 16, size * 4 / 16, color);
+    // Build the lower cloud body with circles so no flat rectangle edge is visible.
+    make_circle(root, size * 4 / 16, y + size * 4 / 16, size * 4 / 16, color);
+    make_circle(root, size * 8 / 16, y + size * 4 / 16, size * 4 / 16, color);
 }
 
 void draw_sun(lv_obj_t *root, lv_coord_t size)
@@ -43,17 +61,18 @@ void draw_sun(lv_obj_t *root, lv_coord_t size)
     lv_color_t sun = lv_color_hex(0xf4c542);
     lv_coord_t c = size / 2;
     lv_coord_t core = size * 6 / 16;
-    lv_coord_t ray = size * 2 / 16;
+    lv_coord_t ray = size * 4 / 16;
+    lv_coord_t thickness = LV_MAX(2, size / 18);
     make_circle(root, c - core / 2, c - core / 2, core, sun);
 
-    make_rect(root, c - 1, 1, 2, ray, sun);
-    make_rect(root, c - 1, size - ray - 1, 2, ray, sun);
-    make_rect(root, 1, c - 1, ray, 2, sun);
-    make_rect(root, size - ray - 1, c - 1, ray, 2, sun);
-    make_rect(root, size * 3 / 16, size * 3 / 16, 2, ray, sun);
-    make_rect(root, size * 11 / 16, size * 11 / 16, 2, ray, sun);
-    make_rect(root, size * 11 / 16, size * 3 / 16, 2, ray, sun);
-    make_rect(root, size * 3 / 16, size * 11 / 16, 2, ray, sun);
+    make_ray(root, c, c, ray, thickness, 0, sun);
+    make_ray(root, c, c, ray, thickness, 450, sun);
+    make_ray(root, c, c, ray, thickness, 900, sun);
+    make_ray(root, c, c, ray, thickness, 1350, sun);
+    make_ray(root, c, c, ray, thickness, 1800, sun);
+    make_ray(root, c, c, ray, thickness, 2250, sun);
+    make_ray(root, c, c, ray, thickness, 2700, sun);
+    make_ray(root, c, c, ray, thickness, 3150, sun);
 }
 
 void draw_rain(lv_obj_t *root, lv_coord_t size)
