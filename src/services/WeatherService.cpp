@@ -149,6 +149,13 @@ const WeatherForecastDay *WeatherService::forecast_days() const
     return _forecast;
 }
 
+bool WeatherService::refresh_now()
+{
+    if (!_configured || !is_wifi_connected())
+        return false;
+    return fetch_and_update();
+}
+
 std::string WeatherService::header_text() const
 {
     if (!_has_weather)

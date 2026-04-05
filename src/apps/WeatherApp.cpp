@@ -25,6 +25,7 @@ struct WeatherAppCtx {
   lv_obj_t *forecast_day_labels[WeatherService::FORECAST_DAYS]{};
   lv_obj_t *forecast_icons[WeatherService::FORECAST_DAYS]{};
   lv_obj_t *forecast_temp_labels[WeatherService::FORECAST_DAYS]{};
+  lv_obj_t *refresh_btn = nullptr;
   lv_timer_t *refresh_timer = nullptr;
 };
 
@@ -54,6 +55,38 @@ static std::string short_date(const std::string &iso)
 {
   if (iso.size() >= 10) return iso.substr(5, 5);
   return iso;
+}
+
+static int weekday_from_ymd(int y, int m, int d)
+{
+  if (m < 3) {
+    m += 12;
+    y -= 1;
+  }
+  int k = y % 100;
+  int j = y / 100;
+  int h = (d + (13 * (m + 1)) / 5 + k + k / 4 + j / 4 + (5 * j)) % 7;
+  return (h + 6) % 7;  // 0=Sun .. 6=Sat
+}
+
+static std::string weekday_label_from_iso(const std::string &iso)
+{
+  if (iso.size() < 10) return iso;
+
+  int y = 0;
+  int m = 0;
+  int d = 0;
+  if (std::sscanf(iso.c_str(), "%d-%d-%d", &y, &m, &d) != 3)
+    return short_date(iso);
+
+  static const char *names[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  int w = weekday_from_ymd(y, m, d);
+  if (w < 0 || w > 6) return short_date(iso);
+
+  std::string out = names[w];
+  out += " ";
+  out += short_date(iso);
+  return out;
 }
 
 static void nav_back_event(lv_event_t *e)
@@ -125,9 +158,9 @@ static void weather_app_update_ui()
     }
 
     lv_obj_clear_flag(app_ctx.forecast_rows[i], LV_OBJ_FLAG_HIDDEN);
-    std::string date_text = short_date(forecast[i].date);
+    std::string date_text = weekday_label_from_iso(forecast[i].date);
     lv_label_set_text(app_ctx.forecast_day_labels[i], date_text.c_str());
-    weather_icon_update(app_ctx.forecast_icons[i], weather_icon_kind_from_code(forecast[i].weather_code), 24);
+    weather_icon_update(app_ctx.forecast_icons[i], weather_icon_kind_from_code(forecast[i].weather_code), 30);
 
     char day_temp_buf[64] = {0};
     std::snprintf(day_temp_buf,
@@ -143,6 +176,18 @@ static void weather_app_update_ui()
 static void weather_app_timer_cb(lv_timer_t *timer)
 {
   (void)timer;
+  weather_app_update_ui();
+}
+
+static void weather_app_refresh_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  if (app_ctx.condition_label)
+    lv_label_set_text(app_ctx.condition_label, "Refreshing...");
+  lv_refr_now(nullptr);
+
+  WeatherService::instance().refresh_now();
   weather_app_update_ui();
 }
 
@@ -195,6 +240,15 @@ void weather_app_launch(void)
   lv_label_set_text(title, "Weather");
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
+
+  lv_obj_t *refresh_btn = lv_button_create(bar);
+  lv_obj_set_size(refresh_btn, 74, 32);
+  lv_obj_align(refresh_btn, LV_ALIGN_RIGHT_MID, -4, 0);
+  lv_obj_add_event_cb(refresh_btn, weather_app_refresh_event, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t *refresh_lbl = lv_label_create(refresh_btn);
+  lv_label_set_text(refresh_lbl, "Refresh");
+  lv_obj_center(refresh_lbl);
 
   create_time_status_label(bar, 56);
   create_wifi_status_icon(bar, -8);
@@ -258,7 +312,7 @@ void weather_app_launch(void)
   lv_obj_set_style_text_color(forecast_title, lv_color_hex(0xd5e2ff), 0);
 
   lv_obj_t *forecast_card = lv_obj_create(content);
-  lv_obj_set_size(forecast_card, lv_pct(100), 150);
+  lv_obj_set_size(forecast_card, lv_pct(100), 168);
   lv_obj_clear_flag(forecast_card, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(forecast_card, lv_color_hex(0x2a2d42), 0);
   lv_obj_set_style_bg_opa(forecast_card, LV_OPA_COVER, 0);
@@ -271,7 +325,7 @@ void weather_app_launch(void)
 
   for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
     lv_obj_t *row = lv_obj_create(forecast_card);
-    lv_obj_set_size(row, lv_pct(100), 40);
+    lv_obj_set_size(row, lv_pct(100), 48);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row, 0, 0);
@@ -279,13 +333,15 @@ void weather_app_launch(void)
 
     lv_obj_t *day_label = lv_label_create(row);
     lv_obj_set_style_text_color(day_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(day_label, &lv_font_montserrat_14, 0);
     lv_obj_align(day_label, LV_ALIGN_LEFT_MID, 0, 0);
 
-    lv_obj_t *icon = weather_icon_create(row, WeatherIconKind::Cloudy, 24);
-    lv_obj_align(icon, LV_ALIGN_LEFT_MID, 62, 0);
+    lv_obj_t *icon = weather_icon_create(row, WeatherIconKind::Cloudy, 30);
+    lv_obj_align(icon, LV_ALIGN_LEFT_MID, 96, 0);
 
     lv_obj_t *temp = lv_label_create(row);
     lv_obj_set_style_text_color(temp, lv_color_hex(0xd5e2ff), 0);
+    lv_obj_set_style_text_font(temp, &lv_font_montserrat_14, 0);
     lv_obj_align(temp, LV_ALIGN_RIGHT_MID, 0, 0);
 
     app_ctx.forecast_rows[i] = row;
@@ -302,6 +358,7 @@ void weather_app_launch(void)
   app_ctx.pressure_label = pressure_label;
   app_ctx.precip_label = precip_label;
   app_ctx.wind_label = wind_label;
+  app_ctx.refresh_btn = refresh_btn;
   app_ctx.refresh_timer = lv_timer_create(weather_app_timer_cb, 5000, nullptr);
 
   weather_app_update_ui();

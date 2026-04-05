@@ -35,6 +35,7 @@ public:
     float wind_direction_degrees() const;
     int forecast_count() const;
     const WeatherForecastDay *forecast_days() const;
+    bool refresh_now();
 
 private:
     static void on_wifi_connected(const SystemEvent &event, void *user_data);
