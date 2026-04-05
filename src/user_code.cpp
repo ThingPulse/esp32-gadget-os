@@ -7,6 +7,7 @@
 #include "apps/CalculatorApp.h"
 #include "apps/SettingsApp.h"
 #include "apps/WeatherApp.h"
+#include "apps/WeatherIconTestApp.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
 #include "ui/UiSessionState.h"
@@ -54,6 +55,11 @@ static void launch_route(const std::string &route)
     return;
   }
 
+  if (route == "weather_icon_test") {
+    weather_icon_test_app_launch();
+    return;
+  }
+
   if (route == "calculator") {
     calculator_app_launch();
     return;
@@ -82,6 +88,8 @@ static void app_icon_clicked(lv_event_t *e)
       UiSessionState::set_route("settings");
     } else if (std::strcmp(app->name, "Weather") == 0) {
       UiSessionState::set_route("weather");
+    } else if (std::strcmp(app->name, "Weather Icons") == 0) {
+      UiSessionState::set_route("weather_icon_test");
     } else if (std::strcmp(app->name, "Calculator") == 0) {
       UiSessionState::set_route("calculator");
     }
@@ -120,9 +128,11 @@ static void create_home_screen(void)
   lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(grid, 0, 0);
   lv_obj_set_style_pad_all(grid, 10, 0);
+  lv_obj_set_style_pad_column(grid, 4, 0);
+  lv_obj_set_style_pad_row(grid, 10, 0);
   lv_obj_set_layout(grid, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
-  lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
   /* App tiles from registry */
   const AppRegistry &reg = AppRegistry::instance();
@@ -130,14 +140,14 @@ static void create_home_screen(void)
     const App &app = reg.apps()[i];
 
     lv_obj_t *tile = lv_obj_create(grid);
-    lv_obj_set_size(tile, 96, 112);
+    lv_obj_set_size(tile, 88, 112);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(tile, 0, 0);
-    lv_obj_set_style_pad_all(tile, 4, 0);
+    lv_obj_set_style_pad_all(tile, 2, 0);
 
     lv_obj_t *icon_btn = lv_button_create(tile);
-    lv_obj_set_size(icon_btn, 74, 74);
+    lv_obj_set_size(icon_btn, 68, 68);
     lv_obj_align(icon_btn, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_radius(icon_btn, 18, 0);
     lv_obj_add_event_cb(icon_btn, app_icon_clicked, LV_EVENT_CLICKED, (void*)(intptr_t)i);

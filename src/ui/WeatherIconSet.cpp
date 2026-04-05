@@ -29,31 +29,63 @@ lv_obj_t *make_circle(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t d
     return obj;
 }
 
-lv_obj_t *make_ray(lv_obj_t *parent,
-                   lv_coord_t center_x,
-                   lv_coord_t center_y,
-                   lv_coord_t length,
-                   lv_coord_t thickness,
-                   int angle_deg_tenths,
-                   lv_color_t color)
+static void line_points_deleted(lv_event_t *e)
 {
-    lv_obj_t *obj = make_rect(parent, center_x - thickness / 2, center_y - length, thickness, length, color);
-    lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_transform_pivot_x(obj, thickness / 2, 0);
-    lv_obj_set_style_transform_pivot_y(obj, length, 0);
-    lv_obj_set_style_transform_rotation(obj, angle_deg_tenths, 0);
-    return obj;
+    void *points = lv_event_get_user_data(e);
+    if(points) lv_free(points);
+}
+
+lv_obj_t *make_line(lv_obj_t *parent,
+                    lv_coord_t size,
+                    lv_coord_t x1,
+                    lv_coord_t y1,
+                    lv_coord_t x2,
+                    lv_coord_t y2,
+                    lv_coord_t width,
+                    lv_color_t color)
+{
+    lv_point_precise_t *points = static_cast<lv_point_precise_t *>(lv_malloc(sizeof(lv_point_precise_t) * 2));
+    if(!points) return nullptr;
+
+    points[0] = {x1, y1};
+    points[1] = {x2, y2};
+
+    lv_obj_t *line = lv_line_create(parent);
+    style_base(line);
+    lv_obj_set_pos(line, 0, 0);
+    lv_obj_set_size(line, size, size);
+    lv_line_set_points(line, points, 2);
+    lv_obj_set_style_line_width(line, width, 0);
+    lv_obj_set_style_line_color(line, color, 0);
+    lv_obj_set_style_line_rounded(line, true, 0);
+    lv_obj_add_event_cb(line, line_points_deleted, LV_EVENT_DELETE, points);
+    return line;
 }
 
 void draw_cloud(lv_obj_t *root, lv_coord_t size, lv_color_t color)
 {
     lv_coord_t y = size * 5 / 16;
-    make_circle(root, size * 2 / 16, y + size * 2 / 16, size * 5 / 16, color);
-    make_circle(root, size * 5 / 16, y, size * 6 / 16, color);
-    make_circle(root, size * 9 / 16, y + size * 2 / 16, size * 5 / 16, color);
-    // Build the lower cloud body with circles so no flat rectangle edge is visible.
-    make_circle(root, size * 4 / 16, y + size * 4 / 16, size * 4 / 16, color);
-    make_circle(root, size * 8 / 16, y + size * 4 / 16, size * 4 / 16, color);
+    const lv_coord_t side_d = (size * 5 + 8) / 16;
+    const lv_coord_t mid_d = (size * 6 + 8) / 16;
+    const lv_coord_t left_x = (size * 2 + 8) / 16;
+    const lv_coord_t mid_x = (size * 5 + 8) / 16;
+    const lv_coord_t right_x = (size * 9 + 8) / 16;
+    const lv_coord_t side_y = y + (size * 2 + 8) / 16;
+
+    make_circle(root, left_x, side_y, side_d, color);
+    make_circle(root, mid_x, y, mid_d, color);
+    make_circle(root, right_x, side_y, side_d, color);
+
+    // Bridge the side circles using their centers so the body stays flat without dropping too low.
+    const lv_coord_t left_center_x = left_x + side_d / 2;
+    const lv_coord_t right_center_x = right_x + side_d / 2;
+    const lv_coord_t side_center_y = side_y + side_d / 2;
+    make_rect(root,
+              left_center_x,
+              side_center_y - side_d / 2,
+              right_center_x - left_center_x,
+              side_d,
+              color);
 }
 
 void draw_sun(lv_obj_t *root, lv_coord_t size)
@@ -63,16 +95,18 @@ void draw_sun(lv_obj_t *root, lv_coord_t size)
     lv_coord_t core = size * 6 / 16;
     lv_coord_t ray = size * 4 / 16;
     lv_coord_t thickness = LV_MAX(2, size / 18);
-    make_circle(root, c - core / 2, c - core / 2, core, sun);
+    lv_coord_t diag = (ray * 707 + 500) / 1000;
 
-    make_ray(root, c, c, ray, thickness, 0, sun);
-    make_ray(root, c, c, ray, thickness, 450, sun);
-    make_ray(root, c, c, ray, thickness, 900, sun);
-    make_ray(root, c, c, ray, thickness, 1350, sun);
-    make_ray(root, c, c, ray, thickness, 1800, sun);
-    make_ray(root, c, c, ray, thickness, 2250, sun);
-    make_ray(root, c, c, ray, thickness, 2700, sun);
-    make_ray(root, c, c, ray, thickness, 3150, sun);
+    make_line(root, size, c, c, c, c - ray, thickness, sun);
+    make_line(root, size, c, c, c + diag, c - diag, thickness, sun);
+    make_line(root, size, c, c, c + ray, c, thickness, sun);
+    make_line(root, size, c, c, c + diag, c + diag, thickness, sun);
+    make_line(root, size, c, c, c, c + ray, thickness, sun);
+    make_line(root, size, c, c, c - diag, c + diag, thickness, sun);
+    make_line(root, size, c, c, c - ray, c, thickness, sun);
+    make_line(root, size, c, c, c - diag, c - diag, thickness, sun);
+
+    make_circle(root, c - core / 2, c - core / 2, core, sun);
 }
 
 void draw_rain(lv_obj_t *root, lv_coord_t size)

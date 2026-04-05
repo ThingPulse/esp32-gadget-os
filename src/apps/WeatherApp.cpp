@@ -364,50 +364,6 @@ void weather_app_launch(void)
     app_ctx.forecast_temp_labels[i] = temp;
   }
 
-  lv_obj_t *preview_card = lv_obj_create(content);
-  lv_obj_set_size(preview_card, lv_pct(100), 82);
-  lv_obj_clear_flag(preview_card, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(preview_card, lv_color_hex(0x2a2d42), 0);
-  lv_obj_set_style_bg_opa(preview_card, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(preview_card, 0, 0);
-  lv_obj_set_style_radius(preview_card, 10, 0);
-  lv_obj_set_style_pad_all(preview_card, 8, 0);
-  lv_obj_set_layout(preview_card, LV_LAYOUT_FLEX);
-  lv_obj_set_flex_flow(preview_card, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(preview_card, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-  struct PreviewIconSpec {
-    WeatherIconKind kind;
-    const char *label;
-  };
-
-  const PreviewIconSpec preview_icons[] = {
-      {WeatherIconKind::Clear, "Sun"},
-      {WeatherIconKind::Cloudy, "Cloud"},
-      {WeatherIconKind::Rain, "Rain"},
-      {WeatherIconKind::Snow, "Snow"},
-      {WeatherIconKind::Storm, "Storm"},
-      {WeatherIconKind::Fog, "Fog"},
-  };
-
-  for (const PreviewIconSpec &spec : preview_icons) {
-    lv_obj_t *item = lv_obj_create(preview_card);
-    lv_obj_set_size(item, 46, 62);
-    lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(item, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(item, 0, 0);
-    lv_obj_set_style_pad_all(item, 0, 0);
-    lv_obj_set_layout(item, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(item, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(item, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *icon = weather_icon_create(item, spec.kind, 26);
-    lv_obj_t *label = lv_label_create(item);
-    lv_label_set_text(label, spec.label);
-    lv_obj_set_style_text_color(label, lv_color_hex(0xb7bdd7), 0);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-  }
-
   app_ctx.screen = scr;
   app_ctx.date_label = date_label;
   app_ctx.current_icon = current_icon;
