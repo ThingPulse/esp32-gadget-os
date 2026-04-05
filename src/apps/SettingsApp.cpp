@@ -68,10 +68,12 @@ static WifiCtx wifi_ctx;
 
 struct TimeCtx {
   lv_obj_t *settings_scr;
-  lv_obj_t *timezone_dd;
+  lv_obj_t *timezone_roller;
   lv_obj_t *fmt_switch;
+  int selected_tz_index;
 };
 static TimeCtx time_ctx;
+static std::string timezone_options_cache;
 
 static void wifi_save_event(lv_event_t *e)
 {
@@ -202,11 +204,17 @@ static void time_save_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
-  uint16_t tz_index = lv_dropdown_get_selected(time_ctx.timezone_dd);
   bool use_24h = lv_obj_has_state(time_ctx.fmt_switch, LV_STATE_CHECKED);
-  TimeService::instance().save_preferences((int)tz_index, use_24h);
+  TimeService::instance().save_preferences(time_ctx.selected_tz_index, use_24h);
 
   lv_screen_load_anim(time_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+}
+
+static void timezone_changed_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+  lv_obj_t *roller = (lv_obj_t *)lv_event_get_target(e);
+  time_ctx.selected_tz_index = (int)lv_roller_get_selected(roller);
 }
 
 static void open_time_screen(lv_event_t *e)
@@ -238,15 +246,19 @@ static void open_time_screen(lv_event_t *e)
   lv_label_set_text(tz_label, "Timezone");
   lv_obj_set_style_text_color(tz_label, lv_color_white(), 0);
 
-  lv_obj_t *tz_dd = lv_dropdown_create(content);
-  lv_obj_set_width(tz_dd, lv_pct(100));
-  std::string options;
-  for (int i = 0; i < TimeService::timezone_count(); ++i) {
-    if (i > 0) options += "\n";
-    options += TimeService::timezone_name(i);
+  lv_obj_t *tz_roller = lv_roller_create(content);
+  lv_obj_set_width(tz_roller, lv_pct(100));
+  lv_obj_set_height(tz_roller, 120);
+  if (timezone_options_cache.empty()) {
+    for (int i = 0; i < TimeService::timezone_count(); ++i) {
+      if (i > 0) timezone_options_cache += "\n";
+      timezone_options_cache += TimeService::timezone_name(i);
+    }
   }
-  lv_dropdown_set_options(tz_dd, options.c_str());
-  lv_dropdown_set_selected(tz_dd, (uint16_t)time_service.timezone_index());
+  lv_roller_set_options(tz_roller, timezone_options_cache.c_str(), LV_ROLLER_MODE_NORMAL);
+  lv_roller_set_visible_row_count(tz_roller, 4);
+  lv_roller_set_selected(tz_roller, (uint16_t)time_service.timezone_index(), LV_ANIM_OFF);
+  lv_obj_add_event_cb(tz_roller, timezone_changed_event, LV_EVENT_VALUE_CHANGED, nullptr);
 
   lv_obj_t *fmt_row = lv_obj_create(content);
   lv_obj_set_size(fmt_row, lv_pct(100), 52);
@@ -280,8 +292,9 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_center(save_label);
 
   time_ctx.settings_scr = settings_scr;
-  time_ctx.timezone_dd = tz_dd;
+  time_ctx.timezone_roller = tz_roller;
   time_ctx.fmt_switch = fmt_switch;
+  time_ctx.selected_tz_index = time_service.timezone_index();
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }
