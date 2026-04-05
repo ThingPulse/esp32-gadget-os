@@ -5,7 +5,16 @@
 #include "services/WeatherService.h"
 #include "services/WifiService.h"
 #include "ui/StatusIcons.h"
+#include <ArduinoJson.h>
 #include <lvgl.h>
+
+#include <cstdio>
+
+#if defined(ARDUINO)
+#include <HTTPClient.h>
+#include <WiFiClient.h>
+#include <WiFi.h>
+#endif
 
 APP_REGISTER("Settings", LV_SYMBOL_SETTINGS, settings_launch);
 
@@ -86,6 +95,7 @@ struct WeatherCtx {
   lv_obj_t *lat_input;
   lv_obj_t *lon_input;
   lv_obj_t *unit_switch;
+  lv_obj_t *guess_result_label;
 };
 static WeatherCtx weather_ctx;
 
@@ -110,6 +120,110 @@ static std::string normalize_coord_text(const char *text)
     if (out[i] == ',') out[i] = '.';
   }
   return out;
+}
+
+static bool fetch_ip_location(double &lat, double &lon, std::string &city, std::string &region, std::string &error)
+{
+  std::string payload;
+
+#if defined(ARDUINO)
+  WiFiClient client;
+  HTTPClient http;
+  if (!http.begin(client, "http://ip-api.com/json")) {
+    error = "HTTP begin failed";
+    return false;
+  }
+
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    error = "HTTP error";
+    http.end();
+    return false;
+  }
+
+  payload = http.getString().c_str();
+  http.end();
+#else
+  FILE *pipe = popen("curl -s --max-time 8 \"http://ip-api.com/json\"", "r");
+  if (!pipe) {
+    error = "Cannot run curl";
+    return false;
+  }
+
+  char buffer[256];
+  while (fgets(buffer, sizeof(buffer), pipe))
+    payload += buffer;
+
+  int rc = pclose(pipe);
+  if (rc != 0 || payload.empty()) {
+    error = "Network request failed";
+    return false;
+  }
+#endif
+
+  JsonDocument doc;
+  if (deserializeJson(doc, payload.c_str(), payload.size()) != DeserializationError::Ok) {
+    error = "Bad JSON response";
+    return false;
+  }
+
+  std::string status = doc["status"].as<std::string>();
+  if (status != "success") {
+    std::string msg = doc["message"].as<std::string>();
+    error = msg.empty() ? "Lookup failed" : msg;
+    return false;
+  }
+
+  lat = doc["lat"].as<double>();
+  lon = doc["lon"].as<double>();
+  city = doc["city"].as<std::string>();
+  region = doc["regionName"].as<std::string>();
+
+  return true;
+}
+
+static void weather_guess_location_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  if (!weather_ctx.lat_input || !weather_ctx.lon_input || !weather_ctx.guess_result_label) return;
+
+  lv_label_set_text(weather_ctx.guess_result_label, "Guessing location...");
+  lv_refr_now(nullptr);
+
+  double lat = 0.0;
+  double lon = 0.0;
+  std::string city;
+  std::string region;
+  std::string error;
+
+  if (!fetch_ip_location(lat, lon, city, region, error)) {
+    std::string label = "Location guess failed";
+    if (!error.empty()) {
+      label += ": ";
+      label += error;
+    }
+    lv_label_set_text(weather_ctx.guess_result_label, label.c_str());
+    return;
+  }
+
+  char lat_buf[24] = {0};
+  char lon_buf[24] = {0};
+  std::snprintf(lat_buf, sizeof(lat_buf), "%.6f", lat);
+  std::snprintf(lon_buf, sizeof(lon_buf), "%.6f", lon);
+  lv_textarea_set_text(weather_ctx.lat_input, lat_buf);
+  lv_textarea_set_text(weather_ctx.lon_input, lon_buf);
+
+  std::string place = city;
+  if (!region.empty()) {
+    if (!place.empty()) place += ", ";
+    place += region;
+  }
+  if (place.empty()) place = "unknown location";
+
+  std::string label = "Guessed: ";
+  label += place;
+  lv_label_set_text(weather_ctx.guess_result_label, label.c_str());
 }
 
 static void wifi_save_event(lv_event_t *e)
@@ -481,6 +595,19 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_add_event_cb(lon_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(lon_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
+  lv_obj_t *guess_btn = lv_button_create(content);
+  lv_obj_set_width(guess_btn, lv_pct(100));
+  lv_obj_set_height(guess_btn, 44);
+  lv_obj_add_event_cb(guess_btn, weather_guess_location_event, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t *guess_label = lv_label_create(guess_btn);
+  lv_label_set_text(guess_label, "Guess from IP");
+  lv_obj_center(guess_label);
+
+  lv_obj_t *guess_result_label = lv_label_create(content);
+  lv_label_set_text(guess_result_label, "");
+  lv_obj_set_style_text_color(guess_result_label, lv_color_hex(0xb7bdd7), 0);
+
   lv_obj_t *unit_row = lv_obj_create(content);
   lv_obj_set_size(unit_row, lv_pct(100), 52);
   lv_obj_clear_flag(unit_row, LV_OBJ_FLAG_SCROLLABLE);
@@ -536,6 +663,7 @@ static void open_weather_screen(lv_event_t *e)
   weather_ctx.lat_input = lat_input;
   weather_ctx.lon_input = lon_input;
   weather_ctx.unit_switch = unit_switch;
+  weather_ctx.guess_result_label = guess_result_label;
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }
