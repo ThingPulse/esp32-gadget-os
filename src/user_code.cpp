@@ -4,9 +4,15 @@
 #include <lvgl.h>
 #include "AppRegistry.h"
 #include "ServiceRegistry.h"
+#include "apps/CalculatorApp.h"
+#include "apps/SettingsApp.h"
+#include "apps/WeatherApp.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
+#include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
+
+#include <cstring>
 
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
@@ -22,6 +28,39 @@ static LGFX lcd;
 
 static lv_display_t *disp;
 static uint8_t draw_buf[320 * 20 * 2];
+static lv_obj_t *home_screen = nullptr;
+
+static void launch_route(const std::string &route)
+{
+  if (route == "home") {
+    if (home_screen && lv_obj_is_valid(home_screen))
+      lv_screen_load(home_screen);
+    UiSessionState::set_route("home");
+    return;
+  }
+
+  if (route == "settings") {
+    settings_launch();
+    return;
+  }
+
+  if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather") {
+    settings_launch_with_route(route.c_str());
+    return;
+  }
+
+  if (route == "weather") {
+    weather_app_launch();
+    return;
+  }
+
+  if (route == "calculator") {
+    calculator_app_launch();
+    return;
+  }
+
+  UiSessionState::set_route("home");
+}
 
 #if defined(SDL_h_) || (defined(ARDUINO) && defined(ESP_PLATFORM))
 static void touch_read(lv_indev_t *indev, lv_indev_data_t *data)
@@ -39,6 +78,13 @@ static void app_icon_clicked(lv_event_t *e)
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     const App *app = &AppRegistry::instance().apps()[idx];
+    if (std::strcmp(app->name, "Settings") == 0) {
+      UiSessionState::set_route("settings");
+    } else if (std::strcmp(app->name, "Weather") == 0) {
+      UiSessionState::set_route("weather");
+    } else if (std::strcmp(app->name, "Calculator") == 0) {
+      UiSessionState::set_route("calculator");
+    }
     if (app->on_launch) app->on_launch();
   }
 }
@@ -46,6 +92,7 @@ static void app_icon_clicked(lv_event_t *e)
 static void create_home_screen(void)
 {
   lv_obj_t *scr = lv_screen_active();
+  home_screen = scr;
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -154,7 +201,12 @@ void setup(void)
   lv_indev_set_read_cb(touch, touch_read);
 #endif
 
+  UiSessionState::begin();
   create_home_screen();
+
+  const std::string route = UiSessionState::current_route();
+  if (route != "home")
+    launch_route(route);
 }
 
 void loop(void)

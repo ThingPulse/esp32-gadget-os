@@ -2,6 +2,7 @@
 
 #include "AppRegistry.h"
 #include "ui/StatusIcons.h"
+#include "ui/UiSessionState.h"
 
 #include <cmath>
 #include <cstdio>
@@ -27,7 +28,9 @@ static CalculatorCtx calc_ctx;
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
+    if (!target_scr || !lv_obj_is_valid(target_scr)) return;
     lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
   }
 }
@@ -255,6 +258,7 @@ static lv_obj_t *create_calc_btn(lv_obj_t *parent,
 
 void calculator_app_launch(void)
 {
+  UiSessionState::set_route("calculator");
   lv_obj_t *home_scr = lv_screen_active();
 
   lv_obj_t *scr = lv_obj_create(nullptr);

@@ -4,11 +4,13 @@
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
 #include "services/WifiService.h"
+#include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
 #include <ArduinoJson.h>
 #include <lvgl.h>
 
 #include <cstdio>
+#include <cstring>
 
 #if defined(ARDUINO)
 #include <HTTPClient.h>
@@ -20,15 +22,29 @@ APP_REGISTER("Settings", LV_SYMBOL_SETTINGS, settings_launch);
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
-static void nav_to_target_screen(lv_event_t *e)
+static lv_obj_t *route_restore_settings_screen = nullptr;
+
+static void nav_to_home_screen(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
+    if (!target_scr || !lv_obj_is_valid(target_scr)) return;
     lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
   }
 }
 
-static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target)
+static void nav_to_settings_screen(lv_event_t *e)
+{
+  if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    UiSessionState::set_route("settings");
+    lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
+    if (!target_scr || !lv_obj_is_valid(target_scr)) return;
+    lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+  }
+}
+
+static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target, bool back_to_home)
 {
   lv_obj_t *bar = lv_obj_create(scr);
   lv_obj_set_size(bar, lv_pct(100), 44);
@@ -45,7 +61,7 @@ static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target
   lv_obj_set_style_bg_opa(back_btn, LV_OPA_TRANSP, 0);
   lv_obj_set_style_shadow_width(back_btn, 0, 0);
   lv_obj_set_style_border_width(back_btn, 0, 0);
-  lv_obj_add_event_cb(back_btn, nav_to_target_screen, LV_EVENT_CLICKED, back_target);
+  lv_obj_add_event_cb(back_btn, back_to_home ? nav_to_home_screen : nav_to_settings_screen, LV_EVENT_CLICKED, back_target);
 
   lv_obj_t *back_label = lv_label_create(back_btn);
   lv_label_set_text(back_label, LV_SYMBOL_LEFT);
@@ -240,6 +256,7 @@ static void wifi_save_event(lv_event_t *e)
     WifiService::instance().reload_from_config();
   }
 
+  UiSessionState::set_route("settings");
   lv_screen_load_anim(wifi_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
 }
 
@@ -274,9 +291,16 @@ static void wifi_kb_event(lv_event_t *e)
 
 static void open_wifi_screen(lv_event_t *e)
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  lv_obj_t *settings_scr = nullptr;
+  if (e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  } else {
+    settings_scr = route_restore_settings_screen;
+  }
+  if (!settings_scr) return;
 
-  lv_obj_t *settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  UiSessionState::set_route("settings_wifi");
 
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -284,7 +308,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "WiFi", settings_scr);
+  make_top_bar(scr, "WiFi", settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -358,6 +382,7 @@ static void time_save_event(lv_event_t *e)
   bool use_24h = lv_obj_has_state(time_ctx.fmt_switch, LV_STATE_CHECKED);
   TimeService::instance().save_preferences(time_ctx.selected_tz_index, use_24h);
 
+  UiSessionState::set_route("settings");
   lv_screen_load_anim(time_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
 }
 
@@ -403,10 +428,18 @@ static void region_changed_event(lv_event_t *e)
 
 static void open_time_screen(lv_event_t *e)
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  lv_obj_t *settings_scr = nullptr;
+  if (e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  } else {
+    settings_scr = route_restore_settings_screen;
+  }
+  if (!settings_scr) return;
 
-  lv_obj_t *settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
   TimeService &time_service = TimeService::instance();
+
+  UiSessionState::set_route("settings_time");
 
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -414,7 +447,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Time", settings_scr);
+  make_top_bar(scr, "Time", settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -544,14 +577,22 @@ static void weather_save_event(lv_event_t *e)
     WeatherService::instance().reload_from_config();
   }
 
+  UiSessionState::set_route("settings");
   lv_screen_load_anim(weather_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
 }
 
 static void open_weather_screen(lv_event_t *e)
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  lv_obj_t *settings_scr = nullptr;
+  if (e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  } else {
+    settings_scr = route_restore_settings_screen;
+  }
+  if (!settings_scr) return;
 
-  lv_obj_t *settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  UiSessionState::set_route("settings_weather");
 
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -559,7 +600,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Weather", settings_scr);
+  make_top_bar(scr, "Weather", settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -668,17 +709,15 @@ static void open_weather_screen(lv_event_t *e)
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }
 
-void settings_launch(void)
+static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
 {
-  lv_obj_t *home_scr = lv_screen_active();
-
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Settings", home_scr);
+  make_top_bar(scr, "Settings", home_scr, true);
 
   /* Settings list */
   lv_obj_t *list = lv_obj_create(scr);
@@ -759,6 +798,42 @@ void settings_launch(void)
   lv_label_set_text(weather_chevron, LV_SYMBOL_RIGHT);
   lv_obj_set_style_text_color(weather_chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(weather_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
+
+  return scr;
+}
+
+void settings_launch_with_route(const char *route)
+{
+  lv_obj_t *home_scr = lv_screen_active();
+  lv_obj_t *settings_scr = create_settings_screen(home_scr);
+  route_restore_settings_screen = settings_scr;
+
+  if (!route || route[0] == '\0' || std::strcmp(route, "settings") == 0) {
+    UiSessionState::set_route("settings");
+    lv_screen_load_anim(settings_scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+    route_restore_settings_screen = nullptr;
+    return;
+  }
+
+  if (std::strcmp(route, "settings_wifi") == 0) {
+    open_wifi_screen(nullptr);
+  } else if (std::strcmp(route, "settings_time") == 0) {
+    open_time_screen(nullptr);
+  } else if (std::strcmp(route, "settings_weather") == 0) {
+    open_weather_screen(nullptr);
+  } else {
+    UiSessionState::set_route("settings");
+    lv_screen_load_anim(settings_scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  }
+
+  route_restore_settings_screen = nullptr;
+}
+
+void settings_launch(void)
+{
+  lv_obj_t *home_scr = lv_screen_active();
+  UiSessionState::set_route("settings");
+  lv_obj_t *scr = create_settings_screen(home_scr);
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }

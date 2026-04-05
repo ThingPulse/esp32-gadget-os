@@ -3,6 +3,8 @@
 #include "ServiceRegistry.h"
 #include <ArduinoJson.h>
 
+#include <vector>
+
 struct ConfigStoreService::Impl {
     JsonDocument  doc;
     std::string   loaded_domain;
@@ -54,11 +56,12 @@ bool ConfigStoreService::save(const char *domain)
     const char *d = domain ? domain : _impl->loaded_domain.c_str();
     if (!d || d[0] == '\0') return false;
 
-    // Serialize into a heap buffer sized by measureJson() to avoid depending
-    // on ARDUINOJSON_ENABLE_STD_STRING on Arduino targets.
+    // Serialize into a heap buffer with explicit room for NUL terminator
+    // without relying on ARDUINOJSON_ENABLE_STD_STRING on Arduino targets.
     const size_t len = measureJson(_impl->doc);
-    std::string out(len, '\0');
-    serializeJson(_impl->doc, &out[0], len + 1);
+    std::vector<char> out_buf(len + 1, '\0');
+    serializeJson(_impl->doc, out_buf.data(), out_buf.size());
+    std::string out(out_buf.data(), len);
 
     const std::string path = std::string("/config/") + d + ".json";
     return FileSystemService::instance().fs().write(path.c_str(), out);

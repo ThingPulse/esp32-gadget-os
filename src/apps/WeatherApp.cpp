@@ -3,6 +3,7 @@
 #include "AppRegistry.h"
 #include "services/WeatherService.h"
 #include "ui/StatusIcons.h"
+#include "ui/UiSessionState.h"
 #include "ui/WeatherIconSet.h"
 
 #include <cstdio>
@@ -92,7 +93,9 @@ static std::string weekday_label_from_iso(const std::string &iso)
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
+    if (!target_scr || !lv_obj_is_valid(target_scr)) return;
     lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
   }
 }
@@ -205,6 +208,7 @@ static void weather_app_screen_delete_event(lv_event_t *e)
 
 void weather_app_launch(void)
 {
+  UiSessionState::set_route("weather");
   lv_obj_t *home_scr = lv_screen_active();
 
   lv_obj_t *scr = lv_obj_create(nullptr);
