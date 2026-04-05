@@ -89,6 +89,29 @@ struct WeatherCtx {
 };
 static WeatherCtx weather_ctx;
 
+static const char *weather_coord_kb_map[] = {
+  "1", "2", "3", LV_SYMBOL_BACKSPACE, "\n",
+  "4", "5", "6", "+/-", "\n",
+  "7", "8", "9", ".", "\n",
+  ",", "0", LV_SYMBOL_OK, LV_SYMBOL_CLOSE, nullptr
+};
+
+static const lv_buttonmatrix_ctrl_t weather_coord_kb_ctrl[] = {
+  (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)(LV_KEYBOARD_CTRL_BUTTON_FLAGS | 1),
+  (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1,
+  (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1,
+  (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)1, (lv_buttonmatrix_ctrl_t)(LV_KEYBOARD_CTRL_BUTTON_FLAGS | 1), (lv_buttonmatrix_ctrl_t)(LV_KEYBOARD_CTRL_BUTTON_FLAGS | 1)
+};
+
+static std::string normalize_coord_text(const char *text)
+{
+  std::string out = text ? text : "";
+  for (size_t i = 0; i < out.size(); ++i) {
+    if (out[i] == ',') out[i] = '.';
+  }
+  return out;
+}
+
 static void wifi_save_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -400,8 +423,8 @@ static void weather_save_event(lv_event_t *e)
 
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("weather")) {
-    cfg.set("latitude", std::string(lv_textarea_get_text(weather_ctx.lat_input)));
-    cfg.set("longitude", std::string(lv_textarea_get_text(weather_ctx.lon_input)));
+    cfg.set("latitude", normalize_coord_text(lv_textarea_get_text(weather_ctx.lat_input)));
+    cfg.set("longitude", normalize_coord_text(lv_textarea_get_text(weather_ctx.lon_input)));
     cfg.set("metric", lv_obj_has_state(weather_ctx.unit_switch, LV_STATE_CHECKED));
     cfg.save();
     WeatherService::instance().reload_from_config();
@@ -441,6 +464,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_t *lat_input = lv_textarea_create(content);
   lv_obj_set_width(lat_input, lv_pct(100));
   lv_textarea_set_one_line(lat_input, true);
+  lv_textarea_set_accepted_chars(lat_input, "0123456789-.,");
   lv_textarea_set_placeholder_text(lat_input, "47.37");
   lv_obj_add_event_cb(lat_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(lat_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
@@ -452,6 +476,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_t *lon_input = lv_textarea_create(content);
   lv_obj_set_width(lon_input, lv_pct(100));
   lv_textarea_set_one_line(lon_input, true);
+  lv_textarea_set_accepted_chars(lon_input, "0123456789-.,");
   lv_textarea_set_placeholder_text(lon_input, "8.54");
   lv_obj_add_event_cb(lon_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(lon_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
@@ -499,6 +524,8 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_t *kb = lv_keyboard_create(scr);
   lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
   lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_USER_1, weather_coord_kb_map, weather_coord_kb_ctrl);
+  lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_USER_1);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_READY, nullptr);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_CANCEL, nullptr);
