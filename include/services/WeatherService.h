@@ -15,6 +15,9 @@ public:
     bool reload_from_config();
     bool has_weather() const;
     std::string header_text() const;
+    float temperature_value() const;
+    int weather_code() const;
+    bool is_metric() const;
 
 private:
     static void on_wifi_connected(const SystemEvent &event, void *user_data);

@@ -98,6 +98,21 @@ bool WeatherService::has_weather() const
     return _has_weather;
 }
 
+float WeatherService::temperature_value() const
+{
+    return _temperature;
+}
+
+int WeatherService::weather_code() const
+{
+    return _weather_code;
+}
+
+bool WeatherService::is_metric() const
+{
+    return _metric;
+}
+
 std::string WeatherService::header_text() const
 {
     if (!_has_weather)
