@@ -10,7 +10,7 @@
 #include <cstring>
 #include <string>
 
-APP_REGISTER("Calculator", LV_SYMBOL_PLUS, calculator_app_launch);
+APP_REGISTER_COLOR("Calculator", LV_SYMBOL_PLUS, calculator_app_launch, 0xf08c2e);
 
 namespace {
 

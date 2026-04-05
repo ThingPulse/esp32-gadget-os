@@ -150,11 +150,17 @@ static void create_home_screen(void)
     lv_obj_set_size(icon_btn, 68, 68);
     lv_obj_align(icon_btn, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_radius(icon_btn, 18, 0);
+    lv_obj_set_style_bg_color(icon_btn, lv_color_hex(app.button_color), 0);
+    lv_obj_set_style_border_width(icon_btn, 0, 0);
+    lv_obj_set_style_shadow_width(icon_btn, 8, 0);
+    lv_obj_set_style_shadow_color(icon_btn, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_shadow_opa(icon_btn, LV_OPA_20, 0);
     lv_obj_add_event_cb(icon_btn, app_icon_clicked, LV_EVENT_CLICKED, (void*)(intptr_t)i);
 
     lv_obj_t *icon_label = lv_label_create(icon_btn);
     lv_label_set_text(icon_label, app.symbol);
     lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(icon_label, lv_color_white(), 0);
     lv_obj_center(icon_label);
 
     lv_obj_t *name_label = lv_label_create(tile);

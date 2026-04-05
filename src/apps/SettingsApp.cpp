@@ -18,7 +18,7 @@
 #include <WiFi.h>
 #endif
 
-APP_REGISTER("Settings", LV_SYMBOL_SETTINGS, settings_launch);
+APP_REGISTER_COLOR("Settings", LV_SYMBOL_SETTINGS, settings_launch, 0x495057);
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 

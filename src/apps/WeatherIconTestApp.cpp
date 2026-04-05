@@ -5,7 +5,7 @@
 #include "ui/UiSessionState.h"
 #include "ui/WeatherIconSet.h"
 
-APP_REGISTER("Weather Icons", LV_SYMBOL_IMAGE, weather_icon_test_app_launch);
+APP_REGISTER_COLOR("Weather Icons", LV_SYMBOL_IMAGE, weather_icon_test_app_launch, 0x339af0);
 
 namespace {
 

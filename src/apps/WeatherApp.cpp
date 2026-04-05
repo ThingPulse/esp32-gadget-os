@@ -10,7 +10,7 @@
 #include <ctime>
 #include <string>
 
-APP_REGISTER("Weather", LV_SYMBOL_EYE_OPEN, weather_app_launch);
+APP_REGISTER_COLOR("Weather", LV_SYMBOL_EYE_OPEN, weather_app_launch, 0x339af0);
 
 namespace {
 
