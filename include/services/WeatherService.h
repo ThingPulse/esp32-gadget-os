@@ -4,8 +4,18 @@
 #include "ServiceRegistry.h"
 #include <string>
 
+struct WeatherForecastDay {
+    bool valid = false;
+    std::string date;
+    int weather_code = 0;
+    float temp_max = 0.0f;
+    float temp_min = 0.0f;
+};
+
 class WeatherService : public SystemService {
 public:
+    static constexpr int FORECAST_DAYS = 3;
+
     static WeatherService &instance();
 
     const char *name() const override { return "Weather"; }
@@ -18,6 +28,13 @@ public:
     float temperature_value() const;
     int weather_code() const;
     bool is_metric() const;
+    float humidity_value() const;
+    float pressure_value() const;
+    float precipitation_value() const;
+    float wind_speed_value() const;
+    float wind_direction_degrees() const;
+    int forecast_count() const;
+    const WeatherForecastDay *forecast_days() const;
 
 private:
     static void on_wifi_connected(const SystemEvent &event, void *user_data);
@@ -36,6 +53,13 @@ private:
     bool _has_weather = false;
     float _temperature = 0.0f;
     int _weather_code = 0;
+    float _humidity = 0.0f;
+    float _pressure = 0.0f;
+    float _precipitation = 0.0f;
+    float _wind_speed = 0.0f;
+    float _wind_direction = 0.0f;
+    WeatherForecastDay _forecast[FORECAST_DAYS]{};
+    int _forecast_count = 0;
     unsigned long _last_fetch_ms = 0;
 
     SubscriptionId _wifi_connected_sub = 0;

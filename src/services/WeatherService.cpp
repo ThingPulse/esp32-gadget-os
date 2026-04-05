@@ -5,6 +5,7 @@
 #include "services/WifiService.h"
 
 #include <ArduinoJson.h>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 
@@ -113,6 +114,41 @@ bool WeatherService::is_metric() const
     return _metric;
 }
 
+float WeatherService::humidity_value() const
+{
+    return _humidity;
+}
+
+float WeatherService::pressure_value() const
+{
+    return _pressure;
+}
+
+float WeatherService::precipitation_value() const
+{
+    return _precipitation;
+}
+
+float WeatherService::wind_speed_value() const
+{
+    return _wind_speed;
+}
+
+float WeatherService::wind_direction_degrees() const
+{
+    return _wind_direction;
+}
+
+int WeatherService::forecast_count() const
+{
+    return _forecast_count;
+}
+
+const WeatherForecastDay *WeatherService::forecast_days() const
+{
+    return _forecast;
+}
+
 std::string WeatherService::header_text() const
 {
     if (!_has_weather)
@@ -163,10 +199,42 @@ bool WeatherService::fetch_and_update()
     if (!current.isNull()) {
         _temperature = current["temperature_2m"].as<float>();
         _weather_code = current["weather_code"].as<int>();
+        _humidity = current["relative_humidity_2m"].as<float>();
+        _pressure = current["pressure_msl"].as<float>();
+        _precipitation = current["precipitation"].as<float>();
+        _wind_speed = current["wind_speed_10m"].as<float>();
+        _wind_direction = current["wind_direction_10m"].as<float>();
     } else {
         JsonVariant current_weather = doc["current_weather"];
         _temperature = current_weather["temperature"].as<float>();
         _weather_code = current_weather["weathercode"].as<int>();
+        _humidity = 0.0f;
+        _pressure = 0.0f;
+        _precipitation = 0.0f;
+        _wind_speed = current_weather["windspeed"].as<float>();
+        _wind_direction = current_weather["winddirection"].as<float>();
+    }
+
+    _forecast_count = 0;
+    for (int i = 0; i < FORECAST_DAYS; ++i)
+        _forecast[i] = WeatherForecastDay{};
+
+    JsonVariant daily = doc["daily"];
+    if (!daily.isNull()) {
+        JsonArray time_arr = daily["time"].as<JsonArray>();
+        JsonArray code_arr = daily["weather_code"].as<JsonArray>();
+        JsonArray max_arr = daily["temperature_2m_max"].as<JsonArray>();
+        JsonArray min_arr = daily["temperature_2m_min"].as<JsonArray>();
+
+        int available = (int)std::min({time_arr.size(), code_arr.size(), max_arr.size(), min_arr.size(), (size_t)FORECAST_DAYS});
+        for (int i = 0; i < available; ++i) {
+            _forecast[i].valid = true;
+            _forecast[i].date = time_arr[i].as<std::string>();
+            _forecast[i].weather_code = code_arr[i].as<int>();
+            _forecast[i].temp_max = max_arr[i].as<float>();
+            _forecast[i].temp_min = min_arr[i].as<float>();
+        }
+        _forecast_count = available;
     }
 
     _has_weather = true;
@@ -177,14 +245,18 @@ bool WeatherService::fetch_and_update()
 
 bool WeatherService::fetch_payload(std::string &out_payload) const
 {
-    char url[320] = {0};
+    char url[640] = {0};
     const char *temp_unit = _metric ? "celsius" : "fahrenheit";
+    const char *wind_unit = _metric ? "kmh" : "mph";
+    const char *precip_unit = _metric ? "mm" : "inch";
     std::snprintf(url,
                   sizeof(url),
-                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,weather_code&hourly=temperature_2m&temperature_unit=%s",
+                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=3&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s",
                   _latitude,
                   _longitude,
-                  temp_unit);
+                  temp_unit,
+                  wind_unit,
+                  precip_unit);
 
 #if defined(ARDUINO)
     WiFiClient client;
@@ -225,6 +297,9 @@ void WeatherService::clear_weather()
         return;
 
     _has_weather = false;
+    _forecast_count = 0;
+    for (int i = 0; i < FORECAST_DAYS; ++i)
+        _forecast[i] = WeatherForecastDay{};
     EventBus::instance().publish(SystemEvent{EventType::WeatherCleared});
 }
 
