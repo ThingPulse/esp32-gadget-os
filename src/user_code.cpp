@@ -4,6 +4,7 @@
 #include <lvgl.h>
 #include "AppRegistry.h"
 #include "ServiceRegistry.h"
+#include "services/TimeService.h"
 #include "ui/StatusIcons.h"
 
 #if defined(SDL_h_)
@@ -64,6 +65,7 @@ static void create_home_screen(void)
   lv_obj_set_style_text_color(bar_label, lv_color_white(), 0);
   lv_obj_align(bar_label, LV_ALIGN_CENTER, 0, 0);
 
+  create_time_status_label(bar, 8);
   create_wifi_status_icon(bar, -8);
 
   /* App grid */

@@ -1,6 +1,7 @@
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"
 #include "services/ConfigStoreService.h"
+#include "services/TimeService.h"
 #include "services/WifiService.h"
 #include "ui/StatusIcons.h"
 #include <lvgl.h>
@@ -46,6 +47,7 @@ static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target
   lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
   lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
 
+  create_time_status_label(bar, 56);
   create_wifi_status_icon(bar, -8);
 }
 
@@ -63,6 +65,13 @@ struct WifiCtx {
   lv_obj_t *settings_scr;
 };
 static WifiCtx wifi_ctx;
+
+struct TimeCtx {
+  lv_obj_t *settings_scr;
+  lv_obj_t *timezone_dd;
+  lv_obj_t *fmt_switch;
+};
+static TimeCtx time_ctx;
 
 static void wifi_save_event(lv_event_t *e)
 {
@@ -152,7 +161,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_t *pass_input = lv_textarea_create(content);
   lv_obj_set_width(pass_input, lv_pct(100));
   lv_textarea_set_one_line(pass_input, true);
-  lv_textarea_set_password_mode(pass_input, true);
+  lv_textarea_set_password_mode(pass_input, false);
   lv_textarea_set_placeholder_text(pass_input, "Enter password");
   lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
@@ -160,10 +169,7 @@ static void open_wifi_screen(lv_event_t *e)
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("wifi")) {
     std::string ssid = cfg.get("ssid", "");
-    std::string password = cfg.get("password", "");
     lv_textarea_set_text(ssid_input, ssid.c_str());
-    if (!password.empty())
-      lv_textarea_set_placeholder_text(pass_input, "Saved password");
   }
 
   lv_obj_t *save_btn = lv_button_create(content);
@@ -188,6 +194,94 @@ static void open_wifi_screen(lv_event_t *e)
   wifi_ctx.ssid_input = ssid_input;
   wifi_ctx.pass_input = pass_input;
   wifi_ctx.settings_scr = settings_scr;
+
+  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+}
+
+static void time_save_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  uint16_t tz_index = lv_dropdown_get_selected(time_ctx.timezone_dd);
+  bool use_24h = lv_obj_has_state(time_ctx.fmt_switch, LV_STATE_CHECKED);
+  TimeService::instance().save_preferences((int)tz_index, use_24h);
+
+  lv_screen_load_anim(time_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+}
+
+static void open_time_screen(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  lv_obj_t *settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  TimeService &time_service = TimeService::instance();
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(scr, 0, 0);
+  lv_obj_set_style_border_width(scr, 0, 0);
+
+  make_top_bar(scr, "Time", settings_scr);
+
+  lv_obj_t *content = lv_obj_create(scr);
+  lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
+  lv_obj_set_size(content, lv_pct(100), WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(content, 0, 0);
+  lv_obj_set_style_pad_all(content, 16, 0);
+  lv_obj_set_style_pad_row(content, 12, 0);
+  lv_obj_set_layout(content, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+
+  lv_obj_t *tz_label = lv_label_create(content);
+  lv_label_set_text(tz_label, "Timezone");
+  lv_obj_set_style_text_color(tz_label, lv_color_white(), 0);
+
+  lv_obj_t *tz_dd = lv_dropdown_create(content);
+  lv_obj_set_width(tz_dd, lv_pct(100));
+  std::string options;
+  for (int i = 0; i < TimeService::timezone_count(); ++i) {
+    if (i > 0) options += "\n";
+    options += TimeService::timezone_name(i);
+  }
+  lv_dropdown_set_options(tz_dd, options.c_str());
+  lv_dropdown_set_selected(tz_dd, (uint16_t)time_service.timezone_index());
+
+  lv_obj_t *fmt_row = lv_obj_create(content);
+  lv_obj_set_size(fmt_row, lv_pct(100), 52);
+  lv_obj_clear_flag(fmt_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(fmt_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(fmt_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(fmt_row, 0, 0);
+  lv_obj_set_style_radius(fmt_row, 10, 0);
+  lv_obj_set_style_pad_hor(fmt_row, 16, 0);
+  lv_obj_set_style_pad_ver(fmt_row, 0, 0);
+
+  lv_obj_t *fmt_label = lv_label_create(fmt_row);
+  lv_label_set_text(fmt_label, "24-hour format");
+  lv_obj_set_style_text_color(fmt_label, lv_color_white(), 0);
+  lv_obj_align(fmt_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *fmt_switch = lv_switch_create(fmt_row);
+  lv_obj_align(fmt_switch, LV_ALIGN_RIGHT_MID, 0, 0);
+  if (time_service.use_24h())
+    lv_obj_add_state(fmt_switch, LV_STATE_CHECKED);
+  else
+    lv_obj_clear_state(fmt_switch, LV_STATE_CHECKED);
+
+  lv_obj_t *save_btn = lv_button_create(content);
+  lv_obj_set_width(save_btn, lv_pct(100));
+  lv_obj_set_height(save_btn, 44);
+  lv_obj_add_event_cb(save_btn, time_save_event, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t *save_label = lv_label_create(save_btn);
+  lv_label_set_text(save_label, "Save");
+  lv_obj_center(save_label);
+
+  time_ctx.settings_scr = settings_scr;
+  time_ctx.timezone_dd = tz_dd;
+  time_ctx.fmt_switch = fmt_switch;
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }
@@ -237,6 +331,29 @@ void settings_launch(void)
   lv_label_set_text(chevron, LV_SYMBOL_RIGHT);
   lv_obj_set_style_text_color(chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(chevron, LV_ALIGN_RIGHT_MID, 0, 0);
+
+  /* Time row */
+  lv_obj_t *time_row = lv_obj_create(list);
+  lv_obj_set_size(time_row, lv_pct(100), 52);
+  lv_obj_clear_flag(time_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(time_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(time_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(time_row, 0, 0);
+  lv_obj_set_style_radius(time_row, 10, 0);
+  lv_obj_set_style_pad_hor(time_row, 16, 0);
+  lv_obj_set_style_pad_ver(time_row, 0, 0);
+  lv_obj_add_flag(time_row, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(time_row, open_time_screen, LV_EVENT_CLICKED, scr);
+
+  lv_obj_t *time_label = lv_label_create(time_row);
+  lv_label_set_text(time_label, LV_SYMBOL_BELL "  Time");
+  lv_obj_set_style_text_color(time_label, lv_color_white(), 0);
+  lv_obj_align(time_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *time_chevron = lv_label_create(time_row);
+  lv_label_set_text(time_chevron, LV_SYMBOL_RIGHT);
+  lv_obj_set_style_text_color(time_chevron, lv_color_hex(0x888888), 0);
+  lv_obj_align(time_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }

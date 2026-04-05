@@ -4,6 +4,7 @@ enum class EventType {
     WifiConnecting,
     WifiConnected,
     WifiDisconnected,
+    TimeSynchronized,
 };
 
 struct SystemEvent {
