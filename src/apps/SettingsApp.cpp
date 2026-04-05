@@ -2,6 +2,7 @@
 #include "AppRegistry.h"
 #include "services/ConfigStoreService.h"
 #include "services/TimeService.h"
+#include "services/WeatherService.h"
 #include "services/WifiService.h"
 #include "ui/StatusIcons.h"
 #include <lvgl.h>
@@ -68,12 +69,25 @@ static WifiCtx wifi_ctx;
 
 struct TimeCtx {
   lv_obj_t *settings_scr;
+  lv_obj_t *region_roller;
   lv_obj_t *timezone_roller;
   lv_obj_t *fmt_switch;
+  int selected_region_index;
   int selected_tz_index;
+  std::string region_options_cache;
+  std::string timezone_options_cache;
 };
 static TimeCtx time_ctx;
-static std::string timezone_options_cache;
+
+struct WeatherCtx {
+  lv_obj_t *content;
+  lv_obj_t *kb;
+  lv_obj_t *settings_scr;
+  lv_obj_t *lat_input;
+  lv_obj_t *lon_input;
+  lv_obj_t *unit_switch;
+};
+static WeatherCtx weather_ctx;
 
 static void wifi_save_event(lv_event_t *e)
 {
@@ -214,7 +228,40 @@ static void timezone_changed_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
   lv_obj_t *roller = (lv_obj_t *)lv_event_get_target(e);
-  time_ctx.selected_tz_index = (int)lv_roller_get_selected(roller);
+  int local_tz_index = (int)lv_roller_get_selected(roller);
+  time_ctx.selected_tz_index = TimeService::timezone_global_index(time_ctx.selected_region_index, local_tz_index);
+}
+
+static void rebuild_timezone_roller(int region_index, int selected_local_tz_index)
+{
+  time_ctx.timezone_options_cache.clear();
+  int count = TimeService::timezone_count_in_region(region_index);
+  for (int i = 0; i < count; ++i) {
+    if (i > 0) time_ctx.timezone_options_cache += "\n";
+    time_ctx.timezone_options_cache += TimeService::timezone_name_in_region(region_index, i);
+  }
+
+  if (count <= 0) {
+    time_ctx.timezone_options_cache = "UTC";
+    count = 1;
+  }
+
+  if (selected_local_tz_index < 0) selected_local_tz_index = 0;
+  if (selected_local_tz_index >= count) selected_local_tz_index = count - 1;
+
+  lv_roller_set_options(time_ctx.timezone_roller, time_ctx.timezone_options_cache.c_str(), LV_ROLLER_MODE_NORMAL);
+  lv_roller_set_visible_row_count(time_ctx.timezone_roller, 4);
+  lv_roller_set_selected(time_ctx.timezone_roller, (uint16_t)selected_local_tz_index, LV_ANIM_OFF);
+  time_ctx.selected_tz_index = TimeService::timezone_global_index(region_index, selected_local_tz_index);
+}
+
+static void region_changed_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+  lv_obj_t *roller = (lv_obj_t *)lv_event_get_target(e);
+  int region_index = (int)lv_roller_get_selected(roller);
+  time_ctx.selected_region_index = region_index;
+  rebuild_timezone_roller(region_index, 0);
 }
 
 static void open_time_screen(lv_event_t *e)
@@ -243,21 +290,38 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *tz_label = lv_label_create(content);
-  lv_label_set_text(tz_label, "Timezone");
+  lv_label_set_text(tz_label, "Region");
   lv_obj_set_style_text_color(tz_label, lv_color_white(), 0);
+
+  lv_obj_t *region_roller = lv_roller_create(content);
+  lv_obj_set_width(region_roller, lv_pct(100));
+  lv_obj_set_height(region_roller, 120);
+  if (time_ctx.region_options_cache.empty()) {
+    for (int i = 0; i < TimeService::region_count(); ++i) {
+      if (i > 0) time_ctx.region_options_cache += "\n";
+      time_ctx.region_options_cache += TimeService::region_name(i);
+    }
+  }
+  lv_roller_set_options(region_roller, time_ctx.region_options_cache.c_str(), LV_ROLLER_MODE_NORMAL);
+  lv_roller_set_visible_row_count(region_roller, 4);
+
+  lv_obj_t *tz_label2 = lv_label_create(content);
+  lv_label_set_text(tz_label2, "Timezone");
+  lv_obj_set_style_text_color(tz_label2, lv_color_white(), 0);
 
   lv_obj_t *tz_roller = lv_roller_create(content);
   lv_obj_set_width(tz_roller, lv_pct(100));
   lv_obj_set_height(tz_roller, 120);
-  if (timezone_options_cache.empty()) {
-    for (int i = 0; i < TimeService::timezone_count(); ++i) {
-      if (i > 0) timezone_options_cache += "\n";
-      timezone_options_cache += TimeService::timezone_name(i);
-    }
-  }
-  lv_roller_set_options(tz_roller, timezone_options_cache.c_str(), LV_ROLLER_MODE_NORMAL);
-  lv_roller_set_visible_row_count(tz_roller, 4);
-  lv_roller_set_selected(tz_roller, (uint16_t)time_service.timezone_index(), LV_ANIM_OFF);
+  int region_index = 0;
+  int local_tz_index = 0;
+  TimeService::split_timezone_index(time_service.timezone_index(), &region_index, &local_tz_index);
+  lv_roller_set_selected(region_roller, (uint16_t)region_index, LV_ANIM_OFF);
+
+  time_ctx.timezone_roller = tz_roller;
+  time_ctx.selected_region_index = region_index;
+  rebuild_timezone_roller(region_index, local_tz_index);
+
+  lv_obj_add_event_cb(region_roller, region_changed_event, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_event_cb(tz_roller, timezone_changed_event, LV_EVENT_VALUE_CHANGED, nullptr);
 
   lv_obj_t *fmt_row = lv_obj_create(content);
@@ -292,9 +356,159 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_center(save_label);
 
   time_ctx.settings_scr = settings_scr;
+  time_ctx.region_roller = region_roller;
   time_ctx.timezone_roller = tz_roller;
   time_ctx.fmt_switch = fmt_switch;
+  time_ctx.selected_region_index = region_index;
   time_ctx.selected_tz_index = time_service.timezone_index();
+
+  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+}
+
+static void weather_ta_event(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *ta = (lv_obj_t *)lv_event_get_target(e);
+
+  if (code == LV_EVENT_FOCUSED) {
+    lv_obj_clear_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(weather_ctx.kb, ta);
+    lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT - WIFI_KB_HEIGHT);
+    lv_obj_scroll_to_view(ta, LV_ANIM_ON);
+  } else if (code == LV_EVENT_DEFOCUSED) {
+    lv_obj_add_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(weather_ctx.kb, nullptr);
+    lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  }
+}
+
+static void weather_kb_event(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+    lv_obj_t *ta = lv_keyboard_get_textarea(weather_ctx.kb);
+    if (ta) lv_obj_clear_state(ta, LV_STATE_FOCUSED);
+    lv_keyboard_set_textarea(weather_ctx.kb, nullptr);
+    lv_obj_add_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  }
+}
+
+static void weather_save_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  if (cfg.load("weather")) {
+    cfg.set("latitude", std::string(lv_textarea_get_text(weather_ctx.lat_input)));
+    cfg.set("longitude", std::string(lv_textarea_get_text(weather_ctx.lon_input)));
+    cfg.set("metric", lv_obj_has_state(weather_ctx.unit_switch, LV_STATE_CHECKED));
+    cfg.save();
+    WeatherService::instance().reload_from_config();
+  }
+
+  lv_screen_load_anim(weather_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+}
+
+static void open_weather_screen(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  lv_obj_t *settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(scr, 0, 0);
+  lv_obj_set_style_border_width(scr, 0, 0);
+
+  make_top_bar(scr, "Weather", settings_scr);
+
+  lv_obj_t *content = lv_obj_create(scr);
+  lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
+  lv_obj_set_size(content, lv_pct(100), WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(content, 0, 0);
+  lv_obj_set_style_pad_all(content, 16, 0);
+  lv_obj_set_style_pad_row(content, 12, 0);
+  lv_obj_set_layout(content, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+
+  lv_obj_t *lat_label = lv_label_create(content);
+  lv_label_set_text(lat_label, "Latitude");
+  lv_obj_set_style_text_color(lat_label, lv_color_white(), 0);
+
+  lv_obj_t *lat_input = lv_textarea_create(content);
+  lv_obj_set_width(lat_input, lv_pct(100));
+  lv_textarea_set_one_line(lat_input, true);
+  lv_textarea_set_placeholder_text(lat_input, "47.37");
+  lv_obj_add_event_cb(lat_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
+  lv_obj_add_event_cb(lat_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
+
+  lv_obj_t *lon_label = lv_label_create(content);
+  lv_label_set_text(lon_label, "Longitude");
+  lv_obj_set_style_text_color(lon_label, lv_color_white(), 0);
+
+  lv_obj_t *lon_input = lv_textarea_create(content);
+  lv_obj_set_width(lon_input, lv_pct(100));
+  lv_textarea_set_one_line(lon_input, true);
+  lv_textarea_set_placeholder_text(lon_input, "8.54");
+  lv_obj_add_event_cb(lon_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
+  lv_obj_add_event_cb(lon_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
+
+  lv_obj_t *unit_row = lv_obj_create(content);
+  lv_obj_set_size(unit_row, lv_pct(100), 52);
+  lv_obj_clear_flag(unit_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(unit_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(unit_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(unit_row, 0, 0);
+  lv_obj_set_style_radius(unit_row, 10, 0);
+  lv_obj_set_style_pad_hor(unit_row, 16, 0);
+  lv_obj_set_style_pad_ver(unit_row, 0, 0);
+
+  lv_obj_t *unit_label = lv_label_create(unit_row);
+  lv_label_set_text(unit_label, "Metric (C)");
+  lv_obj_set_style_text_color(unit_label, lv_color_white(), 0);
+  lv_obj_align(unit_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *unit_switch = lv_switch_create(unit_row);
+  lv_obj_align(unit_switch, LV_ALIGN_RIGHT_MID, 0, 0);
+
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  if (cfg.load("weather")) {
+    std::string lat = cfg.get("latitude", "");
+    std::string lon = cfg.get("longitude", "");
+    bool metric = cfg.get_bool("metric", true);
+    lv_textarea_set_text(lat_input, lat.c_str());
+    lv_textarea_set_text(lon_input, lon.c_str());
+    if (metric)
+      lv_obj_add_state(unit_switch, LV_STATE_CHECKED);
+    else
+      lv_obj_clear_state(unit_switch, LV_STATE_CHECKED);
+  }
+
+  lv_obj_t *save_btn = lv_button_create(content);
+  lv_obj_set_width(save_btn, lv_pct(100));
+  lv_obj_set_height(save_btn, 44);
+  lv_obj_add_event_cb(save_btn, weather_save_event, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t *save_label = lv_label_create(save_btn);
+  lv_label_set_text(save_label, "Save");
+  lv_obj_center(save_label);
+
+  lv_obj_t *kb = lv_keyboard_create(scr);
+  lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
+  lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_READY, nullptr);
+  lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_CANCEL, nullptr);
+
+  weather_ctx.content = content;
+  weather_ctx.kb = kb;
+  weather_ctx.settings_scr = settings_scr;
+  weather_ctx.lat_input = lat_input;
+  weather_ctx.lon_input = lon_input;
+  weather_ctx.unit_switch = unit_switch;
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }
@@ -367,6 +581,29 @@ void settings_launch(void)
   lv_label_set_text(time_chevron, LV_SYMBOL_RIGHT);
   lv_obj_set_style_text_color(time_chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(time_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
+
+  /* Weather row */
+  lv_obj_t *weather_row = lv_obj_create(list);
+  lv_obj_set_size(weather_row, lv_pct(100), 52);
+  lv_obj_clear_flag(weather_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(weather_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(weather_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(weather_row, 0, 0);
+  lv_obj_set_style_radius(weather_row, 10, 0);
+  lv_obj_set_style_pad_hor(weather_row, 16, 0);
+  lv_obj_set_style_pad_ver(weather_row, 0, 0);
+  lv_obj_add_flag(weather_row, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(weather_row, open_weather_screen, LV_EVENT_CLICKED, scr);
+
+  lv_obj_t *weather_label = lv_label_create(weather_row);
+  lv_label_set_text(weather_label, LV_SYMBOL_EYE_OPEN "  Weather");
+  lv_obj_set_style_text_color(weather_label, lv_color_white(), 0);
+  lv_obj_align(weather_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *weather_chevron = lv_label_create(weather_row);
+  lv_label_set_text(weather_chevron, LV_SYMBOL_RIGHT);
+  lv_obj_set_style_text_color(weather_chevron, lv_color_hex(0x888888), 0);
+  lv_obj_align(weather_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
   lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
 }

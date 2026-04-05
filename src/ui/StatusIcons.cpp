@@ -2,6 +2,7 @@
 
 #include "EventBus.h"
 #include "services/TimeService.h"
+#include "services/WeatherService.h"
 #include "services/WifiService.h"
 
 struct WifiIconCtx {
@@ -125,5 +126,61 @@ lv_obj_t *create_time_status_label(lv_obj_t *parent, lv_coord_t x_offset)
 
     lv_obj_add_event_cb(label, time_label_deleted, LV_EVENT_DELETE, ctx);
     update_time_label(label);
+    return label;
+}
+
+struct WeatherCenterCtx {
+    lv_obj_t *label;
+    std::string fallback;
+    SubscriptionId weather_updated_sub;
+    SubscriptionId weather_cleared_sub;
+};
+
+static void update_weather_center_label(WeatherCenterCtx *ctx)
+{
+    if (!ctx || !ctx->label || !lv_obj_is_valid(ctx->label))
+        return;
+
+    WeatherService &weather = WeatherService::instance();
+    if (weather.has_weather()) {
+        std::string text = weather.header_text();
+        lv_label_set_text(ctx->label, text.c_str());
+    } else {
+        lv_label_set_text(ctx->label, ctx->fallback.c_str());
+    }
+}
+
+static void weather_center_event(const SystemEvent &event, void *user_data)
+{
+    (void)event;
+    WeatherCenterCtx *ctx = static_cast<WeatherCenterCtx *>(user_data);
+    update_weather_center_label(ctx);
+}
+
+static void weather_center_deleted(lv_event_t *e)
+{
+    WeatherCenterCtx *ctx = static_cast<WeatherCenterCtx *>(lv_event_get_user_data(e));
+    if (!ctx)
+        return;
+
+    EventBus::instance().unsubscribe(ctx->weather_updated_sub);
+    EventBus::instance().unsubscribe(ctx->weather_cleared_sub);
+    delete ctx;
+}
+
+lv_obj_t *create_weather_center_label(lv_obj_t *parent, const char *fallback_text, lv_coord_t x_offset)
+{
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_align(label, LV_ALIGN_CENTER, x_offset, 0);
+    lv_obj_set_style_text_color(label, lv_color_white(), 0);
+
+    WeatherCenterCtx *ctx = new WeatherCenterCtx{};
+    ctx->label = label;
+    ctx->fallback = fallback_text ? fallback_text : "";
+    ctx->weather_updated_sub = EventBus::instance().subscribe(EventType::WeatherUpdated, weather_center_event, ctx);
+    ctx->weather_cleared_sub = EventBus::instance().subscribe(EventType::WeatherCleared, weather_center_event, ctx);
+
+    lv_obj_add_event_cb(label, weather_center_deleted, LV_EVENT_DELETE, ctx);
+    update_weather_center_label(ctx);
     return label;
 }

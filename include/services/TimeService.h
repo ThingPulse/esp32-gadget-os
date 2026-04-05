@@ -17,6 +17,12 @@ public:
 
     static int timezone_count();
     static const char *timezone_name(int index);
+    static int region_count();
+    static const char *region_name(int index);
+    static int timezone_count_in_region(int region_index);
+    static const char *timezone_name_in_region(int region_index, int timezone_index_in_region);
+    static int timezone_global_index(int region_index, int timezone_index_in_region);
+    static void split_timezone_index(int global_index, int *out_region_index, int *out_timezone_index_in_region);
 
     int timezone_index() const;
     bool use_24h() const;

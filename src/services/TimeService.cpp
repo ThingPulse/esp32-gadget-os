@@ -6,10 +6,12 @@
 
 #if defined(ARDUINO)
 #include <Arduino.h>
+#include <cstring>
 #include <cstdlib>
 #include <time.h>
 #else
 #include <chrono>
+#include <cstring>
 #include <cstdlib>
 #include <ctime>
 #endif
@@ -82,6 +84,44 @@ constexpr TimezoneEntry TIMEZONES[] = {
 };
 
 constexpr int TIMEZONE_COUNT = static_cast<int>(sizeof(TIMEZONES) / sizeof(TIMEZONES[0]));
+
+constexpr const char *REGIONS[] = {
+    "UTC",
+    "Africa",
+    "America",
+    "Asia",
+    "Australia",
+    "Europe",
+    "Pacific",
+};
+
+constexpr int REGION_COUNT = static_cast<int>(sizeof(REGIONS) / sizeof(REGIONS[0]));
+
+const char *region_for_timezone_name(const char *timezone_name)
+{
+    if (std::strcmp(timezone_name, "UTC") == 0)
+        return "UTC";
+
+    const char *slash = std::strchr(timezone_name, '/');
+    if (!slash)
+        return "UTC";
+
+    for (int i = 0; i < REGION_COUNT; ++i) {
+        size_t len = std::strlen(REGIONS[i]);
+        if (std::strncmp(timezone_name, REGIONS[i], len) == 0 && timezone_name[len] == '/')
+            return REGIONS[i];
+    }
+
+    return "UTC";
+}
+
+int region_index_from_name(const char *region_name)
+{
+    for (int i = 0; i < REGION_COUNT; ++i)
+        if (std::strcmp(REGIONS[i], region_name) == 0)
+            return i;
+    return 0;
+}
 
 }  // namespace
 
@@ -158,6 +198,90 @@ const char *TimeService::timezone_name(int index)
     if (index < 0 || index >= TIMEZONE_COUNT)
         return TIMEZONES[0].name;
     return TIMEZONES[index].name;
+}
+
+int TimeService::region_count()
+{
+    return REGION_COUNT;
+}
+
+const char *TimeService::region_name(int index)
+{
+    if (index < 0 || index >= REGION_COUNT)
+        return REGIONS[0];
+    return REGIONS[index];
+}
+
+int TimeService::timezone_count_in_region(int region_index)
+{
+    if (region_index < 0 || region_index >= REGION_COUNT)
+        return 0;
+
+    int count = 0;
+    const char *region = REGIONS[region_index];
+    for (int i = 0; i < TIMEZONE_COUNT; ++i)
+        if (std::strcmp(region_for_timezone_name(TIMEZONES[i].name), region) == 0)
+            ++count;
+
+    return count;
+}
+
+const char *TimeService::timezone_name_in_region(int region_index, int timezone_index_in_region)
+{
+    if (region_index < 0 || region_index >= REGION_COUNT)
+        return TIMEZONES[0].name;
+
+    const char *region = REGIONS[region_index];
+    int local_idx = 0;
+    for (int i = 0; i < TIMEZONE_COUNT; ++i) {
+        if (std::strcmp(region_for_timezone_name(TIMEZONES[i].name), region) != 0)
+            continue;
+
+        if (local_idx == timezone_index_in_region)
+            return TIMEZONES[i].name;
+
+        ++local_idx;
+    }
+
+    return TIMEZONES[0].name;
+}
+
+int TimeService::timezone_global_index(int region_index, int timezone_index_in_region)
+{
+    if (region_index < 0 || region_index >= REGION_COUNT)
+        return 0;
+
+    const char *region = REGIONS[region_index];
+    int local_idx = 0;
+    for (int i = 0; i < TIMEZONE_COUNT; ++i) {
+        if (std::strcmp(region_for_timezone_name(TIMEZONES[i].name), region) != 0)
+            continue;
+
+        if (local_idx == timezone_index_in_region)
+            return i;
+
+        ++local_idx;
+    }
+
+    return 0;
+}
+
+void TimeService::split_timezone_index(int global_index, int *out_region_index, int *out_timezone_index_in_region)
+{
+    if (global_index < 0 || global_index >= TIMEZONE_COUNT)
+        global_index = 0;
+
+    const char *region = region_for_timezone_name(TIMEZONES[global_index].name);
+    int region_index = region_index_from_name(region);
+
+    int timezone_index_in_region = 0;
+    for (int i = 0; i < global_index; ++i) {
+        if (std::strcmp(region_for_timezone_name(TIMEZONES[i].name), region) == 0)
+            ++timezone_index_in_region;
+    }
+
+    if (out_region_index) *out_region_index = region_index;
+    if (out_timezone_index_in_region) *out_timezone_index_in_region = timezone_index_in_region;
 }
 
 int TimeService::timezone_index() const

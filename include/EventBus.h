@@ -5,6 +5,8 @@ enum class EventType {
     WifiConnected,
     WifiDisconnected,
     TimeSynchronized,
+    WeatherUpdated,
+    WeatherCleared,
 };
 
 struct SystemEvent {
