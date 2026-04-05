@@ -71,10 +71,20 @@ static void launch_route(const std::string &route)
 #if defined(SDL_h_) || (defined(ARDUINO) && defined(ESP_PLATFORM))
 static void touch_read(lv_indev_t *indev, lv_indev_data_t *data)
 {
-  lgfx::touch_point_t tp;
+  (void)indev;
+  static lv_coord_t last_x = 0;
+  static lv_coord_t last_y = 0;
+  lgfx::touch_point_t tp{};
   bool pressed = lcd.getTouch(&tp);
-  data->point.x = tp.x;
-  data->point.y = tp.y;
+
+  if (pressed) {
+    last_x = tp.x;
+    last_y = tp.y;
+  }
+
+  // Keep last valid coordinates when released to avoid feeding garbage into LVGL.
+  data->point.x = last_x;
+  data->point.y = last_y;
   data->state = pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 #endif
