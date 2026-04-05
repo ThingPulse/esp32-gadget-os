@@ -5,6 +5,7 @@ class SystemService {
 public:
     virtual const char *name() const = 0;
     virtual bool begin() = 0;
+    virtual void loop() {}
     virtual ~SystemService() = default;
 };
 
@@ -17,6 +18,7 @@ public:
     // Calls begin() on every registered service in registration order.
     // Returns false if any service fails to start.
     bool begin_all();
+    void loop_all();
     // Look up a service by name. Returns nullptr if not found.
     SystemService *get(const char *name) const;
 

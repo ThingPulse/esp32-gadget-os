@@ -1,6 +1,8 @@
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"
 #include "services/ConfigStoreService.h"
+#include "services/WifiService.h"
+#include "ui/StatusIcons.h"
 #include <lvgl.h>
 
 APP_REGISTER("Settings", LV_SYMBOL_SETTINGS, settings_launch);
@@ -43,6 +45,8 @@ static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target
   lv_label_set_text(lbl, title);
   lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
   lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+
+  create_wifi_status_icon(bar, -8);
 }
 
 // ── WiFi screen ───────────────────────────────────────────────────────────
@@ -71,6 +75,7 @@ static void wifi_save_event(lv_event_t *e)
     if (password[0] != '\0')
       cfg.set("password", std::string(password));
     cfg.save();
+    WifiService::instance().reload_from_config();
   }
 
   lv_screen_load_anim(wifi_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);

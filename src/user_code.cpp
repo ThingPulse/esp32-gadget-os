@@ -4,6 +4,7 @@
 #include <lvgl.h>
 #include "AppRegistry.h"
 #include "ServiceRegistry.h"
+#include "ui/StatusIcons.h"
 
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
@@ -62,6 +63,8 @@ static void create_home_screen(void)
   lv_label_set_text(bar_label, "esp32-gadget-os");
   lv_obj_set_style_text_color(bar_label, lv_color_white(), 0);
   lv_obj_align(bar_label, LV_ALIGN_CENTER, 0, 0);
+
+  create_wifi_status_icon(bar, -8);
 
   /* App grid */
   lv_obj_t *grid = lv_obj_create(scr);
@@ -170,6 +173,7 @@ void loop(void)
   lv_tick_inc(cur_ms - prev_ms);
   prev_ms = cur_ms;
 #endif
+  ServiceRegistry::instance().loop_all();
   lv_task_handler();
 }
 

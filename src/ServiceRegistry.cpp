@@ -21,6 +21,12 @@ bool ServiceRegistry::begin_all()
     return ok;
 }
 
+void ServiceRegistry::loop_all()
+{
+    for (int i = 0; i < _count; ++i)
+        _services[i]->loop();
+}
+
 SystemService *ServiceRegistry::get(const char *name) const
 {
     for (int i = 0; i < _count; ++i)
