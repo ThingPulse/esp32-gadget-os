@@ -7,11 +7,24 @@
 #include "ui/UiSessionState.h"
 #include "ui/UiTrace.h"
 
+#include <cmath>
 #include <cstdio>
 
 APP_REGISTER_COLOR("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0);
 
 namespace {
+
+static float haversine_km(double lat1, double lon1, double lat2, double lon2)
+{
+    constexpr double R = 6371.0;
+    constexpr double D2R = 3.14159265358979323846 / 180.0;
+    double dlat = (lat2 - lat1) * D2R;
+    double dlon = (lon2 - lon1) * D2R;
+    double a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+               std::cos(lat1 * D2R) * std::cos(lat2 * D2R) *
+               std::sin(dlon / 2) * std::sin(dlon / 2);
+    return (float)(R * 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a)));
+}
 
 struct PlanesAppCtx {
   lv_obj_t *screen = nullptr;
@@ -98,18 +111,18 @@ static void planes_app_update_ui()
     lv_obj_clear_flag(app_ctx.rows[i], LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(app_ctx.callsign_labels[i], planes[i].callsign.c_str());
 
-    char detail_buf[128] = {0};
-    const float speed_kmh = planes[i].velocity_ms * 3.6f;
-    std::snprintf(detail_buf,
-                  sizeof(detail_buf),
-                  "%s | %.2f, %.2f | %.0fm | %.0fkm/h%s",
-                  planes[i].icao24.c_str(),
-                  planes[i].latitude,
-                  planes[i].longitude,
-                  planes[i].altitude_m,
-                  speed_kmh,
-                  planes[i].on_ground ? " | GND" : "");
-    lv_label_set_text(app_ctx.detail_labels[i], detail_buf);
+    if (planes[i].on_ground) {
+        lv_label_set_text(app_ctx.detail_labels[i], "On Ground");
+    } else {
+        const float dist_km = haversine_km(svc.center_latitude(), svc.center_longitude(),
+                                           planes[i].latitude, planes[i].longitude);
+        const float speed_kmh = planes[i].velocity_ms * 3.6f;
+        char detail_buf[96] = {0};
+        std::snprintf(detail_buf, sizeof(detail_buf),
+                      "Alt: %.0fm  %.0f km/h  %.1f km",
+                      planes[i].altitude_m, speed_kmh, dist_km);
+        lv_label_set_text(app_ctx.detail_labels[i], detail_buf);
+    }
   }
 }
 

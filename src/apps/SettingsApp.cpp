@@ -130,6 +130,7 @@ struct PlanesCtx {
   lv_obj_t *lon_input;
   lv_obj_t *range_input;
   lv_obj_t *status_label;
+  lv_obj_t *guess_result_label;
 };
 static PlanesCtx planes_ctx;
 
@@ -258,6 +259,50 @@ static void weather_guess_location_event(lv_event_t *e)
   std::string label = "Guessed: ";
   label += place;
   lv_label_set_text(weather_ctx.guess_result_label, label.c_str());
+}
+
+static void planes_guess_location_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  if (!planes_ctx.lat_input || !planes_ctx.lon_input || !planes_ctx.guess_result_label) return;
+
+  lv_label_set_text(planes_ctx.guess_result_label, "Guessing location...");
+  lv_refr_now(nullptr);
+
+  double lat = 0.0;
+  double lon = 0.0;
+  std::string city;
+  std::string region;
+  std::string error;
+
+  if (!fetch_ip_location(lat, lon, city, region, error)) {
+    std::string label = "Location guess failed";
+    if (!error.empty()) {
+      label += ": ";
+      label += error;
+    }
+    lv_label_set_text(planes_ctx.guess_result_label, label.c_str());
+    return;
+  }
+
+  char lat_buf[24] = {0};
+  char lon_buf[24] = {0};
+  std::snprintf(lat_buf, sizeof(lat_buf), "%.6f", lat);
+  std::snprintf(lon_buf, sizeof(lon_buf), "%.6f", lon);
+  lv_textarea_set_text(planes_ctx.lat_input, lat_buf);
+  lv_textarea_set_text(planes_ctx.lon_input, lon_buf);
+
+  std::string place = city;
+  if (!region.empty()) {
+    if (!place.empty()) place += ", ";
+    place += region;
+  }
+  if (place.empty()) place = "unknown location";
+
+  std::string label = "Guessed: ";
+  label += place;
+  lv_label_set_text(planes_ctx.guess_result_label, label.c_str());
 }
 
 static void wifi_save_event(lv_event_t *e)
@@ -857,6 +902,19 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(lon_input, planes_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(lon_input, planes_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
+  lv_obj_t *guess_btn = lv_button_create(content);
+  lv_obj_set_width(guess_btn, lv_pct(100));
+  lv_obj_set_height(guess_btn, 44);
+  lv_obj_add_event_cb(guess_btn, planes_guess_location_event, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t *guess_label = lv_label_create(guess_btn);
+  lv_label_set_text(guess_label, "Guess from IP");
+  lv_obj_center(guess_label);
+
+  lv_obj_t *guess_result_label = lv_label_create(content);
+  lv_label_set_text(guess_result_label, "");
+  lv_obj_set_style_text_color(guess_result_label, lv_color_hex(0xb7bdd7), 0);
+
   lv_obj_t *range_label = lv_label_create(content);
   lv_label_set_text(range_label, "Visibility Range (km)");
   lv_obj_set_style_text_color(range_label, lv_color_white(), 0);
@@ -908,6 +966,7 @@ static void open_planes_screen(lv_event_t *e)
   planes_ctx.lon_input = lon_input;
   planes_ctx.range_input = range_input;
   planes_ctx.status_label = status_label;
+  planes_ctx.guess_result_label = guess_result_label;
 
   ui_load_screen(scr, false);
   UI_TRACE("Settings", "open_planes_screen loaded");
