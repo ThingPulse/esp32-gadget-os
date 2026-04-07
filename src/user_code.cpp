@@ -13,6 +13,7 @@
 #include "services/WeatherService.h"
 #include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
+#include "ui/UiTrace.h"
 
 #include <cstring>
 
@@ -29,12 +30,17 @@ static LGFX lcd;
 #endif
 
 static lv_display_t *disp;
-static uint8_t draw_buf[320 * 20 * 2];
+// Keep native smooth while reducing ESP32 DRAM pressure.
+static uint8_t draw_buf[320 * 8 * 2];
 static lv_obj_t *home_screen = nullptr;
+static bool restore_route_pending = true;
 
 static void launch_route(const std::string &route)
 {
+  UI_TRACE("Route", "launch_route route=%s", route.c_str());
+
   if (route == "home") {
+    UI_TRACE("Route", "loading home screen");
     if (home_screen && lv_obj_is_valid(home_screen))
       lv_screen_load(home_screen);
     UiSessionState::set_route("home");
@@ -42,35 +48,42 @@ static void launch_route(const std::string &route)
   }
 
   if (route == "settings") {
+    UI_TRACE("Route", "launch settings");
     settings_launch();
     return;
   }
 
   if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes") {
+    UI_TRACE("Route", "launch settings subroute=%s", route.c_str());
     settings_launch_with_route(route.c_str());
     return;
   }
 
   if (route == "weather") {
+    UI_TRACE("Route", "launch weather");
     weather_app_launch();
     return;
   }
 
   if (route == "weather_icon_test") {
+    UI_TRACE("Route", "launch weather_icon_test");
     weather_icon_test_app_launch();
     return;
   }
 
   if (route == "planes") {
+    UI_TRACE("Route", "launch planes");
     planes_app_launch();
     return;
   }
 
   if (route == "calculator") {
+    UI_TRACE("Route", "launch calculator");
     calculator_app_launch();
     return;
   }
 
+  UI_TRACE("Route", "unknown route=%s fallback=home", route.c_str());
   UiSessionState::set_route("home");
 }
 
@@ -100,17 +113,7 @@ static void app_icon_clicked(lv_event_t *e)
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     const App *app = &AppRegistry::instance().apps()[idx];
-    if (std::strcmp(app->name, "Settings") == 0) {
-      UiSessionState::set_route("settings");
-    } else if (std::strcmp(app->name, "Weather") == 0) {
-      UiSessionState::set_route("weather");
-    } else if (std::strcmp(app->name, "Weather Icons") == 0) {
-      UiSessionState::set_route("weather_icon_test");
-    } else if (std::strcmp(app->name, "Planes") == 0) {
-      UiSessionState::set_route("planes");
-    } else if (std::strcmp(app->name, "Calculator") == 0) {
-      UiSessionState::set_route("calculator");
-    }
+    UI_TRACE("Tap", "app_icon_clicked idx=%d app=%s", idx, app && app->name ? app->name : "<null>");
     if (app->on_launch) app->on_launch();
   }
 }
@@ -214,6 +217,7 @@ static uint32_t get_tick_ms(void)
 
 void setup(void)
 {
+  UI_TRACE("Boot", "setup start");
   ServiceRegistry::instance().begin_all();
 
   lcd.init();
@@ -238,14 +242,24 @@ void setup(void)
   UiSessionState::begin();
   create_home_screen();
 
-  // DISABLED: Route persistence - testing if this causes crashes
-  // const std::string route = UiSessionState::current_route();
-  // if (route != "home")
-  //   launch_route(route);
+  // Defer route restoration until first loop so home screen is fully ready
+  restore_route_pending = true;
+  UI_TRACE("Boot", "setup done restore_route_pending=1");
 }
 
 void loop(void)
 {
+  // Restore persisted route on first loop iteration after home screen is created
+  if (restore_route_pending) {
+    UI_TRACE("Boot", "restore_route_pending fired");
+    restore_route_pending = false;
+    const std::string route = UiSessionState::current_route();
+    UI_TRACE("Boot", "current_route=%s", route.c_str());
+    if (route != "home" && !route.empty()) {
+      launch_route(route);
+    }
+  }
+
 #if !defined(LV_TICK_CUSTOM) || !LV_TICK_CUSTOM
   static uint32_t prev_ms = 0;
 #if defined(SDL_h_)

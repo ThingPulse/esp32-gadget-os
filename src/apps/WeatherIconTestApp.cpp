@@ -1,6 +1,7 @@
 #include "apps/WeatherIconTestApp.h"
 
 #include "AppRegistry.h"
+#include "ui/UiNav.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
 #include "ui/WeatherIconSet.h"
@@ -20,7 +21,7 @@ static void nav_back_event(lv_event_t *e)
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
-    lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+    ui_load_screen(target_scr, true);
   }
 }
 
@@ -28,7 +29,6 @@ static void nav_back_event(lv_event_t *e)
 
 void weather_icon_test_app_launch(void)
 {
-  UiSessionState::set_route("weather_icon_test");
   lv_obj_t *home_scr = lv_screen_active();
 
   lv_obj_t *scr = lv_obj_create(nullptr);
@@ -107,5 +107,8 @@ void weather_icon_test_app_launch(void)
     weather_icon_create(card, icon_spec.kind, 68);
   }
 
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("weather_icon_test");
 }

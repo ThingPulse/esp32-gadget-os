@@ -9,11 +9,30 @@
 #include <cstdio>
 #include <cstdlib>
 
+
 #if defined(ARDUINO)
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#if defined(__has_include)
+#if __has_include(<WiFiClientSecure.h>)
+#include <WiFiClientSecure.h>
+#define PLANES_HAS_SECURE_CLIENT 1
+using PlanesSecureClient = WiFiClientSecure;
+#elif __has_include(<NetworkClientSecure.h>)
+#include <NetworkClientSecure.h>
+#define PLANES_HAS_SECURE_CLIENT 1
+using PlanesSecureClient = NetworkClientSecure;
+#else
+#define PLANES_HAS_SECURE_CLIENT 0
+using PlanesSecureClient = WiFiClient;
+#endif
+#else
+#define PLANES_HAS_SECURE_CLIENT 1
+#include <WiFiClientSecure.h>
+using PlanesSecureClient = WiFiClientSecure;
+#endif
 #else
 #include <chrono>
 #endif
@@ -49,7 +68,7 @@ bool PlanesService::begin()
         _wifi_disconnected_sub = EventBus::instance().subscribe(EventType::WifiDisconnected, on_wifi_disconnected, this);
 
     reload_from_config();
-    if (_configured && is_wifi_connected())
+    if (_enabled && _configured && is_wifi_connected())
         fetch_and_update();
 
     return true;
@@ -57,11 +76,14 @@ bool PlanesService::begin()
 
 void PlanesService::loop()
 {
-    if (!_configured || !is_wifi_connected())
+    if (!_enabled || !_configured || !is_wifi_connected())
         return;
 
-    if (!_has_data || (now_ms() - _last_fetch_ms >= PLANES_REFRESH_MS))
-        fetch_and_update();
+    const unsigned long now = now_ms();
+    if (_last_fetch_ms != 0 && (now - _last_fetch_ms) < PLANES_REFRESH_MS)
+        return;
+
+    fetch_and_update();
 }
 
 bool PlanesService::reload_from_config()
@@ -98,7 +120,7 @@ bool PlanesService::reload_from_config()
     }
 
     _configured = true;
-    if (is_wifi_connected())
+    if (_enabled && is_wifi_connected())
         fetch_and_update();
 
     return true;
@@ -115,7 +137,7 @@ void PlanesService::on_wifi_connected(const SystemEvent &event, void *user_data)
 {
     (void)event;
     PlanesService *self = static_cast<PlanesService *>(user_data);
-    if (self && self->_configured)
+    if (self && self->_enabled && self->_configured)
         self->fetch_and_update();
 }
 
@@ -134,6 +156,8 @@ bool PlanesService::is_wifi_connected() const
 
 bool PlanesService::fetch_and_update()
 {
+    _last_fetch_ms = now_ms();
+
     std::string payload;
     if (!fetch_payload(payload)) {
         clear_planes();
@@ -177,7 +201,6 @@ bool PlanesService::fetch_and_update()
 
     _has_data = true;
     _last_error.clear();
-    _last_fetch_ms = now_ms();
     return true;
 }
 
@@ -203,18 +226,40 @@ bool PlanesService::fetch_payload(std::string &out_payload)
                   lomax);
 
 #if defined(ARDUINO)
-    WiFiClientSecure client;
-    client.setInsecure();
-
     HTTPClient http;
+    PlanesSecureClient client;
+#if PLANES_HAS_SECURE_CLIENT
+    client.setInsecure();
     if (!http.begin(client, url)) {
-        _last_error = "HTTP begin failed";
+        _last_error = "HTTP begin failed (secure client)";
         return false;
     }
+#else
+    (void)client;
+    _last_error = "HTTPS requires WiFiClientSecure/NetworkClientSecure; update ESP32 platform package";
+    return false;
+#endif
+
+    http.setConnectTimeout(8000);
+    http.setTimeout(12000);
+    http.addHeader("Accept", "application/json");
+    http.addHeader("User-Agent", "esp32-gadget-os/1.0");
+    http.addHeader("Connection", "close");
 
     int code = http.GET();
     if (code != HTTP_CODE_OK) {
-        _last_error = "HTTP error " + std::to_string(code);
+        std::string err = "HTTP error " + std::to_string(code);
+        const String body = http.getString();
+        if (!body.isEmpty()) {
+            err += ": ";
+            if (body.length() > 140) {
+                err += body.substring(0, 140).c_str();
+                err += "...";
+            } else {
+                err += body.c_str();
+            }
+        }
+        _last_error = err;
         http.end();
         return false;
     }

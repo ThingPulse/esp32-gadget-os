@@ -2,8 +2,10 @@
 
 #include "AppRegistry.h"
 #include "services/PlanesService.h"
+#include "ui/UiNav.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
+#include "ui/UiTrace.h"
 
 #include <cstdio>
 
@@ -19,6 +21,7 @@ struct PlanesAppCtx {
   lv_obj_t *callsign_labels[PlanesService::MAX_PLANES]{};
   lv_obj_t *detail_labels[PlanesService::MAX_PLANES]{};
   lv_timer_t *refresh_timer = nullptr;
+  bool closing = false;
 };
 
 static PlanesAppCtx app_ctx;
@@ -26,15 +29,25 @@ static PlanesAppCtx app_ctx;
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    UI_TRACE("Planes", "back clicked");
+    PlanesService::instance().pause();
+    app_ctx.closing = true;
+    if (app_ctx.refresh_timer) {
+      lv_timer_delete(app_ctx.refresh_timer);
+      app_ctx.refresh_timer = nullptr;
+      UI_TRACE("Planes", "back deleted refresh timer");
+    }
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
+    UI_TRACE("Planes", "back target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
-    lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+    ui_load_screen(target_scr, true);
   }
 }
 
 static void planes_app_update_ui()
 {
+  if (app_ctx.closing) return;
   if (!app_ctx.screen || !lv_obj_is_valid(app_ctx.screen)) return;
   if (!app_ctx.status_label || !lv_obj_is_valid(app_ctx.status_label)) return;
   if (!app_ctx.count_label || !lv_obj_is_valid(app_ctx.count_label)) return;
@@ -103,16 +116,19 @@ static void planes_app_update_ui()
 static void planes_app_timer_cb(lv_timer_t *timer)
 {
   (void)timer;
+  if (app_ctx.closing) return;
   planes_app_update_ui();
 }
 
 static void planes_app_refresh_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  if (app_ctx.closing) return;
+
+  UI_TRACE("Planes", "refresh clicked");
 
   if (app_ctx.status_label && lv_obj_is_valid(app_ctx.status_label))
     lv_label_set_text(app_ctx.status_label, "Refreshing...");
-  lv_refr_now(nullptr);
 
   PlanesService::instance().refresh_now();
   planes_app_update_ui();
@@ -121,6 +137,8 @@ static void planes_app_refresh_event(lv_event_t *e)
 static void planes_app_screen_delete_event(lv_event_t *e)
 {
   (void)e;
+  UI_TRACE("Planes", "screen delete event");
+  PlanesService::instance().pause();
   if (app_ctx.refresh_timer) {
     lv_timer_delete(app_ctx.refresh_timer);
     app_ctx.refresh_timer = nullptr;
@@ -132,7 +150,8 @@ static void planes_app_screen_delete_event(lv_event_t *e)
 
 void planes_app_launch(void)
 {
-  UiSessionState::set_route("planes");
+  UI_TRACE("Planes", "launch begin");
+  app_ctx.closing = false;
   lv_obj_t *home_scr = lv_screen_active();
 
   lv_obj_t *scr = lv_obj_create(nullptr);
@@ -240,6 +259,11 @@ void planes_app_launch(void)
   app_ctx.count_label = count_label;
   app_ctx.refresh_timer = lv_timer_create(planes_app_timer_cb, 3000, nullptr);
 
+  PlanesService::instance().resume();
   planes_app_update_ui();
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  UI_TRACE("Planes", "launch loaded screen");
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("planes");
 }

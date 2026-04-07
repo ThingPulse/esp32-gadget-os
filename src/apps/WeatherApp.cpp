@@ -2,8 +2,10 @@
 
 #include "AppRegistry.h"
 #include "services/WeatherService.h"
+#include "ui/UiNav.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
+#include "ui/UiTrace.h"
 #include "ui/WeatherIconSet.h"
 
 #include <cstdio>
@@ -30,6 +32,7 @@ struct WeatherAppCtx {
   lv_obj_t *forecast_temp_labels[WeatherService::FORECAST_DAYS]{};
   lv_obj_t *refresh_btn = nullptr;
   lv_timer_t *refresh_timer = nullptr;
+  bool closing = false;
 };
 
 static WeatherAppCtx app_ctx;
@@ -92,16 +95,34 @@ static std::string weekday_label_from_iso(const std::string &iso)
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    UI_TRACE("Weather", "back clicked");
+    WeatherService::instance().pause();
+    app_ctx.closing = true;
+    if (app_ctx.refresh_timer) {
+      lv_timer_delete(app_ctx.refresh_timer);
+      app_ctx.refresh_timer = nullptr;
+      UI_TRACE("Weather", "back deleted refresh timer");
+    }
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
+    UI_TRACE("Weather", "back target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
-    lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+    ui_load_screen(target_scr, true);
   }
 }
 
 static void weather_app_update_ui()
 {
+  if (app_ctx.closing) return;
   if (!app_ctx.screen || !lv_obj_is_valid(app_ctx.screen)) return;
+  if (!app_ctx.date_label || !lv_obj_is_valid(app_ctx.date_label)) return;
+  if (!app_ctx.current_icon || !lv_obj_is_valid(app_ctx.current_icon)) return;
+  if (!app_ctx.condition_label || !lv_obj_is_valid(app_ctx.condition_label)) return;
+  if (!app_ctx.temp_label || !lv_obj_is_valid(app_ctx.temp_label)) return;
+  if (!app_ctx.humidity_label || !lv_obj_is_valid(app_ctx.humidity_label)) return;
+  if (!app_ctx.pressure_label || !lv_obj_is_valid(app_ctx.pressure_label)) return;
+  if (!app_ctx.precip_label || !lv_obj_is_valid(app_ctx.precip_label)) return;
+  if (!app_ctx.wind_label || !lv_obj_is_valid(app_ctx.wind_label)) return;
 
   WeatherService &weather = WeatherService::instance();
 
@@ -114,7 +135,7 @@ static void weather_app_update_ui()
     lv_label_set_text(app_ctx.wind_label, "--");
 
     for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
-      if (app_ctx.forecast_rows[i])
+      if (app_ctx.forecast_rows[i] && lv_obj_is_valid(app_ctx.forecast_rows[i]))
         lv_obj_add_flag(app_ctx.forecast_rows[i], LV_OBJ_FLAG_HIDDEN);
     }
     return;
@@ -160,7 +181,10 @@ static void weather_app_update_ui()
   const WeatherForecastDay *forecast = weather.forecast_days();
   int count = weather.forecast_count();
   for (int i = 0; i < 4 && i < WeatherService::FORECAST_DAYS; ++i) {
-    if (!app_ctx.forecast_rows[i]) continue;
+    if (!app_ctx.forecast_rows[i] || !lv_obj_is_valid(app_ctx.forecast_rows[i])) continue;
+    if (!app_ctx.forecast_day_labels[i] || !lv_obj_is_valid(app_ctx.forecast_day_labels[i])) continue;
+    if (!app_ctx.forecast_icons[i] || !lv_obj_is_valid(app_ctx.forecast_icons[i])) continue;
+    if (!app_ctx.forecast_temp_labels[i] || !lv_obj_is_valid(app_ctx.forecast_temp_labels[i])) continue;
 
     if (i >= count || !forecast[i].valid) {
       lv_obj_add_flag(app_ctx.forecast_rows[i], LV_OBJ_FLAG_HIDDEN);
@@ -185,16 +209,19 @@ static void weather_app_update_ui()
 static void weather_app_timer_cb(lv_timer_t *timer)
 {
   (void)timer;
+  if (app_ctx.closing) return;
   weather_app_update_ui();
 }
 
 static void weather_app_refresh_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  if (app_ctx.closing) return;
 
-  if (app_ctx.condition_label)
+  UI_TRACE("Weather", "refresh clicked");
+
+  if (app_ctx.condition_label && lv_obj_is_valid(app_ctx.condition_label))
     lv_label_set_text(app_ctx.condition_label, "Refreshing...");
-  lv_refr_now(nullptr);
 
   WeatherService::instance().refresh_now();
   weather_app_update_ui();
@@ -203,6 +230,8 @@ static void weather_app_refresh_event(lv_event_t *e)
 static void weather_app_screen_delete_event(lv_event_t *e)
 {
   (void)e;
+  UI_TRACE("Weather", "screen delete event");
+  WeatherService::instance().pause();
   if (app_ctx.refresh_timer) {
     lv_timer_delete(app_ctx.refresh_timer);
     app_ctx.refresh_timer = nullptr;
@@ -214,7 +243,8 @@ static void weather_app_screen_delete_event(lv_event_t *e)
 
 void weather_app_launch(void)
 {
-  UiSessionState::set_route("weather");
+  UI_TRACE("Weather", "launch begin");
+  app_ctx.closing = false;
   lv_obj_t *home_scr = lv_screen_active();
 
   lv_obj_t *scr = lv_obj_create(nullptr);
@@ -376,6 +406,11 @@ void weather_app_launch(void)
   app_ctx.refresh_btn = refresh_btn;
   app_ctx.refresh_timer = lv_timer_create(weather_app_timer_cb, 5000, nullptr);
 
+  WeatherService::instance().resume();
   weather_app_update_ui();
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  UI_TRACE("Weather", "launch loaded screen");
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("weather");
 }

@@ -1,6 +1,7 @@
 #include "apps/CalculatorApp.h"
 
 #include "AppRegistry.h"
+#include "ui/UiNav.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
 
@@ -31,7 +32,7 @@ static void nav_back_event(lv_event_t *e)
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
-    lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+    ui_load_screen(target_scr, true);
   }
 }
 
@@ -258,7 +259,6 @@ static lv_obj_t *create_calc_btn(lv_obj_t *parent,
 
 void calculator_app_launch(void)
 {
-  UiSessionState::set_route("calculator");
   lv_obj_t *home_scr = lv_screen_active();
 
   lv_obj_t *scr = lv_obj_create(nullptr);
@@ -359,5 +359,8 @@ void calculator_app_launch(void)
   create_calc_btn(panel, ".", sx + (bw + gap) * 2, sy + (bh + gap) * 4, bw, bh, num_bg, num_fg);
   create_calc_btn(panel, "=", sx + (bw + gap) * 3, sy + (bh + gap) * 4, bw, bh, op_bg, op_fg);
 
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("calculator");
 }

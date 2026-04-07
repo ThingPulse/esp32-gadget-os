@@ -24,6 +24,8 @@ public:
 
     bool reload_from_config();
     bool has_weather() const;
+    void pause() { _enabled = false; }
+    void resume() { _enabled = true; _last_fetch_ms = 0; }
     std::string header_text() const;
     float temperature_value() const;
     int weather_code() const;
@@ -48,6 +50,7 @@ private:
     unsigned long now_ms() const;
 
     bool _configured = false;
+    bool _enabled = false;
     bool _metric = true;
     double _latitude = 0.0;
     double _longitude = 0.0;

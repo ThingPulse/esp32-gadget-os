@@ -48,9 +48,8 @@ bool WeatherService::begin()
         _wifi_connected_sub = EventBus::instance().subscribe(EventType::WifiConnected, on_wifi_connected, this);
     if (_wifi_disconnected_sub == 0)
         _wifi_disconnected_sub = EventBus::instance().subscribe(EventType::WifiDisconnected, on_wifi_disconnected, this);
-
     reload_from_config();
-    if (_configured && is_wifi_connected())
+    if (_enabled && _configured && is_wifi_connected())
         fetch_and_update();
 
     return true;
@@ -58,11 +57,14 @@ bool WeatherService::begin()
 
 void WeatherService::loop()
 {
-    if (!_configured || !is_wifi_connected())
+    if (!_enabled || !_configured || !is_wifi_connected())
         return;
 
-    if (!_has_weather || (now_ms() - _last_fetch_ms >= WEATHER_REFRESH_MS))
-        fetch_and_update();
+    const unsigned long now = now_ms();
+    if (_last_fetch_ms != 0 && (now - _last_fetch_ms) < WEATHER_REFRESH_MS)
+        return;
+
+    fetch_and_update();
 }
 
 bool WeatherService::reload_from_config()
@@ -88,7 +90,7 @@ bool WeatherService::reload_from_config()
     _longitude = std::strtod(lon.c_str(), nullptr);
     _configured = true;
 
-    if (is_wifi_connected())
+    if (_enabled && is_wifi_connected())
         fetch_and_update();
 
     return true;
@@ -171,7 +173,7 @@ void WeatherService::on_wifi_connected(const SystemEvent &event, void *user_data
 {
     (void)event;
     WeatherService *self = static_cast<WeatherService *>(user_data);
-    if (self && self->_configured)
+    if (self && self->_enabled && self->_configured)
         self->fetch_and_update();
 }
 
@@ -190,6 +192,8 @@ bool WeatherService::is_wifi_connected() const
 
 bool WeatherService::fetch_and_update()
 {
+    _last_fetch_ms = now_ms();
+
     std::string payload;
     if (!fetch_payload(payload)) {
         clear_weather();
@@ -245,7 +249,6 @@ bool WeatherService::fetch_and_update()
     }
 
     _has_weather = true;
-    _last_fetch_ms = now_ms();
     EventBus::instance().publish(SystemEvent{EventType::WeatherUpdated});
     return true;
 }

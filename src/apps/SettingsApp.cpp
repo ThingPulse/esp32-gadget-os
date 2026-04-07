@@ -5,8 +5,10 @@
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
 #include "services/WifiService.h"
+#include "ui/UiNav.h"
 #include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
+#include "ui/UiTrace.h"
 #include <ArduinoJson.h>
 #include <lvgl.h>
 
@@ -28,20 +30,24 @@ static lv_obj_t *route_restore_settings_screen = nullptr;
 static void nav_to_home_screen(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    UI_TRACE("Settings", "nav_to_home clicked");
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
+    UI_TRACE("Settings", "nav_to_home target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
-    lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+    ui_load_screen(target_scr, true);
   }
 }
 
 static void nav_to_settings_screen(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    UI_TRACE("Settings", "nav_to_settings clicked");
     UiSessionState::set_route("settings");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
+    UI_TRACE("Settings", "nav_to_settings target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
-    lv_screen_load_anim(target_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+    ui_load_screen(target_scr, true);
   }
 }
 
@@ -270,7 +276,7 @@ static void wifi_save_event(lv_event_t *e)
 
   UiSessionState::set_route("settings");
   if (!wifi_ctx.settings_scr || !lv_obj_is_valid(wifi_ctx.settings_scr)) return;
-  lv_screen_load_anim(wifi_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+  ui_load_screen(wifi_ctx.settings_scr, true);
 }
 
 static void wifi_ta_event(lv_event_t *e)
@@ -318,8 +324,6 @@ static void open_wifi_screen(lv_event_t *e)
     settings_scr = route_restore_settings_screen;
   }
   if (!settings_scr) return;
-
-  UiSessionState::set_route("settings_wifi");
 
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -391,7 +395,10 @@ static void open_wifi_screen(lv_event_t *e)
   wifi_ctx.pass_input = pass_input;
   wifi_ctx.settings_scr = settings_scr;
 
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("settings_wifi");
 }
 
 static void time_save_event(lv_event_t *e)
@@ -403,7 +410,7 @@ static void time_save_event(lv_event_t *e)
 
   UiSessionState::set_route("settings");
   if (!time_ctx.settings_scr || !lv_obj_is_valid(time_ctx.settings_scr)) return;
-  lv_screen_load_anim(time_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+  ui_load_screen(time_ctx.settings_scr, true);
 }
 
 static void timezone_changed_event(lv_event_t *e)
@@ -458,8 +465,6 @@ static void open_time_screen(lv_event_t *e)
   if (!settings_scr) return;
 
   TimeService &time_service = TimeService::instance();
-
-  UiSessionState::set_route("settings_time");
 
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -552,7 +557,10 @@ static void open_time_screen(lv_event_t *e)
   time_ctx.selected_region_index = region_index;
   time_ctx.selected_tz_index = time_service.timezone_index();
 
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("settings_time");
 }
 
 static void weather_ta_event(lv_event_t *e)
@@ -605,7 +613,7 @@ static void weather_save_event(lv_event_t *e)
 
   UiSessionState::set_route("settings");
   if (!weather_ctx.settings_scr || !lv_obj_is_valid(weather_ctx.settings_scr)) return;
-  lv_screen_load_anim(weather_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+  ui_load_screen(weather_ctx.settings_scr, true);
 }
 
 static void open_weather_screen(lv_event_t *e)
@@ -618,8 +626,6 @@ static void open_weather_screen(lv_event_t *e)
     settings_scr = route_restore_settings_screen;
   }
   if (!settings_scr) return;
-
-  UiSessionState::set_route("settings_weather");
 
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -733,7 +739,10 @@ static void open_weather_screen(lv_event_t *e)
   weather_ctx.unit_switch = unit_switch;
   weather_ctx.guess_result_label = guess_result_label;
 
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("settings_weather");
 }
 
 static void planes_ta_event(lv_event_t *e)
@@ -775,6 +784,8 @@ static void planes_save_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
+  UI_TRACE("Settings", "planes_save_event clicked");
+
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("planes")) {
     cfg.set("center_latitude", normalize_coord_text(lv_textarea_get_text(planes_ctx.lat_input)));
@@ -785,12 +796,15 @@ static void planes_save_event(lv_event_t *e)
   }
 
   UiSessionState::set_route("settings");
+  UI_TRACE("Settings", "planes_save_event return_to_settings valid=%d",
+           (planes_ctx.settings_scr && lv_obj_is_valid(planes_ctx.settings_scr)) ? 1 : 0);
   if (!planes_ctx.settings_scr || !lv_obj_is_valid(planes_ctx.settings_scr)) return;
-  lv_screen_load_anim(planes_ctx.settings_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, true);
+  ui_load_screen(planes_ctx.settings_scr, true);
 }
 
 static void open_planes_screen(lv_event_t *e)
 {
+  UI_TRACE("Settings", "open_planes_screen begin from_event=%d", e ? 1 : 0);
   lv_obj_t *settings_scr = nullptr;
   if (e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -799,8 +813,7 @@ static void open_planes_screen(lv_event_t *e)
     settings_scr = route_restore_settings_screen;
   }
   if (!settings_scr) return;
-
-  UiSessionState::set_route("settings_planes");
+  UI_TRACE("Settings", "open_planes_screen settings_scr valid=%d", lv_obj_is_valid(settings_scr) ? 1 : 0);
 
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -896,7 +909,11 @@ static void open_planes_screen(lv_event_t *e)
   planes_ctx.range_input = range_input;
   planes_ctx.status_label = status_label;
 
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  UI_TRACE("Settings", "open_planes_screen loaded");
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("settings_planes");
 }
 
 static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
@@ -1017,13 +1034,14 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
 
 void settings_launch_with_route(const char *route)
 {
+  UI_TRACE("Settings", "settings_launch_with_route route=%s", route ? route : "<null>");
   lv_obj_t *home_scr = lv_screen_active();
   lv_obj_t *settings_scr = create_settings_screen(home_scr);
   route_restore_settings_screen = settings_scr;
 
   if (!route || route[0] == '\0' || std::strcmp(route, "settings") == 0) {
     UiSessionState::set_route("settings");
-    lv_screen_load_anim(settings_scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+    ui_load_screen(settings_scr, false);
     route_restore_settings_screen = nullptr;
     return;
   }
@@ -1038,17 +1056,22 @@ void settings_launch_with_route(const char *route)
     open_planes_screen(nullptr);
   } else {
     UiSessionState::set_route("settings");
-    lv_screen_load_anim(settings_scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+    ui_load_screen(settings_scr, false);
   }
 
   route_restore_settings_screen = nullptr;
+  UI_TRACE("Settings", "settings_launch_with_route done");
 }
 
 void settings_launch(void)
 {
+  UI_TRACE("Settings", "settings_launch begin");
   lv_obj_t *home_scr = lv_screen_active();
-  UiSessionState::set_route("settings");
   lv_obj_t *scr = create_settings_screen(home_scr);
 
-  lv_screen_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+  ui_load_screen(scr, false);
+  UI_TRACE("Settings", "settings_launch loaded");
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("settings");
 }

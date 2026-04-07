@@ -14,6 +14,12 @@ struct WifiIconCtx {
     SubscriptionId disconnected_sub;
 };
 
+static void wifi_ctx_delete_async(void *user_data)
+{
+    WifiIconCtx *ctx = static_cast<WifiIconCtx *>(user_data);
+    delete ctx;
+}
+
 static void update_wifi_icon(lv_obj_t *label)
 {
     if (!label || !lv_obj_is_valid(label))
@@ -49,7 +55,8 @@ static void wifi_icon_deleted(lv_event_t *e)
     EventBus::instance().unsubscribe(ctx->connecting_sub);
     EventBus::instance().unsubscribe(ctx->connected_sub);
     EventBus::instance().unsubscribe(ctx->disconnected_sub);
-    delete ctx;
+    ctx->label = nullptr;
+    lv_async_call(wifi_ctx_delete_async, ctx);
 }
 
 lv_obj_t *create_wifi_status_icon(lv_obj_t *parent, lv_coord_t x_offset)
@@ -73,6 +80,12 @@ struct TimeLabelCtx {
     lv_timer_t *timer;
     SubscriptionId sync_sub;
 };
+
+static void time_ctx_delete_async(void *user_data)
+{
+    TimeLabelCtx *ctx = static_cast<TimeLabelCtx *>(user_data);
+    delete ctx;
+}
 
 static void update_time_label(lv_obj_t *label)
 {
@@ -113,7 +126,9 @@ static void time_label_deleted(lv_event_t *e)
     EventBus::instance().unsubscribe(ctx->sync_sub);
     if (ctx->timer)
         lv_timer_delete(ctx->timer);
-    delete ctx;
+    ctx->timer = nullptr;
+    ctx->label = nullptr;
+    lv_async_call(time_ctx_delete_async, ctx);
 }
 
 lv_obj_t *create_time_status_label(lv_obj_t *parent, lv_coord_t x_offset)
@@ -141,6 +156,12 @@ struct WeatherCenterCtx {
     SubscriptionId weather_updated_sub;
     SubscriptionId weather_cleared_sub;
 };
+
+static void weather_center_ctx_delete_async(void *user_data)
+{
+    WeatherCenterCtx *ctx = static_cast<WeatherCenterCtx *>(user_data);
+    delete ctx;
+}
 
 static void update_weather_center_label(WeatherCenterCtx *ctx)
 {
@@ -179,7 +200,12 @@ static void weather_center_deleted(lv_event_t *e)
 
     EventBus::instance().unsubscribe(ctx->weather_updated_sub);
     EventBus::instance().unsubscribe(ctx->weather_cleared_sub);
-    delete ctx;
+    ctx->root = nullptr;
+    ctx->weather_row = nullptr;
+    ctx->icon = nullptr;
+    ctx->temp_label = nullptr;
+    ctx->fallback_label = nullptr;
+    lv_async_call(weather_center_ctx_delete_async, ctx);
 }
 
 lv_obj_t *create_weather_center_label(lv_obj_t *parent, const char *fallback_text, lv_coord_t x_offset)

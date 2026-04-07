@@ -28,6 +28,8 @@ public:
 
     bool reload_from_config();
     bool refresh_now();
+    void pause() { _enabled = false; }
+    void resume() { _enabled = true; _last_fetch_ms = 0; }
 
     bool is_configured() const { return _configured; }
     bool has_data() const { return _has_data; }
@@ -51,6 +53,7 @@ private:
 
     bool _configured = false;
     bool _has_data = false;
+    bool _enabled = false;
     double _center_lat = 0.0;
     double _center_lon = 0.0;
     double _range_km = 30.0;
