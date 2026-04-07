@@ -114,7 +114,12 @@ static void planes_app_update_ui()
     }
 
     lv_obj_clear_flag(app_ctx.rows[i], LV_OBJ_FLAG_HIDDEN);
-    lv_label_set_text(app_ctx.callsign_labels[i], planes[i].callsign.c_str());
+    std::string first_line = planes[i].callsign;
+    if (!planes[i].route.empty()) {
+      first_line += "  ";
+      first_line += planes[i].route;
+    }
+    lv_label_set_text(app_ctx.callsign_labels[i], first_line.c_str());
 
     if (planes[i].on_ground) {
         lv_label_set_text(app_ctx.detail_labels[i], "On Ground");

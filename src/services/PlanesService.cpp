@@ -5,6 +5,7 @@
 
 #include <ArduinoJson.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +41,10 @@ using PlanesSecureClient = WiFiClientSecure;
 namespace {
 
 constexpr unsigned long PLANES_REFRESH_MS = 10UL * 1000UL;
+constexpr unsigned long ROUTE_CACHE_OK_MS = 6UL * 60UL * 60UL * 1000UL;
+constexpr unsigned long ROUTE_CACHE_MISS_MS = 30UL * 60UL * 1000UL;
+constexpr int ROUTE_LOOKUPS_PER_CYCLE = 3;
+constexpr size_t ROUTE_CACHE_MAX_ENTRIES = 512;
 
 static std::string trim_copy(const std::string &in)
 {
@@ -50,6 +55,25 @@ static std::string trim_copy(const std::string &in)
     while (end > start && (in[end - 1] == ' ' || in[end - 1] == '\t')) end--;
 
     return in.substr(start, end - start);
+}
+
+static std::string normalize_callsign_key(const std::string &callsign)
+{
+    std::string out;
+    out.reserve(callsign.size());
+    for (char ch : callsign) {
+        if (ch == ' ' || ch == '\t') continue;
+        out.push_back((char)std::toupper((unsigned char)ch));
+    }
+    return out;
+}
+
+static std::string airport_code_from_obj(const JsonVariantConst &airport)
+{
+    std::string iata = airport["iata_code"].as<std::string>();
+    if (!iata.empty()) return iata;
+    std::string icao = airport["icao_code"].as<std::string>();
+    return icao;
 }
 
 }  // namespace
@@ -179,6 +203,7 @@ bool PlanesService::fetch_and_update()
         _planes[i] = PlaneState{};
 
     JsonArray states = doc["states"].as<JsonArray>();
+    int route_network_budget = ROUTE_LOOKUPS_PER_CYCLE;
     if (!states.isNull()) {
         for (JsonVariant row_var : states) {
             if (_plane_count >= MAX_PLANES) break;
@@ -193,6 +218,7 @@ bool PlanesService::fetch_and_update()
             dst.icao24 = row[0].as<std::string>();
             dst.callsign = trim_copy(row[1].as<std::string>());
             if (dst.callsign.empty()) dst.callsign = "(no callsign)";
+            dst.route = route_for_callsign(dst.callsign, route_network_budget);
             dst.longitude = row[5].as<float>();
             dst.latitude = row[6].as<float>();
             dst.altitude_m = row[7].isNull() ? 0.0f : row[7].as<float>();
@@ -203,6 +229,95 @@ bool PlanesService::fetch_and_update()
 
     _has_data = true;
     _last_error.clear();
+    return true;
+}
+
+std::string PlanesService::route_for_callsign(const std::string &callsign_raw, int &network_budget)
+{
+    const std::string key = normalize_callsign_key(callsign_raw);
+    if (key.empty() || key == "(NOCALLSIGN)") return "";
+
+    const unsigned long now = now_ms();
+    auto it = _route_cache.find(key);
+    if (it != _route_cache.end() && it->second.expires_at_ms > now)
+        return it->second.route;
+
+    if (network_budget <= 0) return "";
+    network_budget--;
+
+    std::string route;
+    if (fetch_route_for_callsign(key, route)) {
+        _route_cache[key] = RouteCacheEntry{route, now + ROUTE_CACHE_OK_MS};
+    } else {
+        _route_cache[key] = RouteCacheEntry{"", now + ROUTE_CACHE_MISS_MS};
+    }
+
+    if (_route_cache.size() > ROUTE_CACHE_MAX_ENTRIES)
+        _route_cache.clear();
+
+    return route;
+}
+
+bool PlanesService::fetch_route_for_callsign(const std::string &callsign_key, std::string &out_route)
+{
+    out_route.clear();
+    std::string payload;
+
+    char url[256] = {0};
+    std::snprintf(url, sizeof(url), "https://api.adsbdb.com/v0/callsign/%s", callsign_key.c_str());
+
+#if defined(ARDUINO)
+    HTTPClient http;
+    PlanesSecureClient client;
+#if PLANES_HAS_SECURE_CLIENT
+    client.setInsecure();
+    if (!http.begin(client, url)) {
+        return false;
+    }
+#else
+    (void)client;
+    return false;
+#endif
+
+    http.setConnectTimeout(4000);
+    http.setTimeout(6000);
+    http.addHeader("Accept", "application/json");
+    http.addHeader("User-Agent", "esp32-gadget-os/1.0");
+    http.addHeader("Connection", "close");
+
+    int code = http.GET();
+    if (code != HTTP_CODE_OK) {
+        http.end();
+        return false;
+    }
+
+    payload = http.getString().c_str();
+    http.end();
+    if (payload.empty()) return false;
+#else
+    char cmd[320] = {0};
+    std::snprintf(cmd, sizeof(cmd), "curl -s --max-time 8 \"%s\"", url);
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe) return false;
+    char buffer[256];
+    while (fgets(buffer, sizeof(buffer), pipe))
+        payload += buffer;
+    int rc = pclose(pipe);
+    if (rc != 0 || payload.empty()) return false;
+#endif
+
+    JsonDocument doc;
+    if (deserializeJson(doc, payload.c_str(), payload.size()) != DeserializationError::Ok)
+        return false;
+
+    JsonVariantConst flightroute = doc["response"]["flightroute"];
+    if (flightroute.isNull()) return false;
+
+    std::string origin = airport_code_from_obj(flightroute["origin"]);
+    std::string destination = airport_code_from_obj(flightroute["destination"]);
+    if (origin.empty() || destination.empty()) return false;
+
+    out_route = origin + "->" + destination;
     return true;
 }
 

@@ -4,11 +4,13 @@
 #include "ServiceRegistry.h"
 
 #include <string>
+#include <unordered_map>
 
 struct PlaneState {
     bool valid = false;
     std::string icao24;
     std::string callsign;
+    std::string route;
     float latitude = 0.0f;
     float longitude = 0.0f;
     float altitude_m = 0.0f;
@@ -50,8 +52,17 @@ private:
     bool is_wifi_connected() const;
     bool fetch_and_update();
     bool fetch_payload(std::string &out_payload);
+    bool fetch_route_for_callsign(const std::string &callsign_key, std::string &out_route);
+    std::string route_for_callsign(const std::string &callsign_raw, int &network_budget);
     void clear_planes();
     unsigned long now_ms() const;
+
+    struct RouteCacheEntry {
+        std::string route;
+        unsigned long expires_at_ms = 0;
+        RouteCacheEntry() = default;
+        RouteCacheEntry(const std::string &r, unsigned long e) : route(r), expires_at_ms(e) {}
+    };
 
     bool _configured = false;
     bool _has_data = false;
@@ -65,6 +76,7 @@ private:
     int _plane_count = 0;
     unsigned long _last_fetch_ms = 0;
     std::string _last_error;
+    std::unordered_map<std::string, RouteCacheEntry> _route_cache;
 
     SubscriptionId _wifi_connected_sub = 0;
     SubscriptionId _wifi_disconnected_sub = 0;
