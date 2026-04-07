@@ -100,6 +100,8 @@ bool PlanesService::reload_from_config()
     std::string lat = cfg.get("center_latitude", "");
     std::string lon = cfg.get("center_longitude", "");
     std::string range = cfg.get("range_km", "");
+    _metric = cfg.get_bool("metric", true);
+    _hide_ground = cfg.get_bool("hide_ground", false);
 
     if (lat.empty() || lon.empty() || range.empty()) {
         _configured = false;

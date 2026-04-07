@@ -131,6 +131,8 @@ struct PlanesCtx {
   lv_obj_t *range_input;
   lv_obj_t *status_label;
   lv_obj_t *guess_result_label;
+  lv_obj_t *unit_switch;
+  lv_obj_t *hide_ground_switch;
 };
 static PlanesCtx planes_ctx;
 
@@ -836,6 +838,8 @@ static void planes_save_event(lv_event_t *e)
     cfg.set("center_latitude", normalize_coord_text(lv_textarea_get_text(planes_ctx.lat_input)));
     cfg.set("center_longitude", normalize_coord_text(lv_textarea_get_text(planes_ctx.lon_input)));
     cfg.set("range_km", normalize_coord_text(lv_textarea_get_text(planes_ctx.range_input)));
+    cfg.set("metric", lv_obj_has_state(planes_ctx.unit_switch, LV_STATE_CHECKED));
+    cfg.set("hide_ground", lv_obj_has_state(planes_ctx.hide_ground_switch, LV_STATE_CHECKED));
     cfg.save();
     PlanesService::instance().reload_from_config();
   }
@@ -931,6 +935,40 @@ static void open_planes_screen(lv_event_t *e)
   lv_label_set_text(status_label, "Used to compute OpenSky bounding box.");
   lv_obj_set_style_text_color(status_label, lv_color_hex(0xb7bdd7), 0);
 
+  // Metric toggle
+  lv_obj_t *unit_row = lv_obj_create(content);
+  lv_obj_set_size(unit_row, lv_pct(100), 52);
+  lv_obj_clear_flag(unit_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(unit_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(unit_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(unit_row, 0, 0);
+  lv_obj_set_style_radius(unit_row, 10, 0);
+  lv_obj_set_style_pad_hor(unit_row, 16, 0);
+  lv_obj_set_style_pad_ver(unit_row, 0, 0);
+  lv_obj_t *unit_label = lv_label_create(unit_row);
+  lv_label_set_text(unit_label, "Metric units");
+  lv_obj_set_style_text_color(unit_label, lv_color_white(), 0);
+  lv_obj_align(unit_label, LV_ALIGN_LEFT_MID, 0, 0);
+  lv_obj_t *unit_switch = lv_switch_create(unit_row);
+  lv_obj_align(unit_switch, LV_ALIGN_RIGHT_MID, 0, 0);
+
+  // Hide-on-ground toggle
+  lv_obj_t *hg_row = lv_obj_create(content);
+  lv_obj_set_size(hg_row, lv_pct(100), 52);
+  lv_obj_clear_flag(hg_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(hg_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(hg_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(hg_row, 0, 0);
+  lv_obj_set_style_radius(hg_row, 10, 0);
+  lv_obj_set_style_pad_hor(hg_row, 16, 0);
+  lv_obj_set_style_pad_ver(hg_row, 0, 0);
+  lv_obj_t *hg_label = lv_label_create(hg_row);
+  lv_label_set_text(hg_label, "Hide planes on ground");
+  lv_obj_set_style_text_color(hg_label, lv_color_white(), 0);
+  lv_obj_align(hg_label, LV_ALIGN_LEFT_MID, 0, 0);
+  lv_obj_t *hide_ground_switch = lv_switch_create(hg_row);
+  lv_obj_align(hide_ground_switch, LV_ALIGN_RIGHT_MID, 0, 0);
+
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("planes")) {
     std::string lat = cfg.get("center_latitude", "");
@@ -939,6 +977,14 @@ static void open_planes_screen(lv_event_t *e)
     lv_textarea_set_text(lat_input, lat.c_str());
     lv_textarea_set_text(lon_input, lon.c_str());
     lv_textarea_set_text(range_input, range.c_str());
+    if (cfg.get_bool("metric", true))
+      lv_obj_add_state(unit_switch, LV_STATE_CHECKED);
+    else
+      lv_obj_clear_state(unit_switch, LV_STATE_CHECKED);
+    if (cfg.get_bool("hide_ground", false))
+      lv_obj_add_state(hide_ground_switch, LV_STATE_CHECKED);
+    else
+      lv_obj_clear_state(hide_ground_switch, LV_STATE_CHECKED);
   }
 
   lv_obj_t *save_btn = lv_button_create(content);
@@ -967,6 +1013,8 @@ static void open_planes_screen(lv_event_t *e)
   planes_ctx.range_input = range_input;
   planes_ctx.status_label = status_label;
   planes_ctx.guess_result_label = guess_result_label;
+  planes_ctx.unit_switch = unit_switch;
+  planes_ctx.hide_ground_switch = hide_ground_switch;
 
   ui_load_screen(scr, false);
   UI_TRACE("Settings", "open_planes_screen loaded");

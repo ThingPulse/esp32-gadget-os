@@ -39,6 +39,8 @@ public:
     double center_latitude() const { return _center_lat; }
     double center_longitude() const { return _center_lon; }
     double range_km() const { return _range_km; }
+    bool is_metric() const { return _metric; }
+    bool hide_ground() const { return _hide_ground; }
     const std::string &last_error() const { return _last_error; }
 
 private:
@@ -54,6 +56,8 @@ private:
     bool _configured = false;
     bool _has_data = false;
     bool _enabled = false;
+    bool _metric = true;
+    bool _hide_ground = false;
     double _center_lat = 0.0;
     double _center_lon = 0.0;
     double _range_km = 30.0;

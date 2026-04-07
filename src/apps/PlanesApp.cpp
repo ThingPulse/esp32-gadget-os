@@ -108,6 +108,11 @@ static void planes_app_update_ui()
       continue;
     }
 
+    if (planes[i].on_ground && svc.hide_ground()) {
+      lv_obj_add_flag(app_ctx.rows[i], LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+
     lv_obj_clear_flag(app_ctx.rows[i], LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(app_ctx.callsign_labels[i], planes[i].callsign.c_str());
 
@@ -116,11 +121,20 @@ static void planes_app_update_ui()
     } else {
         const float dist_km = haversine_km(svc.center_latitude(), svc.center_longitude(),
                                            planes[i].latitude, planes[i].longitude);
-        const float speed_kmh = planes[i].velocity_ms * 3.6f;
         char detail_buf[96] = {0};
-        std::snprintf(detail_buf, sizeof(detail_buf),
-                      "Alt: %.0fm  %.0f km/h  %.1f km",
-                      planes[i].altitude_m, speed_kmh, dist_km);
+        if (svc.is_metric()) {
+          const float speed_kmh = planes[i].velocity_ms * 3.6f;
+          std::snprintf(detail_buf, sizeof(detail_buf),
+                  "Alt: %.0fm  %.0f km/h  %.1f km",
+                  planes[i].altitude_m, speed_kmh, dist_km);
+        } else {
+          const float alt_ft    = planes[i].altitude_m * 3.28084f;
+          const float speed_mph = planes[i].velocity_ms * 2.23694f;
+          const float dist_mi   = dist_km * 0.621371f;
+          std::snprintf(detail_buf, sizeof(detail_buf),
+                  "Alt: %.0fft  %.0f mph  %.1f mi",
+                  alt_ft, speed_mph, dist_mi);
+        }
         lv_label_set_text(app_ctx.detail_labels[i], detail_buf);
     }
   }
