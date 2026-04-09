@@ -43,6 +43,7 @@ public:
     double range_km() const { return _range_km; }
     bool is_metric() const { return _metric; }
     bool hide_ground() const { return _hide_ground; }
+    int rate_limit_remaining() const { return _rate_limit_remaining; }
     const std::string &last_error() const { return _last_error; }
 
 private:
@@ -69,6 +70,7 @@ private:
     bool _enabled = false;
     bool _metric = true;
     bool _hide_ground = false;
+    int _rate_limit_remaining = -1;
     double _center_lat = 0.0;
     double _center_lon = 0.0;
     double _range_km = 30.0;

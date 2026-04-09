@@ -77,7 +77,13 @@ static void planes_app_update_ui()
 
   if (!svc.has_data()) {
     lv_label_set_text(app_ctx.status_label, svc.last_error().empty() ? "No plane data yet" : svc.last_error().c_str());
-    lv_label_set_text(app_ctx.count_label, "Planes: 0");
+    {
+      char buf[48] = {0};
+      const int rl = svc.rate_limit_remaining();
+      if (rl >= 0) std::snprintf(buf, sizeof(buf), "Planes: 0  Cr:%d", rl);
+      else std::snprintf(buf, sizeof(buf), "Planes: 0");
+      lv_label_set_text(app_ctx.count_label, buf);
+    }
     for (int i = 0; i < PlanesService::MAX_PLANES; ++i)
       if (app_ctx.rows[i] && lv_obj_is_valid(app_ctx.rows[i])) lv_obj_add_flag(app_ctx.rows[i], LV_OBJ_FLAG_HIDDEN);
     return;
@@ -92,8 +98,14 @@ static void planes_app_update_ui()
                 svc.range_km());
   lv_label_set_text(app_ctx.status_label, status_buf);
 
-  char count_buf[32] = {0};
-  std::snprintf(count_buf, sizeof(count_buf), "Planes: %d", svc.plane_count());
+  char count_buf[64] = {0};
+  {
+    const int rl = svc.rate_limit_remaining();
+    if (rl >= 0)
+      std::snprintf(count_buf, sizeof(count_buf), "Planes: %d  Cr:%d", svc.plane_count(), rl);
+    else
+      std::snprintf(count_buf, sizeof(count_buf), "Planes: %d", svc.plane_count());
+  }
   lv_label_set_text(app_ctx.count_label, count_buf);
 
   const PlaneState *planes = svc.planes();

@@ -2,6 +2,7 @@
 
 #include "services/ConfigStoreService.h"
 #include "services/WifiService.h"
+#include "ui/UiTrace.h"
 
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -40,7 +41,7 @@ using PlanesSecureClient = WiFiClientSecure;
 
 namespace {
 
-constexpr unsigned long PLANES_REFRESH_MS = 10UL * 1000UL;
+constexpr unsigned long PLANES_REFRESH_MS = 60UL * 1000UL;
 constexpr unsigned long ROUTE_CACHE_OK_MS = 6UL * 60UL * 60UL * 1000UL;
 constexpr unsigned long ROUTE_CACHE_MISS_MS = 30UL * 60UL * 1000UL;
 constexpr int ROUTE_LOOKUPS_PER_CYCLE = 3;
@@ -75,6 +76,93 @@ static std::string airport_code_from_obj(const JsonVariantConst &airport)
     std::string icao = airport["icao_code"].as<std::string>();
     return icao;
 }
+
+#if !defined(ARDUINO)
+static std::string snippet_copy(const std::string &s, size_t max_len = 240)
+{
+    if (s.size() <= max_len) return s;
+    return s.substr(0, max_len) + "...";
+}
+
+static bool emulator_http_get_logged(const char *tag,
+                                     const char *url,
+                                     int timeout_seconds,
+                                     std::string &out_body,
+                                     long &out_http_code,
+                                     int &out_exit_code,
+                                     long *out_rate_limit_remaining = nullptr)
+{
+    out_body.clear();
+    out_http_code = 0;
+    out_exit_code = -1;
+
+    char cmd[1024] = {0};
+    if (out_rate_limit_remaining) {
+        std::snprintf(cmd,
+                      sizeof(cmd),
+                      "curl -sS -L --max-time %d"
+                      " -w '\\n__COPILOT_HTTP_CODE:%%{http_code}\\n__COPILOT_RATE_LIMIT:%%{header{x-rate-limit-remaining}}\\n'"
+                      " \"%s\" 2>&1",
+                      timeout_seconds,
+                      url);
+    } else {
+        std::snprintf(cmd,
+                      sizeof(cmd),
+                      "curl -sS -L --max-time %d -w '\\n__COPILOT_HTTP_CODE:%%{http_code}\\n' \"%s\" 2>&1",
+                      timeout_seconds,
+                      url);
+    }
+
+    UI_TRACE(tag, "REQ %s", url);
+
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe) {
+        UI_TRACE(tag, "RESP popen failed");
+        return false;
+    }
+
+    char buffer[256];
+    while (fgets(buffer, sizeof(buffer), pipe))
+        out_body += buffer;
+
+    out_exit_code = pclose(pipe);
+
+    const std::string marker = "\n__COPILOT_HTTP_CODE:";
+    size_t marker_pos = out_body.rfind(marker);
+    if (marker_pos != std::string::npos) {
+        size_t code_start = marker_pos + marker.size();
+        size_t code_end = out_body.find('\n', code_start);
+        std::string code_str = out_body.substr(code_start, code_end - code_start);
+        out_http_code = std::strtol(code_str.c_str(), nullptr, 10);
+
+        if (out_rate_limit_remaining && code_end != std::string::npos) {
+            const std::string rl_marker = "__COPILOT_RATE_LIMIT:";
+            size_t rl_pos = out_body.find(rl_marker, code_end + 1);
+            if (rl_pos != std::string::npos) {
+                size_t rl_start = rl_pos + rl_marker.size();
+                size_t rl_end = out_body.find('\n', rl_start);
+                std::string rl_str = out_body.substr(rl_start,
+                    rl_end == std::string::npos ? std::string::npos : rl_end - rl_start);
+                rl_str = trim_copy(rl_str);
+                *out_rate_limit_remaining = rl_str.empty() ? -1L : std::strtol(rl_str.c_str(), nullptr, 10);
+            } else {
+                *out_rate_limit_remaining = -1L;
+            }
+        }
+
+        out_body.erase(marker_pos);
+    }
+
+    UI_TRACE(tag,
+             "RESP code=%ld exit=%d bytes=%zu body=%s",
+             out_http_code,
+             out_exit_code,
+             out_body.size(),
+             snippet_copy(out_body).c_str());
+
+    return out_exit_code == 0 && !out_body.empty();
+}
+#endif
 
 }  // namespace
 
@@ -192,7 +280,11 @@ bool PlanesService::fetch_and_update()
     }
 
     JsonDocument doc;
-    if (deserializeJson(doc, payload.c_str(), payload.size()) != DeserializationError::Ok) {
+    DeserializationError err = deserializeJson(doc, payload.c_str(), payload.size());
+    if (err != DeserializationError::Ok) {
+#if !defined(ARDUINO)
+        UI_TRACE("PlanesOpenSky", "JSON parse failed err=%s body=%s", err.c_str(), snippet_copy(payload).c_str());
+#endif
         clear_planes();
         _last_error = "Invalid API response";
         return false;
@@ -295,20 +387,22 @@ bool PlanesService::fetch_route_for_callsign(const std::string &callsign_key, st
     http.end();
     if (payload.empty()) return false;
 #else
-    char cmd[320] = {0};
-    std::snprintf(cmd, sizeof(cmd), "curl -s --max-time 8 \"%s\"", url);
-    FILE *pipe = popen(cmd, "r");
-    if (!pipe) return false;
-    char buffer[256];
-    while (fgets(buffer, sizeof(buffer), pipe))
-        payload += buffer;
-    int rc = pclose(pipe);
-    if (rc != 0 || payload.empty()) return false;
+    long http_code = 0;
+    int exit_code = 0;
+    if (!emulator_http_get_logged("PlanesADSB", url, 8, payload, http_code, exit_code))
+        return false;
+    if (http_code != 200)
+        return false;
 #endif
 
     JsonDocument doc;
-    if (deserializeJson(doc, payload.c_str(), payload.size()) != DeserializationError::Ok)
+    DeserializationError err = deserializeJson(doc, payload.c_str(), payload.size());
+    if (err != DeserializationError::Ok) {
+#if !defined(ARDUINO)
+        UI_TRACE("PlanesADSB", "JSON parse failed err=%s body=%s", err.c_str(), snippet_copy(payload).c_str());
+#endif
         return false;
+    }
 
     JsonVariantConst flightroute = doc["response"]["flightroute"];
     if (flightroute.isNull()) return false;
@@ -363,6 +457,9 @@ bool PlanesService::fetch_payload(std::string &out_payload)
     http.addHeader("User-Agent", "esp32-gadget-os/1.0");
     http.addHeader("Connection", "close");
 
+    const char *collect_hdrs[] = {"X-Rate-Limit-Remaining"};
+    http.collectHeaders(collect_hdrs, 1);
+
     int code = http.GET();
     if (code != HTTP_CODE_OK) {
         std::string err = "HTTP error " + std::to_string(code);
@@ -382,6 +479,11 @@ bool PlanesService::fetch_payload(std::string &out_payload)
     }
 
     out_payload = http.getString().c_str();
+    {
+        String rl_str = http.header("X-Rate-Limit-Remaining");
+        if (!rl_str.isEmpty())
+            _rate_limit_remaining = (int)rl_str.toInt();
+    }
     http.end();
     if (out_payload.empty()) {
         _last_error = "Empty response";
@@ -389,23 +491,16 @@ bool PlanesService::fetch_payload(std::string &out_payload)
     }
     return true;
 #else
-    char cmd[420] = {0};
-    std::snprintf(cmd, sizeof(cmd), "curl -s --max-time 10 \"%s\"", url);
-
-    FILE *pipe = popen(cmd, "r");
-    if (!pipe) {
-        _last_error = "Cannot run curl";
+    long http_code = 0;
+    int exit_code = 0;
+    long rate_limit = -1L;
+    if (!emulator_http_get_logged("PlanesOpenSky", url, 10, out_payload, http_code, exit_code, &rate_limit)) {
+        _last_error = "Network request failed";
         return false;
     }
-
-    out_payload.clear();
-    char buffer[256];
-    while (fgets(buffer, sizeof(buffer), pipe))
-        out_payload += buffer;
-
-    int rc = pclose(pipe);
-    if (rc != 0 || out_payload.empty()) {
-        _last_error = "Network request failed";
+    _rate_limit_remaining = (int)rate_limit;
+    if (http_code != 200) {
+        _last_error = "HTTP error " + std::to_string(http_code);
         return false;
     }
     return true;
