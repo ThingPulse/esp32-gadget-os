@@ -42,6 +42,7 @@ using PlanesSecureClient = WiFiClientSecure;
 namespace {
 
 constexpr unsigned long PLANES_REFRESH_MS = 60UL * 1000UL;
+constexpr unsigned long ROUTE_ENRICH_REFRESH_MS = 3000UL;
 constexpr unsigned long ROUTE_CACHE_OK_MS = 6UL * 60UL * 60UL * 1000UL;
 constexpr unsigned long ROUTE_CACHE_MISS_MS = 30UL * 60UL * 1000UL;
 constexpr int ROUTE_LOOKUPS_PER_CYCLE = 3;
@@ -192,10 +193,11 @@ void PlanesService::loop()
         return;
 
     const unsigned long now = now_ms();
-    if (_last_fetch_ms != 0 && (now - _last_fetch_ms) < PLANES_REFRESH_MS)
-        return;
+    if (_last_fetch_ms == 0 || (now - _last_fetch_ms) >= PLANES_REFRESH_MS)
+        fetch_and_update();
 
-    fetch_and_update();
+    if (_has_data && (_last_enrich_ms == 0 || (now - _last_enrich_ms) >= ROUTE_ENRICH_REFRESH_MS))
+        enrich_routes_step();
 }
 
 bool PlanesService::reload_from_config()
@@ -291,6 +293,7 @@ bool PlanesService::fetch_and_update()
     }
 
     _plane_count = 0;
+    _next_enrich_index = 0;
     for (int i = 0; i < MAX_PLANES; ++i)
         _planes[i] = PlaneState{};
 
@@ -320,19 +323,45 @@ bool PlanesService::fetch_and_update()
     }
 
     _has_data = true;
+    _last_enrich_ms = now_ms();
     _last_error.clear();
     return true;
+}
+
+void PlanesService::enrich_routes_step()
+{
+    _last_enrich_ms = now_ms();
+    if (!_has_data || _plane_count <= 0) return;
+
+    int network_budget = ROUTE_LOOKUPS_PER_CYCLE;
+    int visited = 0;
+
+    while (visited < _plane_count && network_budget > 0) {
+        if (_next_enrich_index >= _plane_count)
+            _next_enrich_index = 0;
+
+        PlaneState &plane = _planes[_next_enrich_index];
+        _next_enrich_index++;
+        visited++;
+
+        if (!plane.valid) continue;
+        if (!plane.route.empty()) continue;
+
+        plane.route = route_for_callsign(plane.callsign, network_budget);
+    }
 }
 
 std::string PlanesService::route_for_callsign(const std::string &callsign_raw, int &network_budget)
 {
     const std::string key = normalize_callsign_key(callsign_raw);
-    if (key.empty() || key == "(NOCALLSIGN)") return "";
+    if (key.empty() || key == "(NOCALLSIGN)") return "N/A";
 
     const unsigned long now = now_ms();
     auto it = _route_cache.find(key);
-    if (it != _route_cache.end() && it->second.expires_at_ms > now)
+    if (it != _route_cache.end() && it->second.expires_at_ms > now) {
+        if (it->second.route.empty()) return "N/A";
         return it->second.route;
+    }
 
     if (network_budget <= 0) return "";
     network_budget--;
@@ -342,6 +371,7 @@ std::string PlanesService::route_for_callsign(const std::string &callsign_raw, i
         _route_cache[key] = RouteCacheEntry{route, now + ROUTE_CACHE_OK_MS};
     } else {
         _route_cache[key] = RouteCacheEntry{"", now + ROUTE_CACHE_MISS_MS};
+        route = "N/A";
     }
 
     if (_route_cache.size() > ROUTE_CACHE_MAX_ENTRIES)
@@ -511,6 +541,8 @@ void PlanesService::clear_planes()
 {
     _has_data = false;
     _plane_count = 0;
+    _last_enrich_ms = 0;
+    _next_enrich_index = 0;
     for (int i = 0; i < MAX_PLANES; ++i)
         _planes[i] = PlaneState{};
 }
