@@ -26,6 +26,10 @@ struct WeatherAppCtx {
   lv_obj_t *pressure_label = nullptr;
   lv_obj_t *precip_label = nullptr;
   lv_obj_t *wind_label = nullptr;
+  lv_obj_t *hourly_rows[WeatherService::FORECAST_HOURS]{};
+  lv_obj_t *hourly_time_labels[WeatherService::FORECAST_HOURS]{};
+  lv_obj_t *hourly_icons[WeatherService::FORECAST_HOURS]{};
+  lv_obj_t *hourly_temp_labels[WeatherService::FORECAST_HOURS]{};
   lv_obj_t *forecast_rows[WeatherService::FORECAST_DAYS]{};
   lv_obj_t *forecast_day_labels[WeatherService::FORECAST_DAYS]{};
   lv_obj_t *forecast_icons[WeatherService::FORECAST_DAYS]{};
@@ -92,6 +96,13 @@ static std::string weekday_label_from_iso(const std::string &iso)
   return names[w];
 }
 
+static std::string hour_label_from_iso(const std::string &iso)
+{
+  if (iso.size() >= 16) return iso.substr(11, 5);
+  if (iso.size() >= 13) return iso.substr(11, 2) + std::string(":00");
+  return "--:--";
+}
+
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
@@ -137,6 +148,10 @@ static void weather_app_update_ui()
     for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
       if (app_ctx.forecast_rows[i] && lv_obj_is_valid(app_ctx.forecast_rows[i]))
         lv_obj_add_flag(app_ctx.forecast_rows[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    for (int i = 0; i < WeatherService::FORECAST_HOURS; ++i) {
+      if (app_ctx.hourly_rows[i] && lv_obj_is_valid(app_ctx.hourly_rows[i]))
+        lv_obj_add_flag(app_ctx.hourly_rows[i], LV_OBJ_FLAG_HIDDEN);
     }
     return;
   }
@@ -203,6 +218,29 @@ static void weather_app_update_ui()
                   forecast[i].temp_min,
                   forecast[i].temp_max);
     lv_label_set_text(app_ctx.forecast_temp_labels[i], day_temp_buf);
+  }
+
+  const WeatherForecastHour *hourly_forecast = weather.forecast_hours();
+  int hourly_count = weather.hourly_forecast_count();
+  for (int i = 0; i < WeatherService::FORECAST_HOURS; ++i) {
+    if (!app_ctx.hourly_rows[i] || !lv_obj_is_valid(app_ctx.hourly_rows[i])) continue;
+    if (!app_ctx.hourly_time_labels[i] || !lv_obj_is_valid(app_ctx.hourly_time_labels[i])) continue;
+    if (!app_ctx.hourly_icons[i] || !lv_obj_is_valid(app_ctx.hourly_icons[i])) continue;
+    if (!app_ctx.hourly_temp_labels[i] || !lv_obj_is_valid(app_ctx.hourly_temp_labels[i])) continue;
+
+    if (i >= hourly_count || !hourly_forecast[i].valid) {
+      lv_obj_add_flag(app_ctx.hourly_rows[i], LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+
+    lv_obj_clear_flag(app_ctx.hourly_rows[i], LV_OBJ_FLAG_HIDDEN);
+    std::string hour_text = hour_label_from_iso(hourly_forecast[i].time);
+    lv_label_set_text(app_ctx.hourly_time_labels[i], hour_text.c_str());
+    weather_icon_update(app_ctx.hourly_icons[i], weather_icon_kind_from_code(hourly_forecast[i].weather_code), 30);
+
+    char hour_temp_buf[32] = {0};
+    std::snprintf(hour_temp_buf, sizeof(hour_temp_buf), "%.0f°", hourly_forecast[i].temperature);
+    lv_label_set_text(app_ctx.hourly_temp_labels[i], hour_temp_buf);
   }
 }
 
@@ -352,6 +390,68 @@ void weather_app_launch(void)
   lv_obj_set_style_text_color(precip_label, lv_color_hex(0xd5e2ff), 0);
   lv_obj_set_style_text_font(precip_label, &lv_font_montserrat_14, 0);
   lv_obj_align(precip_label, LV_ALIGN_BOTTOM_LEFT, 70, 0);
+
+  // Hourly forecast card with horizontal scrolling
+  lv_obj_t *hourly_card = lv_obj_create(content);
+  lv_obj_set_size(hourly_card, lv_pct(100), 116);
+  lv_obj_set_style_bg_color(hourly_card, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(hourly_card, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(hourly_card, 0, 0);
+  lv_obj_set_style_radius(hourly_card, 10, 0);
+  lv_obj_set_style_pad_all(hourly_card, 8, 0);
+  lv_obj_set_style_pad_row(hourly_card, 6, 0);
+  lv_obj_set_layout(hourly_card, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(hourly_card, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_scroll_dir(hourly_card, LV_DIR_HOR);
+  lv_obj_set_scrollbar_mode(hourly_card, LV_SCROLLBAR_MODE_AUTO);
+
+  lv_obj_t *hourly_title = lv_label_create(hourly_card);
+  lv_label_set_text(hourly_title, "Next hours");
+  lv_obj_set_style_text_color(hourly_title, lv_color_white(), 0);
+  lv_obj_set_style_text_font(hourly_title, &lv_font_montserrat_14, 0);
+
+  lv_obj_t *hourly_strip = lv_obj_create(hourly_card);
+  lv_obj_set_width(hourly_strip, lv_pct(100));
+  lv_obj_set_height(hourly_strip, 84);
+  lv_obj_set_style_bg_opa(hourly_strip, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(hourly_strip, 0, 0);
+  lv_obj_set_style_pad_all(hourly_strip, 0, 0);
+  lv_obj_set_style_pad_column(hourly_strip, 8, 0);
+  lv_obj_set_layout(hourly_strip, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(hourly_strip, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(hourly_strip, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_scroll_dir(hourly_strip, LV_DIR_HOR);
+  lv_obj_set_scrollbar_mode(hourly_strip, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_clear_flag(hourly_strip, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+
+  for (int i = 0; i < WeatherService::FORECAST_HOURS; ++i) {
+    lv_obj_t *col = lv_obj_create(hourly_strip);
+    lv_obj_set_size(col, 62, 82);
+    lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(col, lv_color_hex(0x33374f), 0);
+    lv_obj_set_style_bg_opa(col, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(col, 0, 0);
+    lv_obj_set_style_radius(col, 8, 0);
+    lv_obj_set_style_pad_all(col, 4, 0);
+    lv_obj_set_layout(col, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *hour_label = lv_label_create(col);
+    lv_obj_set_style_text_color(hour_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(hour_label, &lv_font_montserrat_12, 0);
+
+    lv_obj_t *icon = weather_icon_create(col, WeatherIconKind::Cloudy, 30);
+
+    lv_obj_t *temp = lv_label_create(col);
+    lv_obj_set_style_text_color(temp, lv_color_hex(0xd5e2ff), 0);
+    lv_obj_set_style_text_font(temp, &lv_font_montserrat_12, 0);
+
+    app_ctx.hourly_rows[i] = col;
+    app_ctx.hourly_time_labels[i] = hour_label;
+    app_ctx.hourly_icons[i] = icon;
+    app_ctx.hourly_temp_labels[i] = temp;
+  }
 
   // Forecast grid: 4-day layout
   lv_obj_t *forecast_card = lv_obj_create(content);
