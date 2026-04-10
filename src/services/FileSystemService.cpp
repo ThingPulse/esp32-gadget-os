@@ -55,6 +55,7 @@ bool FileSystemService::begin()
 
 #else
 // Native: POSIX file I/O; files are stored under ./data/ relative to CWD.
+#include <cstdio>
 #include <cerrno>
 #include <fstream>
 #include <sstream>

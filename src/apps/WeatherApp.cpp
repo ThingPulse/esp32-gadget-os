@@ -439,13 +439,13 @@ void weather_app_launch(void)
 
     lv_obj_t *hour_label = lv_label_create(col);
     lv_obj_set_style_text_color(hour_label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(hour_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(hour_label, &lv_font_montserrat_14, 0);
 
     lv_obj_t *icon = weather_icon_create(col, WeatherIconKind::Cloudy, 30);
 
     lv_obj_t *temp = lv_label_create(col);
     lv_obj_set_style_text_color(temp, lv_color_hex(0xd5e2ff), 0);
-    lv_obj_set_style_text_font(temp, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(temp, &lv_font_montserrat_14, 0);
 
     app_ctx.hourly_rows[i] = col;
     app_ctx.hourly_time_labels[i] = hour_label;
