@@ -345,6 +345,7 @@ void PlanesService::enrich_routes_step()
         visited++;
 
         if (!plane.valid) continue;
+        if (_hide_ground && plane.on_ground) continue;
         if (!plane.route.empty()) continue;
 
         plane.route = route_for_callsign(plane.callsign, network_budget);
