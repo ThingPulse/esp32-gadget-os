@@ -9,11 +9,13 @@
 #include "apps/SettingsApp.h"
 #include "apps/WeatherApp.h"
 #include "apps/WeatherIconTestApp.h"
+#include "services/ConfigStoreService.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
 #include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiTrace.h"
+#include "ui/DisplayPreferences.h"
 
 #include <cstring>
 
@@ -40,6 +42,28 @@ static uint8_t draw_buf[320 * 8 * 2];
 static lv_obj_t *home_screen = nullptr;
 static bool restore_route_pending = true;
 
+void apply_display_preferences(void)
+{
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  int rotation = 0;
+  int brightness_percent = 100;
+  if (cfg.load("display")) {
+    rotation = cfg.get_int("rotation", 0);
+    brightness_percent = cfg.get_int("brightness_percent", 100);
+  }
+
+  if (rotation < 0 || rotation > 3) rotation = 0;
+  if (brightness_percent < 5) brightness_percent = 5;
+  if (brightness_percent > 100) brightness_percent = 100;
+
+  lcd.setRotation(rotation);
+
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+  const uint8_t level = (uint8_t)((brightness_percent * 255) / 100);
+  lcd.setBrightness(level);
+#endif
+}
+
 static void launch_route(const std::string &route)
 {
   UI_TRACE("Route", "launch_route route=%s", route.c_str());
@@ -58,7 +82,7 @@ static void launch_route(const std::string &route)
     return;
   }
 
-  if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes") {
+  if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes" || route == "settings_display") {
     UI_TRACE("Route", "launch settings subroute=%s", route.c_str());
     settings_launch_with_route(route.c_str());
     return;
@@ -226,6 +250,7 @@ void setup(void)
   ServiceRegistry::instance().begin_all();
 
   lcd.init();
+  apply_display_preferences();
   lv_init();
 
   disp = lv_display_create(lcd.width(), lcd.height());
