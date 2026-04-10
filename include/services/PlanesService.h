@@ -52,6 +52,7 @@ private:
 
     bool is_wifi_connected() const;
     bool fetch_and_update();
+    void enrich_routes_step();
     bool fetch_payload(std::string &out_payload);
     bool fetch_route_for_callsign(const std::string &callsign_key, std::string &out_route);
     std::string route_for_callsign(const std::string &callsign_raw, int &network_budget);
@@ -77,6 +78,8 @@ private:
     PlaneState _planes[MAX_PLANES]{};
     int _plane_count = 0;
     unsigned long _last_fetch_ms = 0;
+    unsigned long _last_enrich_ms = 0;
+    int _next_enrich_index = 0;
     std::string _last_error;
     std::unordered_map<std::string, RouteCacheEntry> _route_cache;
 
