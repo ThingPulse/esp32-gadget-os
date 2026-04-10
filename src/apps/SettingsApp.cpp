@@ -136,6 +136,14 @@ struct PlanesCtx {
 };
 static PlanesCtx planes_ctx;
 
+struct DisplayCtx {
+  lv_obj_t *settings_scr;
+  lv_obj_t *brightness_slider;
+  lv_obj_t *brightness_value_label;
+  lv_obj_t *rotation_dropdown;
+};
+static DisplayCtx display_ctx;
+
 static const char *weather_coord_kb_map[] = {
   "1", "2", "3", LV_SYMBOL_BACKSPACE, "\n",
   "4", "5", "6", "+/-", "\n",
@@ -1023,6 +1031,134 @@ static void open_planes_screen(lv_event_t *e)
   UiSessionState::set_route("settings_planes");
 }
 
+static void display_brightness_slider_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+  lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(e);
+  lv_obj_t *value_label = (lv_obj_t *)lv_event_get_user_data(e);
+  if (!slider || !value_label || !lv_obj_is_valid(slider) || !lv_obj_is_valid(value_label)) return;
+
+  char brightness_text[8] = {0};
+  std::snprintf(brightness_text, sizeof(brightness_text), "%d%%", (int)lv_slider_get_value(slider));
+  lv_label_set_text(value_label, brightness_text);
+}
+
+static void display_save_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+  if (!display_ctx.settings_scr || !lv_obj_is_valid(display_ctx.settings_scr)) return;
+  if (!display_ctx.brightness_slider || !lv_obj_is_valid(display_ctx.brightness_slider)) return;
+  if (!display_ctx.rotation_dropdown || !lv_obj_is_valid(display_ctx.rotation_dropdown)) return;
+
+  int brightness_percent = (int)lv_slider_get_value(display_ctx.brightness_slider);
+  uint16_t selected_rotation = (uint16_t)lv_dropdown_get_selected(display_ctx.rotation_dropdown);
+
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  if (cfg.load("display")) {
+    cfg.set("brightness_percent", brightness_percent);
+    cfg.set("rotation", (int)selected_rotation);
+    cfg.save("display");
+  }
+
+  ui_load_screen(display_ctx.settings_scr, true);
+}
+
+static void open_display_screen(lv_event_t *e)
+{
+  UI_TRACE("Settings", "open_display_screen event=%d", e ? (int)lv_event_get_code(e) : -1);
+  lv_obj_t *settings_scr = route_restore_settings_screen;
+  if (e) settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  if (!settings_scr || !lv_obj_is_valid(settings_scr)) return;
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(scr, 0, 0);
+  lv_obj_set_style_border_width(scr, 0, 0);
+
+  make_top_bar(scr, "Display", settings_scr, false);
+
+  lv_obj_t *content = lv_obj_create(scr);
+  lv_obj_set_pos(content, 0, 44);
+  lv_obj_set_size(content, lv_pct(100), 480 - 44);
+  lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(content, 0, 0);
+  lv_obj_set_style_pad_all(content, 16, 0);
+  lv_obj_set_style_pad_row(content, 12, 0);
+  lv_obj_set_layout(content, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+
+  lv_obj_t *brightness_title = lv_label_create(content);
+  lv_label_set_text(brightness_title, "Brightness");
+  lv_obj_set_style_text_color(brightness_title, lv_color_white(), 0);
+
+  lv_obj_t *brightness_row = lv_obj_create(content);
+  lv_obj_set_size(brightness_row, lv_pct(100), 64);
+  lv_obj_clear_flag(brightness_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(brightness_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(brightness_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(brightness_row, 0, 0);
+  lv_obj_set_style_radius(brightness_row, 10, 0);
+  lv_obj_set_style_pad_hor(brightness_row, 14, 0);
+  lv_obj_set_style_pad_ver(brightness_row, 8, 0);
+
+  lv_obj_t *brightness_slider = lv_slider_create(brightness_row);
+  lv_obj_set_width(brightness_slider, lv_pct(78));
+  lv_obj_align(brightness_slider, LV_ALIGN_LEFT_MID, 0, 0);
+  lv_slider_set_range(brightness_slider, 5, 100);
+
+  lv_obj_t *brightness_value_label = lv_label_create(brightness_row);
+  lv_label_set_text(brightness_value_label, "100%");
+  lv_obj_set_style_text_color(brightness_value_label, lv_color_white(), 0);
+  lv_obj_align(brightness_value_label, LV_ALIGN_RIGHT_MID, 0, 0);
+  lv_obj_add_event_cb(brightness_slider, display_brightness_slider_event, LV_EVENT_VALUE_CHANGED, brightness_value_label);
+
+  lv_obj_t *rotation_title = lv_label_create(content);
+  lv_label_set_text(rotation_title, "Screen Rotation");
+  lv_obj_set_style_text_color(rotation_title, lv_color_white(), 0);
+
+  lv_obj_t *rotation_dropdown = lv_dropdown_create(content);
+  lv_obj_set_width(rotation_dropdown, lv_pct(100));
+  lv_dropdown_set_options(rotation_dropdown, "0\xb0 (Portrait)\n90\xb0 (Landscape)\n180\xb0 (Portrait Inverted)\n270\xb0 (Landscape Inverted)");
+
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  int brightness_percent = 100;
+  int rotation = 0;
+  if (cfg.load("display")) {
+    brightness_percent = cfg.get_int("brightness_percent", 100);
+    rotation = cfg.get_int("rotation", 0);
+  }
+  if (brightness_percent < 5) brightness_percent = 5;
+  if (brightness_percent > 100) brightness_percent = 100;
+  if (rotation < 0 || rotation > 3) rotation = 0;
+
+  lv_slider_set_value(brightness_slider, brightness_percent, LV_ANIM_OFF);
+  char brightness_text[8] = {0};
+  std::snprintf(brightness_text, sizeof(brightness_text), "%d%%", brightness_percent);
+  lv_label_set_text(brightness_value_label, brightness_text);
+  lv_dropdown_set_selected(rotation_dropdown, (uint16_t)rotation);
+
+  lv_obj_t *save_btn = lv_button_create(content);
+  lv_obj_set_width(save_btn, lv_pct(100));
+  lv_obj_set_height(save_btn, 44);
+  lv_obj_add_event_cb(save_btn, display_save_event, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t *save_label = lv_label_create(save_btn);
+  lv_label_set_text(save_label, "Save");
+  lv_obj_center(save_label);
+
+  display_ctx.settings_scr = settings_scr;
+  display_ctx.brightness_slider = brightness_slider;
+  display_ctx.brightness_value_label = brightness_value_label;
+  display_ctx.rotation_dropdown = rotation_dropdown;
+
+  ui_load_screen(scr, false);
+  UI_TRACE("Settings", "open_display_screen loaded");
+
+  UiSessionState::set_route("settings_display");
+}
+
 static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
 {
   lv_obj_t *scr = lv_obj_create(nullptr);
@@ -1113,6 +1249,29 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_set_style_text_color(weather_chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(weather_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
+  /* Display row */
+  lv_obj_t *display_row = lv_obj_create(list);
+  lv_obj_set_size(display_row, lv_pct(100), 52);
+  lv_obj_clear_flag(display_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(display_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(display_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(display_row, 0, 0);
+  lv_obj_set_style_radius(display_row, 10, 0);
+  lv_obj_set_style_pad_hor(display_row, 16, 0);
+  lv_obj_set_style_pad_ver(display_row, 0, 0);
+  lv_obj_add_flag(display_row, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(display_row, open_display_screen, LV_EVENT_CLICKED, scr);
+
+  lv_obj_t *display_label = lv_label_create(display_row);
+  lv_label_set_text(display_label, LV_SYMBOL_IMAGE "  Display");
+  lv_obj_set_style_text_color(display_label, lv_color_white(), 0);
+  lv_obj_align(display_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *display_chevron = lv_label_create(display_row);
+  lv_label_set_text(display_chevron, LV_SYMBOL_RIGHT);
+  lv_obj_set_style_text_color(display_chevron, lv_color_hex(0x888888), 0);
+  lv_obj_align(display_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
+
   /* Planes row */
   lv_obj_t *planes_row = lv_obj_create(list);
   lv_obj_set_size(planes_row, lv_pct(100), 52);
@@ -1161,6 +1320,8 @@ void settings_launch_with_route(const char *route)
     open_weather_screen(nullptr);
   } else if (std::strcmp(route, "settings_planes") == 0) {
     open_planes_screen(nullptr);
+  } else if (std::strcmp(route, "settings_display") == 0) {
+    open_display_screen(nullptr);
   } else {
     UiSessionState::set_route("settings");
     ui_load_screen(settings_scr, false);
