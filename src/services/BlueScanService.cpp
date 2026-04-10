@@ -42,12 +42,12 @@ static TheengsDecoder g_decoder;
 
 static std::string hex_encode(const std::string &raw)
 {
-    static const char *HEX = "0123456789ABCDEF";
+    static const char *kHexDigits = "0123456789ABCDEF";
     std::string out;
     out.reserve(raw.size() * 2);
     for (unsigned char c : raw) {
-        out.push_back(HEX[(c >> 4) & 0x0F]);
-        out.push_back(HEX[c & 0x0F]);
+        out.push_back(kHexDigits[(c >> 4) & 0x0F]);
+        out.push_back(kHexDigits[c & 0x0F]);
     }
     return out;
 }
