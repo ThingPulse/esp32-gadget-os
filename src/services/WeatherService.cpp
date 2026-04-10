@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #if defined(ARDUINO)
 #include <Arduino.h>
@@ -151,6 +152,16 @@ const WeatherForecastDay *WeatherService::forecast_days() const
     return _forecast;
 }
 
+int WeatherService::hourly_forecast_count() const
+{
+    return _hourly_forecast_count;
+}
+
+const WeatherForecastHour *WeatherService::forecast_hours() const
+{
+    return _hourly_forecast;
+}
+
 bool WeatherService::refresh_now()
 {
     if (!_configured || !is_wifi_connected())
@@ -227,8 +238,11 @@ bool WeatherService::fetch_and_update()
     }
 
     _forecast_count = 0;
+    _hourly_forecast_count = 0;
     for (int i = 0; i < FORECAST_DAYS; ++i)
         _forecast[i] = WeatherForecastDay{};
+    for (int i = 0; i < FORECAST_HOURS; ++i)
+        _hourly_forecast[i] = WeatherForecastHour{};
 
     JsonVariant daily = doc["daily"];
     if (!daily.isNull()) {
@@ -248,6 +262,36 @@ bool WeatherService::fetch_and_update()
         _forecast_count = available;
     }
 
+    JsonVariant hourly = doc["hourly"];
+    JsonArray hourly_time = hourly["time"].as<JsonArray>();
+    JsonArray hourly_code = hourly["weather_code"].as<JsonArray>();
+    JsonArray hourly_temp = hourly["temperature_2m"].as<JsonArray>();
+    const char *current_time_iso = doc["current"]["time"].as<const char *>();
+    if (current_time_iso && !hourly_time.isNull() && !hourly_code.isNull() && !hourly_temp.isNull()) {
+        int start_index = 0;
+        size_t hourly_count = hourly_time.size();
+        for (; start_index < (int)hourly_count; ++start_index) {
+            const char *time_iso = hourly_time[start_index].as<const char *>();
+            if (time_iso && std::strcmp(time_iso, current_time_iso) >= 0)
+                break;
+        }
+
+        int available = (int)std::min({(int)hourly_count - start_index,
+                                       (int)hourly_code.size() - start_index,
+                                       (int)hourly_temp.size() - start_index,
+                                       FORECAST_HOURS});
+        if (available > 0) {
+            for (int i = 0; i < available; ++i) {
+                const int source_index = start_index + i;
+                _hourly_forecast[i].valid = true;
+                _hourly_forecast[i].time = hourly_time[source_index].as<std::string>();
+                _hourly_forecast[i].weather_code = hourly_code[source_index].as<int>();
+                _hourly_forecast[i].temperature = hourly_temp[source_index].as<float>();
+            }
+            _hourly_forecast_count = available;
+        }
+    }
+
     _has_weather = true;
     EventBus::instance().publish(SystemEvent{EventType::WeatherUpdated});
     return true;
@@ -261,9 +305,10 @@ bool WeatherService::fetch_payload(std::string &out_payload) const
     const char *precip_unit = _metric ? "mm" : "inch";
     std::snprintf(url,
                   sizeof(url),
-                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=3&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s",
+                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code,time&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=3&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s",
                   _latitude,
                   _longitude,
+                  FORECAST_HOURS + 1,
                   temp_unit,
                   wind_unit,
                   precip_unit);
@@ -308,8 +353,11 @@ void WeatherService::clear_weather()
 
     _has_weather = false;
     _forecast_count = 0;
+    _hourly_forecast_count = 0;
     for (int i = 0; i < FORECAST_DAYS; ++i)
         _forecast[i] = WeatherForecastDay{};
+    for (int i = 0; i < FORECAST_HOURS; ++i)
+        _hourly_forecast[i] = WeatherForecastHour{};
     EventBus::instance().publish(SystemEvent{EventType::WeatherCleared});
 }
 

@@ -12,9 +12,17 @@ struct WeatherForecastDay {
     float temp_min = 0.0f;
 };
 
+struct WeatherForecastHour {
+    bool valid = false;
+    std::string time;
+    int weather_code = 0;
+    float temperature = 0.0f;
+};
+
 class WeatherService : public SystemService {
 public:
     static constexpr int FORECAST_DAYS = 3;
+    static constexpr int FORECAST_HOURS = 12;
 
     static WeatherService &instance();
 
@@ -37,6 +45,8 @@ public:
     float wind_direction_degrees() const;
     int forecast_count() const;
     const WeatherForecastDay *forecast_days() const;
+    int hourly_forecast_count() const;
+    const WeatherForecastHour *forecast_hours() const;
     bool refresh_now();
 
 private:
@@ -63,7 +73,9 @@ private:
     float _wind_speed = 0.0f;
     float _wind_direction = 0.0f;
     WeatherForecastDay _forecast[FORECAST_DAYS]{};
+    WeatherForecastHour _hourly_forecast[FORECAST_HOURS]{};
     int _forecast_count = 0;
+    int _hourly_forecast_count = 0;
     unsigned long _last_fetch_ms = 0;
 
     SubscriptionId _wifi_connected_sub = 0;
