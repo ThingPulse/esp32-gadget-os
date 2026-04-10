@@ -15,6 +15,7 @@
 #include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiTrace.h"
+#include "ui/DisplayPreferences.h"
 
 #include <cstring>
 
@@ -41,7 +42,7 @@ static uint8_t draw_buf[320 * 8 * 2];
 static lv_obj_t *home_screen = nullptr;
 static bool restore_route_pending = true;
 
-static void apply_display_preferences(void)
+void apply_display_preferences(void)
 {
   ConfigStoreService &cfg = ConfigStoreService::instance();
   int rotation = 0;

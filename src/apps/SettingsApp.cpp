@@ -9,6 +9,7 @@
 #include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiTrace.h"
+#include "ui/DisplayPreferences.h"
 #include <ArduinoJson.h>
 #include <lvgl.h>
 
@@ -1060,6 +1061,8 @@ static void display_save_event(lv_event_t *e)
     cfg.set("rotation", (int)selected_rotation);
     cfg.save("display");
   }
+
+  apply_display_preferences();
 
   ui_load_screen(display_ctx.settings_scr, true);
 }
