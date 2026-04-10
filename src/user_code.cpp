@@ -4,6 +4,7 @@
 #include <lvgl.h>
 #include "AppRegistry.h"
 #include "ServiceRegistry.h"
+#include "apps/BlueScanApp.h"
 #include "apps/CalculatorApp.h"
 #include "apps/PlanesApp.h"
 #include "apps/SettingsApp.h"
@@ -85,6 +86,12 @@ static void launch_route(const std::string &route)
   if (route == "calculator") {
     UI_TRACE("Route", "launch calculator");
     calculator_app_launch();
+    return;
+  }
+
+  if (route == "blue_scan") {
+    UI_TRACE("Route", "launch blue_scan");
+    blue_scan_app_launch();
     return;
   }
 
