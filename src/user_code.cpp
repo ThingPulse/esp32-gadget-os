@@ -20,8 +20,13 @@
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
 #elif defined(ARDUINO) && defined(ESP_PLATFORM)
+#if defined(COLOR_KIT_PRO)
+#include <ColorKitPro.h>
+static ColorKitPro lcd;
+#else
 #include <ColorKitGrande.h>
 static ColorKitGrande lcd;
+#endif
 #elif defined(ESP_PLATFORM) && !defined(ARDUINO)
 #include <esp_timer.h>
 static LGFX lcd;
