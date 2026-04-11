@@ -452,13 +452,12 @@ void weather_app_launch(void)
       UI_TRACE("Weather", "hourly col alloc failed i=%d", i);
       break;
     }
-    lv_obj_set_size(col, 62, 82);
+    lv_obj_set_size(col, 56, 82);
     lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(col, lv_color_hex(0x33374f), 0);
-    lv_obj_set_style_bg_opa(col, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(col, 0, 0);
-    lv_obj_set_style_radius(col, 8, 0);
-    lv_obj_set_style_pad_all(col, 4, 0);
+    lv_obj_set_style_radius(col, 0, 0);
+    lv_obj_set_style_pad_all(col, 2, 0);
     lv_obj_set_layout(col, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
