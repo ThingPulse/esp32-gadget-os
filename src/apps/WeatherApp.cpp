@@ -8,6 +8,7 @@
 #include "ui/UiTrace.h"
 #include "ui/WeatherIconSet.h"
 
+#include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <string>
@@ -34,6 +35,9 @@ struct WeatherAppCtx {
   lv_obj_t *forecast_day_labels[WeatherService::FORECAST_DAYS]{};
   lv_obj_t *forecast_icons[WeatherService::FORECAST_DAYS]{};
   lv_obj_t *forecast_temp_labels[WeatherService::FORECAST_DAYS]{};
+  lv_obj_t *wind_card_speed_label = nullptr;
+  lv_obj_t *wind_card_dir_label = nullptr;
+  lv_obj_t *wind_rose_marker = nullptr;
   lv_obj_t *refresh_btn = nullptr;
   lv_timer_t *refresh_timer = nullptr;
   bool compact_list_icons = false;
@@ -72,6 +76,22 @@ static const char *wind_direction_short(float degrees)
   int index = (int)((degrees + 22.5f) / 45.0f) % 8;
   if (index < 0) index += 8;
   return dirs[index];
+}
+
+static void update_wind_rose_marker(lv_obj_t *marker, float degrees)
+{
+  if (!marker || !lv_obj_is_valid(marker)) return;
+
+  float normalized = std::fmod(degrees, 360.0f);
+  if (normalized < 0.0f) normalized += 360.0f;
+
+  const float rad = normalized * (3.14159265f / 180.0f);
+  const int center = 36;
+  const int radius = 23;
+  const int marker_r = 4;
+  const int x = center + (int)std::lround(std::sin(rad) * radius);
+  const int y = center - (int)std::lround(std::cos(rad) * radius);
+  lv_obj_set_pos(marker, x - marker_r, y - marker_r);
 }
 
 static std::string short_date(const std::string &iso)
@@ -157,6 +177,11 @@ static void weather_app_update_ui()
     lv_label_set_text(app_ctx.pressure_label, "--");
     lv_label_set_text(app_ctx.precip_label, "--");
     lv_label_set_text(app_ctx.wind_label, "--");
+    if (app_ctx.wind_card_speed_label && lv_obj_is_valid(app_ctx.wind_card_speed_label))
+      lv_label_set_text(app_ctx.wind_card_speed_label, "--");
+    if (app_ctx.wind_card_dir_label && lv_obj_is_valid(app_ctx.wind_card_dir_label))
+      lv_label_set_text(app_ctx.wind_card_dir_label, "--");
+    update_wind_rose_marker(app_ctx.wind_rose_marker, 0.0f);
 
     for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
       if (app_ctx.forecast_rows[i] && lv_obj_is_valid(app_ctx.forecast_rows[i]))
@@ -205,6 +230,21 @@ static void weather_app_update_ui()
                 weather.wind_speed_value(),
                 weather.is_metric() ? "km/h" : "mph");
   lv_label_set_text(app_ctx.wind_label, wind_buf);
+
+  if (app_ctx.wind_card_speed_label && lv_obj_is_valid(app_ctx.wind_card_speed_label))
+    lv_label_set_text(app_ctx.wind_card_speed_label, wind_buf);
+
+  if (app_ctx.wind_card_dir_label && lv_obj_is_valid(app_ctx.wind_card_dir_label)) {
+    char wind_dir_buf[32] = {0};
+    std::snprintf(wind_dir_buf,
+                  sizeof(wind_dir_buf),
+                  "%s %.0f°",
+                  wind_direction_short(weather.wind_direction_degrees()),
+                  weather.wind_direction_degrees());
+    lv_label_set_text(app_ctx.wind_card_dir_label, wind_dir_buf);
+  }
+
+  update_wind_rose_marker(app_ctx.wind_rose_marker, weather.wind_direction_degrees());
 
   const WeatherForecastDay *forecast = weather.forecast_days();
   int count = weather.forecast_count();
@@ -567,6 +607,73 @@ void weather_app_launch(void)
     app_ctx.forecast_temp_labels[i] = temp;
   }
 
+  // Wind card with wind-rose style direction marker
+  lv_obj_t *wind_card = lv_obj_create(content);
+  lv_obj_set_size(wind_card, lv_pct(100), 96);
+  lv_obj_clear_flag(wind_card, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(wind_card, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(wind_card, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(wind_card, 0, 0);
+  lv_obj_set_style_radius(wind_card, 10, 0);
+  lv_obj_set_style_pad_all(wind_card, 10, 0);
+
+  lv_obj_t *wind_title = lv_label_create(wind_card);
+  lv_label_set_text(wind_title, "Wind");
+  lv_obj_set_style_text_color(wind_title, lv_color_white(), 0);
+  lv_obj_set_style_text_font(wind_title, &lv_font_montserrat_14, 0);
+  lv_obj_align(wind_title, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  lv_obj_t *wind_card_speed_label = lv_label_create(wind_card);
+  lv_obj_set_style_text_color(wind_card_speed_label, lv_color_hex(0xd5e2ff), 0);
+  lv_obj_set_style_text_font(wind_card_speed_label, &lv_font_montserrat_24, 0);
+  lv_obj_align(wind_card_speed_label, LV_ALIGN_LEFT_MID, 0, 8);
+
+  lv_obj_t *wind_card_dir_label = lv_label_create(wind_card);
+  lv_obj_set_style_text_color(wind_card_dir_label, lv_color_hex(0xb7bdd7), 0);
+  lv_obj_set_style_text_font(wind_card_dir_label, &lv_font_montserrat_14, 0);
+  lv_obj_align(wind_card_dir_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+
+  lv_obj_t *wind_rose = lv_obj_create(wind_card);
+  lv_obj_set_size(wind_rose, 72, 72);
+  lv_obj_set_style_bg_opa(wind_rose, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_color(wind_rose, lv_color_hex(0x7d88a5), 0);
+  lv_obj_set_style_border_width(wind_rose, 1, 0);
+  lv_obj_set_style_radius(wind_rose, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_all(wind_rose, 0, 0);
+  lv_obj_align(wind_rose, LV_ALIGN_RIGHT_MID, 0, 0);
+
+  lv_obj_t *n = lv_label_create(wind_rose);
+  lv_label_set_text(n, "N");
+  lv_obj_set_style_text_color(n, lv_color_white(), 0);
+  lv_obj_set_style_text_font(n, &lv_font_montserrat_14, 0);
+  lv_obj_align(n, LV_ALIGN_TOP_MID, 0, 0);
+
+  lv_obj_t *e = lv_label_create(wind_rose);
+  lv_label_set_text(e, "E");
+  lv_obj_set_style_text_color(e, lv_color_hex(0xb7bdd7), 0);
+  lv_obj_set_style_text_font(e, &lv_font_montserrat_14, 0);
+  lv_obj_align(e, LV_ALIGN_RIGHT_MID, -2, 0);
+
+  lv_obj_t *s = lv_label_create(wind_rose);
+  lv_label_set_text(s, "S");
+  lv_obj_set_style_text_color(s, lv_color_hex(0xb7bdd7), 0);
+  lv_obj_set_style_text_font(s, &lv_font_montserrat_14, 0);
+  lv_obj_align(s, LV_ALIGN_BOTTOM_MID, 0, -1);
+
+  lv_obj_t *w = lv_label_create(wind_rose);
+  lv_label_set_text(w, "W");
+  lv_obj_set_style_text_color(w, lv_color_hex(0xb7bdd7), 0);
+  lv_obj_set_style_text_font(w, &lv_font_montserrat_14, 0);
+  lv_obj_align(w, LV_ALIGN_LEFT_MID, 2, 0);
+
+  lv_obj_t *wind_rose_marker = lv_obj_create(wind_rose);
+  lv_obj_set_size(wind_rose_marker, 8, 8);
+  lv_obj_set_style_bg_color(wind_rose_marker, lv_color_hex(0x5cb2ff), 0);
+  lv_obj_set_style_bg_opa(wind_rose_marker, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(wind_rose_marker, 0, 0);
+  lv_obj_set_style_radius(wind_rose_marker, LV_RADIUS_CIRCLE, 0);
+  update_wind_rose_marker(wind_rose_marker, 0.0f);
+
   app_ctx.screen = scr;
   app_ctx.date_label = date_label;
   app_ctx.current_icon = current_icon;
@@ -576,6 +683,9 @@ void weather_app_launch(void)
   app_ctx.pressure_label = pressure_label;
   app_ctx.precip_label = precip_label;
   app_ctx.wind_label = wind_label;
+  app_ctx.wind_card_speed_label = wind_card_speed_label;
+  app_ctx.wind_card_dir_label = wind_card_dir_label;
+  app_ctx.wind_rose_marker = wind_rose_marker;
   app_ctx.refresh_btn = refresh_btn;
   app_ctx.refresh_timer = lv_timer_create(weather_app_timer_cb, 5000, nullptr);
 
