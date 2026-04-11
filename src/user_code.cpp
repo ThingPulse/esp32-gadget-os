@@ -64,6 +64,12 @@ void apply_display_preferences(void)
 
   lcd.setRotation(rotation);
 
+  if (disp) {
+    lv_display_set_resolution(disp, lcd.width(), lcd.height());
+    lv_obj_invalidate(lv_screen_active());
+    lv_refr_now(disp);
+  }
+
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
   const uint8_t level = (uint8_t)((brightness_percent * 255) / 100);
   lcd.setBrightness(level);
