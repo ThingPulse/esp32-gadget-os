@@ -10,6 +10,7 @@
 #include "ui/StatusIcons.h"
 #include "ui/UiTrace.h"
 #include "ui/DisplayPreferences.h"
+#include "ui/I18n.h"
 #include <ArduinoJson.h>
 #include <lvgl.h>
 
@@ -22,7 +23,7 @@
 #include <WiFi.h>
 #endif
 
-APP_REGISTER_COLOR_RANK("Settings", LV_SYMBOL_SETTINGS, settings_launch, 0x495057, 100);
+APP_REGISTER_COLOR_RANK(I18n::tr(I18n::TextId::Settings), LV_SYMBOL_SETTINGS, settings_launch, 0x495057, 100);
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
@@ -31,10 +32,10 @@ static lv_obj_t *route_restore_settings_screen = nullptr;
 static void nav_to_home_screen(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-    UI_TRACE("Settings", "nav_to_home clicked");
+    UI_TRACE(I18n::tr(I18n::TextId::Settings), "nav_to_home clicked");
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
-    UI_TRACE("Settings", "nav_to_home target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
+    UI_TRACE(I18n::tr(I18n::TextId::Settings), "nav_to_home target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
     ui_load_screen(target_scr, true);
   }
@@ -43,10 +44,10 @@ static void nav_to_home_screen(lv_event_t *e)
 static void nav_to_settings_screen(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-    UI_TRACE("Settings", "nav_to_settings clicked");
+    UI_TRACE(I18n::tr(I18n::TextId::Settings), "nav_to_settings clicked");
     UiSessionState::set_route("settings");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
-    UI_TRACE("Settings", "nav_to_settings target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
+    UI_TRACE(I18n::tr(I18n::TextId::Settings), "nav_to_settings target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
     ui_load_screen(target_scr, true);
   }
@@ -145,6 +146,12 @@ struct DisplayCtx {
 };
 static DisplayCtx display_ctx;
 
+struct LanguageCtx {
+  lv_obj_t *settings_scr;
+  lv_obj_t *language_roller;
+};
+static LanguageCtx language_ctx;
+
 static const char *weather_coord_kb_map[] = {
   "1", "2", "3", LV_SYMBOL_BACKSPACE, "\n",
   "4", "5", "6", "+/-", "\n",
@@ -234,7 +241,7 @@ static void weather_guess_location_event(lv_event_t *e)
 
   if (!weather_ctx.lat_input || !weather_ctx.lon_input || !weather_ctx.guess_result_label) return;
 
-  lv_label_set_text(weather_ctx.guess_result_label, "Guessing location...");
+  lv_label_set_text(weather_ctx.guess_result_label, I18n::tr(I18n::TextId::GuessingLocation));
   lv_refr_now(nullptr);
 
   double lat = 0.0;
@@ -244,7 +251,7 @@ static void weather_guess_location_event(lv_event_t *e)
   std::string error;
 
   if (!fetch_ip_location(lat, lon, city, region, error)) {
-    std::string label = "Location guess failed";
+    std::string label = I18n::tr(I18n::TextId::LocationGuessFailed);
     if (!error.empty()) {
       label += ": ";
       label += error;
@@ -265,9 +272,9 @@ static void weather_guess_location_event(lv_event_t *e)
     if (!place.empty()) place += ", ";
     place += region;
   }
-  if (place.empty()) place = "unknown location";
+  if (place.empty()) place = I18n::tr(I18n::TextId::UnknownLocation);
 
-  std::string label = "Guessed: ";
+  std::string label = I18n::tr(I18n::TextId::GuessedPrefix);
   label += place;
   lv_label_set_text(weather_ctx.guess_result_label, label.c_str());
 }
@@ -278,7 +285,7 @@ static void planes_guess_location_event(lv_event_t *e)
 
   if (!planes_ctx.lat_input || !planes_ctx.lon_input || !planes_ctx.guess_result_label) return;
 
-  lv_label_set_text(planes_ctx.guess_result_label, "Guessing location...");
+  lv_label_set_text(planes_ctx.guess_result_label, I18n::tr(I18n::TextId::GuessingLocation));
   lv_refr_now(nullptr);
 
   double lat = 0.0;
@@ -288,7 +295,7 @@ static void planes_guess_location_event(lv_event_t *e)
   std::string error;
 
   if (!fetch_ip_location(lat, lon, city, region, error)) {
-    std::string label = "Location guess failed";
+    std::string label = I18n::tr(I18n::TextId::LocationGuessFailed);
     if (!error.empty()) {
       label += ": ";
       label += error;
@@ -309,9 +316,9 @@ static void planes_guess_location_event(lv_event_t *e)
     if (!place.empty()) place += ", ";
     place += region;
   }
-  if (place.empty()) place = "unknown location";
+  if (place.empty()) place = I18n::tr(I18n::TextId::UnknownLocation);
 
-  std::string label = "Guessed: ";
+  std::string label = I18n::tr(I18n::TextId::GuessedPrefix);
   label += place;
   lv_label_set_text(planes_ctx.guess_result_label, label.c_str());
 }
@@ -387,7 +394,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "WiFi", settings_scr, false);
+  make_top_bar(scr, I18n::tr(I18n::TextId::WiFi), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -400,25 +407,25 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *ssid_label = lv_label_create(content);
-  lv_label_set_text(ssid_label, "SSID");
+  lv_label_set_text(ssid_label, I18n::tr(I18n::TextId::Ssid));
   lv_obj_set_style_text_color(ssid_label, lv_color_white(), 0);
 
   lv_obj_t *ssid_input = lv_textarea_create(content);
   lv_obj_set_width(ssid_input, lv_pct(100));
   lv_textarea_set_one_line(ssid_input, true);
-  lv_textarea_set_placeholder_text(ssid_input, "Enter SSID");
+  lv_textarea_set_placeholder_text(ssid_input, I18n::tr(I18n::TextId::EnterSsid));
   lv_obj_add_event_cb(ssid_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(ssid_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
   lv_obj_t *pass_label = lv_label_create(content);
-  lv_label_set_text(pass_label, "Password");
+  lv_label_set_text(pass_label, I18n::tr(I18n::TextId::Password));
   lv_obj_set_style_text_color(pass_label, lv_color_white(), 0);
 
   lv_obj_t *pass_input = lv_textarea_create(content);
   lv_obj_set_width(pass_input, lv_pct(100));
   lv_textarea_set_one_line(pass_input, true);
   lv_textarea_set_password_mode(pass_input, false);
-  lv_textarea_set_placeholder_text(pass_input, "Enter password");
+  lv_textarea_set_placeholder_text(pass_input, I18n::tr(I18n::TextId::EnterPassword));
   lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
@@ -434,7 +441,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, wifi_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, I18n::tr(I18n::TextId::Save));
   lv_obj_center(save_label);
 
   /* On-screen keyboard — hidden until a textarea is focused */
@@ -528,7 +535,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Time", settings_scr, false);
+  make_top_bar(scr, I18n::tr(I18n::TextId::Time), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -541,7 +548,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *tz_label = lv_label_create(content);
-  lv_label_set_text(tz_label, "Region");
+  lv_label_set_text(tz_label, I18n::tr(I18n::TextId::Region));
   lv_obj_set_style_text_color(tz_label, lv_color_white(), 0);
 
   lv_obj_t *region_roller = lv_roller_create(content);
@@ -557,7 +564,7 @@ static void open_time_screen(lv_event_t *e)
   lv_roller_set_visible_row_count(region_roller, 4);
 
   lv_obj_t *tz_label2 = lv_label_create(content);
-  lv_label_set_text(tz_label2, "Timezone");
+  lv_label_set_text(tz_label2, I18n::tr(I18n::TextId::Timezone));
   lv_obj_set_style_text_color(tz_label2, lv_color_white(), 0);
 
   lv_obj_t *tz_roller = lv_roller_create(content);
@@ -586,7 +593,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_set_style_pad_ver(fmt_row, 0, 0);
 
   lv_obj_t *fmt_label = lv_label_create(fmt_row);
-  lv_label_set_text(fmt_label, "24-hour format");
+  lv_label_set_text(fmt_label, I18n::tr(I18n::TextId::Hour24Format));
   lv_obj_set_style_text_color(fmt_label, lv_color_white(), 0);
   lv_obj_align(fmt_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -603,7 +610,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, time_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, I18n::tr(I18n::TextId::Save));
   lv_obj_center(save_label);
 
   time_ctx.settings_scr = settings_scr;
@@ -689,7 +696,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Weather", settings_scr, false);
+  make_top_bar(scr, I18n::tr(I18n::TextId::Weather), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -702,7 +709,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *lat_label = lv_label_create(content);
-  lv_label_set_text(lat_label, "Latitude");
+  lv_label_set_text(lat_label, I18n::tr(I18n::TextId::Latitude));
   lv_obj_set_style_text_color(lat_label, lv_color_white(), 0);
 
   lv_obj_t *lat_input = lv_textarea_create(content);
@@ -714,7 +721,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_add_event_cb(lat_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
   lv_obj_t *lon_label = lv_label_create(content);
-  lv_label_set_text(lon_label, "Longitude");
+  lv_label_set_text(lon_label, I18n::tr(I18n::TextId::Longitude));
   lv_obj_set_style_text_color(lon_label, lv_color_white(), 0);
 
   lv_obj_t *lon_input = lv_textarea_create(content);
@@ -731,7 +738,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_add_event_cb(guess_btn, weather_guess_location_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *guess_label = lv_label_create(guess_btn);
-  lv_label_set_text(guess_label, "Guess from IP");
+  lv_label_set_text(guess_label, I18n::tr(I18n::TextId::GuessFromIp));
   lv_obj_center(guess_label);
 
   lv_obj_t *guess_result_label = lv_label_create(content);
@@ -749,7 +756,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_style_pad_ver(unit_row, 0, 0);
 
   lv_obj_t *unit_label = lv_label_create(unit_row);
-  lv_label_set_text(unit_label, "Metric (C)");
+  lv_label_set_text(unit_label, I18n::tr(I18n::TextId::MetricC));
   lv_obj_set_style_text_color(unit_label, lv_color_white(), 0);
   lv_obj_align(unit_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -775,7 +782,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, weather_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, I18n::tr(I18n::TextId::Save));
   lv_obj_center(save_label);
 
   lv_obj_t *kb = lv_keyboard_create(scr);
@@ -840,7 +847,7 @@ static void planes_save_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
-  UI_TRACE("Settings", "planes_save_event clicked");
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "planes_save_event clicked");
 
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("planes")) {
@@ -854,7 +861,7 @@ static void planes_save_event(lv_event_t *e)
   }
 
   UiSessionState::set_route("settings");
-  UI_TRACE("Settings", "planes_save_event return_to_settings valid=%d",
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "planes_save_event return_to_settings valid=%d",
            (planes_ctx.settings_scr && lv_obj_is_valid(planes_ctx.settings_scr)) ? 1 : 0);
   if (!planes_ctx.settings_scr || !lv_obj_is_valid(planes_ctx.settings_scr)) return;
   ui_load_screen(planes_ctx.settings_scr, true);
@@ -862,7 +869,7 @@ static void planes_save_event(lv_event_t *e)
 
 static void open_planes_screen(lv_event_t *e)
 {
-  UI_TRACE("Settings", "open_planes_screen begin from_event=%d", e ? 1 : 0);
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "open_planes_screen begin from_event=%d", e ? 1 : 0);
   lv_obj_t *settings_scr = nullptr;
   if (e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -871,7 +878,7 @@ static void open_planes_screen(lv_event_t *e)
     settings_scr = route_restore_settings_screen;
   }
   if (!settings_scr) return;
-  UI_TRACE("Settings", "open_planes_screen settings_scr valid=%d", lv_obj_is_valid(settings_scr) ? 1 : 0);
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "open_planes_screen settings_scr valid=%d", lv_obj_is_valid(settings_scr) ? 1 : 0);
 
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -879,7 +886,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Planes", settings_scr, false);
+  make_top_bar(scr, I18n::tr(I18n::TextId::Planes), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -892,7 +899,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *lat_label = lv_label_create(content);
-  lv_label_set_text(lat_label, "Center Latitude");
+  lv_label_set_text(lat_label, I18n::tr(I18n::TextId::CenterLatitude));
   lv_obj_set_style_text_color(lat_label, lv_color_white(), 0);
 
   lv_obj_t *lat_input = lv_textarea_create(content);
@@ -904,7 +911,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(lat_input, planes_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
   lv_obj_t *lon_label = lv_label_create(content);
-  lv_label_set_text(lon_label, "Center Longitude");
+  lv_label_set_text(lon_label, I18n::tr(I18n::TextId::CenterLongitude));
   lv_obj_set_style_text_color(lon_label, lv_color_white(), 0);
 
   lv_obj_t *lon_input = lv_textarea_create(content);
@@ -921,7 +928,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(guess_btn, planes_guess_location_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *guess_label = lv_label_create(guess_btn);
-  lv_label_set_text(guess_label, "Guess from IP");
+  lv_label_set_text(guess_label, I18n::tr(I18n::TextId::GuessFromIp));
   lv_obj_center(guess_label);
 
   lv_obj_t *guess_result_label = lv_label_create(content);
@@ -929,7 +936,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_text_color(guess_result_label, lv_color_hex(0xb7bdd7), 0);
 
   lv_obj_t *range_label = lv_label_create(content);
-  lv_label_set_text(range_label, "Visibility Range (km)");
+  lv_label_set_text(range_label, I18n::tr(I18n::TextId::VisibilityRangeKm));
   lv_obj_set_style_text_color(range_label, lv_color_white(), 0);
 
   lv_obj_t *range_input = lv_textarea_create(content);
@@ -941,7 +948,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(range_input, planes_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
   lv_obj_t *status_label = lv_label_create(content);
-  lv_label_set_text(status_label, "Used to compute OpenSky bounding box.");
+  lv_label_set_text(status_label, I18n::tr(I18n::TextId::OpenSkyHint));
   lv_obj_set_style_text_color(status_label, lv_color_hex(0xb7bdd7), 0);
 
   // Metric toggle
@@ -955,7 +962,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_pad_hor(unit_row, 16, 0);
   lv_obj_set_style_pad_ver(unit_row, 0, 0);
   lv_obj_t *unit_label = lv_label_create(unit_row);
-  lv_label_set_text(unit_label, "Metric units");
+  lv_label_set_text(unit_label, I18n::tr(I18n::TextId::MetricUnits));
   lv_obj_set_style_text_color(unit_label, lv_color_white(), 0);
   lv_obj_align(unit_label, LV_ALIGN_LEFT_MID, 0, 0);
   lv_obj_t *unit_switch = lv_switch_create(unit_row);
@@ -972,7 +979,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_pad_hor(hg_row, 16, 0);
   lv_obj_set_style_pad_ver(hg_row, 0, 0);
   lv_obj_t *hg_label = lv_label_create(hg_row);
-  lv_label_set_text(hg_label, "Hide planes on ground");
+  lv_label_set_text(hg_label, I18n::tr(I18n::TextId::HidePlanesOnGround));
   lv_obj_set_style_text_color(hg_label, lv_color_white(), 0);
   lv_obj_align(hg_label, LV_ALIGN_LEFT_MID, 0, 0);
   lv_obj_t *hide_ground_switch = lv_switch_create(hg_row);
@@ -1002,7 +1009,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, planes_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, I18n::tr(I18n::TextId::Save));
   lv_obj_center(save_label);
 
   lv_obj_t *kb = lv_keyboard_create(scr);
@@ -1026,7 +1033,7 @@ static void open_planes_screen(lv_event_t *e)
   planes_ctx.hide_ground_switch = hide_ground_switch;
 
   ui_load_screen(scr, false);
-  UI_TRACE("Settings", "open_planes_screen loaded");
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "open_planes_screen loaded");
   
   // Set route after screen is loaded
   UiSessionState::set_route("settings_planes");
@@ -1069,7 +1076,7 @@ static void display_save_event(lv_event_t *e)
 
 static void open_display_screen(lv_event_t *e)
 {
-  UI_TRACE("Settings", "open_display_screen event=%d", e ? (int)lv_event_get_code(e) : -1);
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "open_display_screen event=%d", e ? (int)lv_event_get_code(e) : -1);
   lv_obj_t *settings_scr = route_restore_settings_screen;
   if (e) settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
   if (!settings_scr || !lv_obj_is_valid(settings_scr)) return;
@@ -1080,7 +1087,7 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Display", settings_scr, false);
+  make_top_bar(scr, I18n::tr(I18n::TextId::Display), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, 44);
@@ -1093,7 +1100,7 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *brightness_title = lv_label_create(content);
-  lv_label_set_text(brightness_title, "Brightness");
+  lv_label_set_text(brightness_title, I18n::tr(I18n::TextId::Brightness));
   lv_obj_set_style_text_color(brightness_title, lv_color_white(), 0);
 
   lv_obj_t *brightness_row = lv_obj_create(content);
@@ -1118,12 +1125,12 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_add_event_cb(brightness_slider, display_brightness_slider_event, LV_EVENT_VALUE_CHANGED, brightness_value_label);
 
   lv_obj_t *rotation_title = lv_label_create(content);
-  lv_label_set_text(rotation_title, "Screen Rotation");
+  lv_label_set_text(rotation_title, I18n::tr(I18n::TextId::ScreenRotation));
   lv_obj_set_style_text_color(rotation_title, lv_color_white(), 0);
 
   lv_obj_t *rotation_dropdown = lv_dropdown_create(content);
   lv_obj_set_width(rotation_dropdown, lv_pct(100));
-  lv_dropdown_set_options(rotation_dropdown, "0\xb0 (Portrait)\n90\xb0 (Landscape)\n180\xb0 (Portrait Inverted)\n270\xb0 (Landscape Inverted)");
+  lv_dropdown_set_options(rotation_dropdown, I18n::tr(I18n::TextId::RotationOptions));
 
   ConfigStoreService &cfg = ConfigStoreService::instance();
   int brightness_percent = 100;
@@ -1148,7 +1155,7 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, display_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, I18n::tr(I18n::TextId::Save));
   lv_obj_center(save_label);
 
   display_ctx.settings_scr = settings_scr;
@@ -1157,9 +1164,70 @@ static void open_display_screen(lv_event_t *e)
   display_ctx.rotation_dropdown = rotation_dropdown;
 
   ui_load_screen(scr, false);
-  UI_TRACE("Settings", "open_display_screen loaded");
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "open_display_screen loaded");
 
   UiSessionState::set_route("settings_display");
+}
+
+static void language_save_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  if (!language_ctx.settings_scr || !lv_obj_is_valid(language_ctx.settings_scr)) return;
+  if (!language_ctx.language_roller || !lv_obj_is_valid(language_ctx.language_roller)) return;
+
+  const uint16_t selected = lv_roller_get_selected(language_ctx.language_roller);
+  if (selected < (uint16_t)I18n::Language::Count) {
+    I18n::set_language((I18n::Language)selected, true);
+  }
+  ui_load_screen(language_ctx.settings_scr, true);
+}
+
+static void open_language_screen(lv_event_t *e)
+{
+  lv_obj_t *settings_scr = route_restore_settings_screen;
+  if (e) settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  if (!settings_scr || !lv_obj_is_valid(settings_scr)) return;
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(scr, 0, 0);
+  lv_obj_set_style_border_width(scr, 0, 0);
+  make_top_bar(scr, I18n::tr(I18n::TextId::Language), settings_scr, false);
+
+  lv_obj_t *content = lv_obj_create(scr);
+  lv_obj_set_pos(content, 0, 44);
+  lv_obj_set_size(content, lv_pct(100), 480 - 44);
+  lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(content, 0, 0);
+  lv_obj_set_style_pad_all(content, 16, 0);
+  lv_obj_set_style_pad_row(content, 12, 0);
+  lv_obj_set_layout(content, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+
+  lv_obj_t *title = lv_label_create(content);
+  lv_label_set_text(title, I18n::tr(I18n::TextId::Language));
+  lv_obj_set_style_text_color(title, lv_color_white(), 0);
+
+  lv_obj_t *roller = lv_roller_create(content);
+  lv_obj_set_width(roller, lv_pct(100));
+  lv_obj_set_height(roller, 160);
+  lv_roller_set_options(roller, "English\nDeutsch\nFrançais\nEspañol", LV_ROLLER_MODE_NORMAL);
+  lv_roller_set_visible_row_count(roller, 4);
+  lv_roller_set_selected(roller, (uint16_t)I18n::language(), LV_ANIM_OFF);
+
+  lv_obj_t *save_btn = lv_button_create(content);
+  lv_obj_set_width(save_btn, lv_pct(100));
+  lv_obj_set_height(save_btn, 44);
+  lv_obj_add_event_cb(save_btn, language_save_event, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *save_label = lv_label_create(save_btn);
+  lv_label_set_text(save_label, I18n::tr(I18n::TextId::Save));
+  lv_obj_center(save_label);
+
+  language_ctx.settings_scr = settings_scr;
+  language_ctx.language_roller = roller;
+  ui_load_screen(scr, false);
+  UiSessionState::set_route("settings_language");
 }
 
 static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
@@ -1170,7 +1238,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Settings", home_scr, true);
+  make_top_bar(scr, I18n::tr(I18n::TextId::Settings), home_scr, true);
 
   /* Settings list */
   lv_obj_t *list = lv_obj_create(scr);
@@ -1197,7 +1265,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(row, open_wifi_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *wifi_label = lv_label_create(row);
-  lv_label_set_text(wifi_label, LV_SYMBOL_WIFI "  WiFi");
+  lv_label_set_text_fmt(wifi_label, "%s  %s", LV_SYMBOL_WIFI, I18n::tr(I18n::TextId::WiFi));
   lv_obj_set_style_text_color(wifi_label, lv_color_white(), 0);
   lv_obj_align(wifi_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1220,7 +1288,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(time_row, open_time_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *time_label = lv_label_create(time_row);
-  lv_label_set_text(time_label, LV_SYMBOL_BELL "  Time");
+  lv_label_set_text_fmt(time_label, "%s  %s", LV_SYMBOL_BELL, I18n::tr(I18n::TextId::Time));
   lv_obj_set_style_text_color(time_label, lv_color_white(), 0);
   lv_obj_align(time_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1243,7 +1311,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(weather_row, open_weather_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *weather_label = lv_label_create(weather_row);
-  lv_label_set_text(weather_label, LV_SYMBOL_EYE_OPEN "  Weather");
+  lv_label_set_text_fmt(weather_label, "%s  %s", LV_SYMBOL_EYE_OPEN, I18n::tr(I18n::TextId::Weather));
   lv_obj_set_style_text_color(weather_label, lv_color_white(), 0);
   lv_obj_align(weather_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1266,7 +1334,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(display_row, open_display_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *display_label = lv_label_create(display_row);
-  lv_label_set_text(display_label, LV_SYMBOL_IMAGE "  Display");
+  lv_label_set_text_fmt(display_label, "%s  %s", LV_SYMBOL_IMAGE, I18n::tr(I18n::TextId::Display));
   lv_obj_set_style_text_color(display_label, lv_color_white(), 0);
   lv_obj_align(display_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1289,7 +1357,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(planes_row, open_planes_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *planes_label = lv_label_create(planes_row);
-  lv_label_set_text(planes_label, LV_SYMBOL_GPS "  Planes");
+  lv_label_set_text_fmt(planes_label, "%s  %s", LV_SYMBOL_GPS, I18n::tr(I18n::TextId::Planes));
   lv_obj_set_style_text_color(planes_label, lv_color_white(), 0);
   lv_obj_align(planes_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1298,12 +1366,35 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_set_style_text_color(planes_chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(planes_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
+  /* Language row */
+  lv_obj_t *lang_row = lv_obj_create(list);
+  lv_obj_set_size(lang_row, lv_pct(100), 52);
+  lv_obj_clear_flag(lang_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(lang_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(lang_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(lang_row, 0, 0);
+  lv_obj_set_style_radius(lang_row, 10, 0);
+  lv_obj_set_style_pad_hor(lang_row, 16, 0);
+  lv_obj_set_style_pad_ver(lang_row, 0, 0);
+  lv_obj_add_flag(lang_row, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(lang_row, open_language_screen, LV_EVENT_CLICKED, scr);
+
+  lv_obj_t *lang_label = lv_label_create(lang_row);
+  lv_label_set_text_fmt(lang_label, "%s  %s", LV_SYMBOL_EDIT, I18n::tr(I18n::TextId::Language));
+  lv_obj_set_style_text_color(lang_label, lv_color_white(), 0);
+  lv_obj_align(lang_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *lang_chevron = lv_label_create(lang_row);
+  lv_label_set_text(lang_chevron, LV_SYMBOL_RIGHT);
+  lv_obj_set_style_text_color(lang_chevron, lv_color_hex(0x888888), 0);
+  lv_obj_align(lang_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
+
   return scr;
 }
 
 void settings_launch_with_route(const char *route)
 {
-  UI_TRACE("Settings", "settings_launch_with_route route=%s", route ? route : "<null>");
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "settings_launch_with_route route=%s", route ? route : "<null>");
   lv_obj_t *home_scr = lv_screen_active();
   lv_obj_t *settings_scr = create_settings_screen(home_scr);
   route_restore_settings_screen = settings_scr;
@@ -1325,23 +1416,25 @@ void settings_launch_with_route(const char *route)
     open_planes_screen(nullptr);
   } else if (std::strcmp(route, "settings_display") == 0) {
     open_display_screen(nullptr);
+  } else if (std::strcmp(route, "settings_language") == 0) {
+    open_language_screen(nullptr);
   } else {
     UiSessionState::set_route("settings");
     ui_load_screen(settings_scr, false);
   }
 
   route_restore_settings_screen = nullptr;
-  UI_TRACE("Settings", "settings_launch_with_route done");
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "settings_launch_with_route done");
 }
 
 void settings_launch(void)
 {
-  UI_TRACE("Settings", "settings_launch begin");
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "settings_launch begin");
   lv_obj_t *home_scr = lv_screen_active();
   lv_obj_t *scr = create_settings_screen(home_scr);
 
   ui_load_screen(scr, false);
-  UI_TRACE("Settings", "settings_launch loaded");
+  UI_TRACE(I18n::tr(I18n::TextId::Settings), "settings_launch loaded");
   
   // Set route after screen is loaded
   UiSessionState::set_route("settings");

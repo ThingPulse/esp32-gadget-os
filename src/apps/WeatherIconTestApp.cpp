@@ -5,8 +5,9 @@
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
 #include "ui/WeatherIconSet.h"
+#include "ui/I18n.h"
 
-APP_REGISTER_COLOR_RANK("Weather Icons", LV_SYMBOL_IMAGE, weather_icon_test_app_launch, 0x339af0, 80);
+APP_REGISTER_COLOR_RANK(I18n::tr(I18n::TextId::AppWeatherIcons), LV_SYMBOL_IMAGE, weather_icon_test_app_launch, 0x339af0, 80);
 
 namespace {
 
@@ -60,7 +61,7 @@ void weather_icon_test_app_launch(void)
   lv_obj_center(back_label);
 
   lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "Weather Icons");
+  lv_label_set_text(title, I18n::tr(I18n::TextId::AppWeatherIcons));
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
 
@@ -79,12 +80,12 @@ void weather_icon_test_app_launch(void)
   lv_obj_set_flex_align(content, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
   const IconSpec icons[] = {
-      {WeatherIconKind::Clear, "Clear"},
-      {WeatherIconKind::Cloudy, "Cloudy"},
-      {WeatherIconKind::Rain, "Rain"},
-      {WeatherIconKind::Snow, "Snow"},
-      {WeatherIconKind::Storm, "Storm"},
-      {WeatherIconKind::Fog, "Fog"},
+      {WeatherIconKind::Clear, I18n::tr(I18n::TextId::Clear)},
+      {WeatherIconKind::Cloudy, I18n::tr(I18n::TextId::Cloudy)},
+      {WeatherIconKind::Rain, I18n::tr(I18n::TextId::Rain)},
+      {WeatherIconKind::Snow, I18n::tr(I18n::TextId::Snow)},
+      {WeatherIconKind::Storm, I18n::tr(I18n::TextId::Thunderstorm)},
+      {WeatherIconKind::Fog, I18n::tr(I18n::TextId::Fog)},
   };
 
   for (const IconSpec &icon_spec : icons) {

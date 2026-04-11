@@ -6,11 +6,12 @@
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
 #include "ui/UiTrace.h"
+#include "ui/I18n.h"
 
 #include <cmath>
 #include <cstdio>
 
-APP_REGISTER_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
+APP_REGISTER_COLOR_RANK(I18n::tr(I18n::TextId::Planes), LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
 
 namespace {
 
@@ -42,17 +43,17 @@ static PlanesAppCtx app_ctx;
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-    UI_TRACE("Planes", "back clicked");
+    UI_TRACE(I18n::tr(I18n::TextId::Planes), "back clicked");
     PlanesService::instance().pause();
     app_ctx.closing = true;
     if (app_ctx.refresh_timer) {
       lv_timer_delete(app_ctx.refresh_timer);
       app_ctx.refresh_timer = nullptr;
-      UI_TRACE("Planes", "back deleted refresh timer");
+      UI_TRACE(I18n::tr(I18n::TextId::Planes), "back deleted refresh timer");
     }
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
-    UI_TRACE("Planes", "back target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
+    UI_TRACE(I18n::tr(I18n::TextId::Planes), "back target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
     ui_load_screen(target_scr, true);
   }
@@ -68,20 +69,20 @@ static void planes_app_update_ui()
   PlanesService &svc = PlanesService::instance();
 
   if (!svc.is_configured()) {
-    lv_label_set_text(app_ctx.status_label, "Configure center/range in Settings > Planes");
-    lv_label_set_text(app_ctx.count_label, "Planes: --");
+    lv_label_set_text(app_ctx.status_label, I18n::tr(I18n::TextId::ConfigurePlanesHint));
+    lv_label_set_text(app_ctx.count_label, I18n::tr(I18n::TextId::PlanesCountUnknown));
     for (int i = 0; i < PlanesService::MAX_PLANES; ++i)
       if (app_ctx.rows[i] && lv_obj_is_valid(app_ctx.rows[i])) lv_obj_add_flag(app_ctx.rows[i], LV_OBJ_FLAG_HIDDEN);
     return;
   }
 
   if (!svc.has_data()) {
-    lv_label_set_text(app_ctx.status_label, svc.last_error().empty() ? "No plane data yet" : svc.last_error().c_str());
+    lv_label_set_text(app_ctx.status_label, svc.last_error().empty() ? I18n::tr(I18n::TextId::NoPlaneDataYet) : svc.last_error().c_str());
     {
       char buf[48] = {0};
       const int rl = svc.rate_limit_remaining();
-      if (rl >= 0) std::snprintf(buf, sizeof(buf), "Planes: 0  Cr:%d", rl);
-      else std::snprintf(buf, sizeof(buf), "Planes: 0");
+      if (rl >= 0) std::snprintf(buf, sizeof(buf), I18n::tr(I18n::TextId::PlanesCountFmt), 0, rl);
+      else std::snprintf(buf, sizeof(buf), I18n::tr(I18n::TextId::PlanesZeroFmt));
       lv_label_set_text(app_ctx.count_label, buf);
     }
     for (int i = 0; i < PlanesService::MAX_PLANES; ++i)
@@ -92,7 +93,7 @@ static void planes_app_update_ui()
   char status_buf[96] = {0};
   std::snprintf(status_buf,
                 sizeof(status_buf),
-                "Center %.3f, %.3f | Range %.0f km",
+                I18n::tr(I18n::TextId::CenterRangeFmt),
                 svc.center_latitude(),
                 svc.center_longitude(),
                 svc.range_km());
@@ -102,9 +103,9 @@ static void planes_app_update_ui()
   {
     const int rl = svc.rate_limit_remaining();
     if (rl >= 0)
-      std::snprintf(count_buf, sizeof(count_buf), "Planes: %d  Cr:%d", svc.plane_count(), rl);
+      std::snprintf(count_buf, sizeof(count_buf), I18n::tr(I18n::TextId::PlanesCountFmt), svc.plane_count(), rl);
     else
-      std::snprintf(count_buf, sizeof(count_buf), "Planes: %d", svc.plane_count());
+      std::snprintf(count_buf, sizeof(count_buf), I18n::tr(I18n::TextId::PlanesCountOnlyFmt), svc.plane_count());
   }
   lv_label_set_text(app_ctx.count_label, count_buf);
 
@@ -134,7 +135,7 @@ static void planes_app_update_ui()
     lv_label_set_text(app_ctx.callsign_labels[i], first_line.c_str());
 
     if (planes[i].on_ground) {
-        lv_label_set_text(app_ctx.detail_labels[i], "On Ground");
+        lv_label_set_text(app_ctx.detail_labels[i], I18n::tr(I18n::TextId::OnGround));
     } else {
         const float dist_km = haversine_km(svc.center_latitude(), svc.center_longitude(),
                                            planes[i].latitude, planes[i].longitude);
@@ -142,14 +143,14 @@ static void planes_app_update_ui()
         if (svc.is_metric()) {
           const float speed_kmh = planes[i].velocity_ms * 3.6f;
           std::snprintf(detail_buf, sizeof(detail_buf),
-                  "Alt: %.0fm  %.0f km/h  %.1f km",
+                  I18n::tr(I18n::TextId::AltMetricFmt),
                   planes[i].altitude_m, speed_kmh, dist_km);
         } else {
           const float alt_ft    = planes[i].altitude_m * 3.28084f;
           const float speed_mph = planes[i].velocity_ms * 2.23694f;
           const float dist_mi   = dist_km * 0.621371f;
           std::snprintf(detail_buf, sizeof(detail_buf),
-                  "Alt: %.0fft  %.0f mph  %.1f mi",
+                  I18n::tr(I18n::TextId::AltImperialFmt),
                   alt_ft, speed_mph, dist_mi);
         }
         lv_label_set_text(app_ctx.detail_labels[i], detail_buf);
@@ -169,10 +170,10 @@ static void planes_app_refresh_event(lv_event_t *e)
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   if (app_ctx.closing) return;
 
-  UI_TRACE("Planes", "refresh clicked");
+  UI_TRACE(I18n::tr(I18n::TextId::Planes), "refresh clicked");
 
   if (app_ctx.status_label && lv_obj_is_valid(app_ctx.status_label))
-    lv_label_set_text(app_ctx.status_label, "Refreshing...");
+    lv_label_set_text(app_ctx.status_label, I18n::tr(I18n::TextId::Refreshing));
 
   PlanesService::instance().refresh_now();
   planes_app_update_ui();
@@ -181,7 +182,7 @@ static void planes_app_refresh_event(lv_event_t *e)
 static void planes_app_screen_delete_event(lv_event_t *e)
 {
   (void)e;
-  UI_TRACE("Planes", "screen delete event");
+  UI_TRACE(I18n::tr(I18n::TextId::Planes), "screen delete event");
   PlanesService::instance().pause();
   if (app_ctx.refresh_timer) {
     lv_timer_delete(app_ctx.refresh_timer);
@@ -194,7 +195,7 @@ static void planes_app_screen_delete_event(lv_event_t *e)
 
 void planes_app_launch(void)
 {
-  UI_TRACE("Planes", "launch begin");
+  UI_TRACE(I18n::tr(I18n::TextId::Planes), "launch begin");
   app_ctx.closing = false;
   lv_obj_t *home_scr = lv_screen_active();
 
@@ -228,7 +229,7 @@ void planes_app_launch(void)
   lv_obj_center(back_label);
 
   lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "Planes");
+  lv_label_set_text(title, I18n::tr(I18n::TextId::Planes));
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
 
@@ -238,7 +239,7 @@ void planes_app_launch(void)
   lv_obj_add_event_cb(refresh_btn, planes_app_refresh_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *refresh_lbl = lv_label_create(refresh_btn);
-  lv_label_set_text(refresh_lbl, "Refresh");
+  lv_label_set_text(refresh_lbl, I18n::tr(I18n::TextId::Refresh));
   lv_obj_center(refresh_lbl);
 
   create_time_status_label(bar, 56);
@@ -306,7 +307,7 @@ void planes_app_launch(void)
   PlanesService::instance().resume();
   planes_app_update_ui();
   ui_load_screen(scr, false);
-  UI_TRACE("Planes", "launch loaded screen");
+  UI_TRACE(I18n::tr(I18n::TextId::Planes), "launch loaded screen");
   
   // Set route after screen is loaded
   UiSessionState::set_route("planes");

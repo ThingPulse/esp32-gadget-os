@@ -16,6 +16,7 @@
 #include "ui/StatusIcons.h"
 #include "ui/UiTrace.h"
 #include "ui/DisplayPreferences.h"
+#include "ui/I18n.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -94,7 +95,7 @@ static void launch_route(const std::string &route)
     return;
   }
 
-  if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes" || route == "settings_display") {
+  if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes" || route == "settings_display" || route == "settings_language") {
     UI_TRACE("Route", "launch settings subroute=%s", route.c_str());
     settings_launch_with_route(route.c_str());
     return;
@@ -226,7 +227,7 @@ static void create_home_screen(void)
     lv_obj_center(icon_label);
 
     lv_obj_t *name_label = lv_label_create(tile);
-    lv_label_set_text(name_label, app.name);
+    lv_label_set_text(name_label, I18n::translate_app_name(app.name));
     lv_obj_set_style_text_color(name_label, lv_color_white(), 0);
     lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, 0);
   }
@@ -260,6 +261,7 @@ void setup(void)
 {
   UI_TRACE("Boot", "setup start");
   ServiceRegistry::instance().begin_all();
+  I18n::load_from_config();
 
   lcd.init();
   apply_display_preferences();

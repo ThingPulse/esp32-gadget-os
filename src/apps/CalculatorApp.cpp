@@ -4,6 +4,7 @@
 #include "ui/UiNav.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
+#include "ui/I18n.h"
 
 #include <cmath>
 #include <cstdio>
@@ -11,7 +12,7 @@
 #include <cstring>
 #include <string>
 
-APP_REGISTER_COLOR_RANK("Calculator", LV_SYMBOL_PLUS, calculator_app_launch, 0xf08c2e, 90);
+APP_REGISTER_COLOR_RANK(I18n::tr(I18n::TextId::AppCalculator), LV_SYMBOL_PLUS, calculator_app_launch, 0xf08c2e, 90);
 
 namespace {
 
@@ -38,7 +39,7 @@ static void nav_back_event(lv_event_t *e)
 
 static std::string format_value(double value)
 {
-  if (std::isnan(value) || std::isinf(value)) return "Error";
+  if (std::isnan(value) || std::isinf(value)) return I18n::tr(I18n::TextId::CalculatorError);
 
   char buf[64] = {0};
   std::snprintf(buf, sizeof(buf), "%.10g", value);
@@ -59,7 +60,7 @@ static double current_value()
 static void set_error_state()
 {
   calc_ctx.has_error = true;
-  calc_ctx.input = "Error";
+  calc_ctx.input = I18n::tr(I18n::TextId::CalculatorError);
   calc_ctx.accumulator = 0.0;
   calc_ctx.pending_op = 0;
   calc_ctx.entering_new = true;
@@ -69,7 +70,7 @@ static void set_error_state()
 static void set_input_from_double(double value)
 {
   calc_ctx.input = format_value(value);
-  if (calc_ctx.input == "Error") {
+  if (calc_ctx.input == I18n::tr(I18n::TextId::CalculatorError)) {
     set_error_state();
     return;
   }
@@ -290,7 +291,7 @@ void calculator_app_launch(void)
   lv_obj_center(back_label);
 
   lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "Calculator");
+  lv_label_set_text(title, I18n::tr(I18n::TextId::AppCalculator));
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
 

@@ -7,13 +7,14 @@
 #include "ui/UiSessionState.h"
 #include "ui/UiTrace.h"
 #include "ui/WeatherIconSet.h"
+#include "ui/I18n.h"
 
 #include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <string>
 
-APP_REGISTER_COLOR_RANK("Weather", LV_SYMBOL_EYE_OPEN, weather_app_launch, 0x339af0, 10);
+APP_REGISTER_COLOR_RANK(I18n::tr(I18n::TextId::Weather), LV_SYMBOL_EYE_OPEN, weather_app_launch, 0x339af0, 10);
 
 namespace {
 
@@ -48,14 +49,14 @@ static WeatherAppCtx app_ctx;
 
 static const char *weather_text_for_code(int weather_code)
 {
-  if (weather_code == 0) return "Clear";
-  if (weather_code <= 3) return "Cloudy";
-  if (weather_code >= 45 && weather_code <= 48) return "Fog";
-  if (weather_code >= 51 && weather_code <= 67) return "Rain";
-  if (weather_code >= 71 && weather_code <= 77) return "Snow";
-  if (weather_code >= 80 && weather_code <= 82) return "Showers";
-  if (weather_code >= 95) return "Thunderstorm";
-  return "Unknown";
+  if (weather_code == 0) return I18n::tr(I18n::TextId::Clear);
+  if (weather_code <= 3) return I18n::tr(I18n::TextId::Cloudy);
+  if (weather_code >= 45 && weather_code <= 48) return I18n::tr(I18n::TextId::Fog);
+  if (weather_code >= 51 && weather_code <= 67) return I18n::tr(I18n::TextId::Rain);
+  if (weather_code >= 71 && weather_code <= 77) return I18n::tr(I18n::TextId::Snow);
+  if (weather_code >= 80 && weather_code <= 82) return I18n::tr(I18n::TextId::Showers);
+  if (weather_code >= 95) return I18n::tr(I18n::TextId::Thunderstorm);
+  return I18n::tr(I18n::TextId::Unknown);
 }
 
 static const char *weather_token_for_code(int weather_code)
@@ -122,7 +123,7 @@ static std::string weekday_label_from_iso(const std::string &iso)
   if (std::sscanf(iso.c_str(), "%d-%d-%d", &y, &m, &d) != 3)
     return short_date(iso);
 
-  static const char *names[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  static const char *names[] = {I18n::weekday_short(0), I18n::weekday_short(1), I18n::weekday_short(2), I18n::weekday_short(3), I18n::weekday_short(4), I18n::weekday_short(5), I18n::weekday_short(6)};
   int w = weekday_from_ymd(y, m, d);
   if (w < 0 || w > 6) return short_date(iso);
 
@@ -139,17 +140,17 @@ static std::string hour_label_from_iso(const std::string &iso)
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-    UI_TRACE("Weather", "back clicked");
+    UI_TRACE(I18n::tr(I18n::TextId::Weather), "back clicked");
     WeatherService::instance().pause();
     app_ctx.closing = true;
     if (app_ctx.refresh_timer) {
       lv_timer_delete(app_ctx.refresh_timer);
       app_ctx.refresh_timer = nullptr;
-      UI_TRACE("Weather", "back deleted refresh timer");
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "back deleted refresh timer");
     }
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
-    UI_TRACE("Weather", "back target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
+    UI_TRACE(I18n::tr(I18n::TextId::Weather), "back target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
     ui_load_screen(target_scr, true);
   }
@@ -171,7 +172,7 @@ static void weather_app_update_ui()
   WeatherService &weather = WeatherService::instance();
 
   if (!weather.has_weather()) {
-    lv_label_set_text(app_ctx.condition_label, "No weather data");
+    lv_label_set_text(app_ctx.condition_label, I18n::tr(I18n::TextId::NoWeatherData));
     lv_label_set_text(app_ctx.temp_label, "--");
     lv_label_set_text(app_ctx.humidity_label, "--");
     lv_label_set_text(app_ctx.pressure_label, "--");
@@ -317,10 +318,10 @@ static void weather_app_refresh_event(lv_event_t *e)
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   if (app_ctx.closing) return;
 
-  UI_TRACE("Weather", "refresh clicked");
+  UI_TRACE(I18n::tr(I18n::TextId::Weather), "refresh clicked");
 
   if (app_ctx.condition_label && lv_obj_is_valid(app_ctx.condition_label))
-    lv_label_set_text(app_ctx.condition_label, "Refreshing...");
+    lv_label_set_text(app_ctx.condition_label, I18n::tr(I18n::TextId::Refreshing));
 
   WeatherService::instance().refresh_now();
   weather_app_update_ui();
@@ -329,7 +330,7 @@ static void weather_app_refresh_event(lv_event_t *e)
 static void weather_app_screen_delete_event(lv_event_t *e)
 {
   (void)e;
-  UI_TRACE("Weather", "screen delete event");
+  UI_TRACE(I18n::tr(I18n::TextId::Weather), "screen delete event");
   WeatherService::instance().pause();
   if (app_ctx.refresh_timer) {
     lv_timer_delete(app_ctx.refresh_timer);
@@ -342,10 +343,10 @@ static void weather_app_screen_delete_event(lv_event_t *e)
 
 void weather_app_launch(void)
 {
-  UI_TRACE("Weather", "launch begin");
+  UI_TRACE(I18n::tr(I18n::TextId::Weather), "launch begin");
   app_ctx.closing = false;
   app_ctx.compact_list_icons = false;
-  UI_TRACE("Weather", "compact_list_icons=%d days=%d hours=%d",
+  UI_TRACE(I18n::tr(I18n::TextId::Weather), "compact_list_icons=%d days=%d hours=%d",
            app_ctx.compact_list_icons ? 1 : 0,
            WeatherService::FORECAST_DAYS,
            WeatherService::FORECAST_HOURS);
@@ -381,7 +382,7 @@ void weather_app_launch(void)
   lv_obj_center(back_label);
 
   lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "Weather");
+  lv_label_set_text(title, I18n::tr(I18n::TextId::Weather));
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
 
@@ -391,7 +392,7 @@ void weather_app_launch(void)
   lv_obj_add_event_cb(refresh_btn, weather_app_refresh_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *refresh_lbl = lv_label_create(refresh_btn);
-  lv_label_set_text(refresh_lbl, "Refresh");
+  lv_label_set_text(refresh_lbl, I18n::tr(I18n::TextId::Refresh));
   lv_obj_center(refresh_lbl);
 
   create_time_status_label(bar, 56);
@@ -489,7 +490,7 @@ void weather_app_launch(void)
   for (int i = 0; i < WeatherService::FORECAST_HOURS; ++i) {
     lv_obj_t *col = lv_obj_create(hourly_strip);
     if (!col) {
-      UI_TRACE("Weather", "hourly col alloc failed i=%d", i);
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "hourly col alloc failed i=%d", i);
       break;
     }
     lv_obj_set_size(col, 56, 82);
@@ -504,7 +505,7 @@ void weather_app_launch(void)
 
     lv_obj_t *hour_label = lv_label_create(col);
     if (!hour_label) {
-      UI_TRACE("Weather", "hour label alloc failed i=%d", i);
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "hour label alloc failed i=%d", i);
       lv_obj_delete(col);
       break;
     }
@@ -523,11 +524,11 @@ void weather_app_launch(void)
       icon = weather_icon_create(col, WeatherIconKind::Cloudy, 30);
     }
     if (!icon)
-      UI_TRACE("Weather", "hour icon alloc failed i=%d", i);
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "hour icon alloc failed i=%d", i);
 
     lv_obj_t *temp = lv_label_create(col);
     if (!temp) {
-      UI_TRACE("Weather", "hour temp alloc failed i=%d", i);
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "hour temp alloc failed i=%d", i);
       lv_obj_delete(col);
       break;
     }
@@ -557,7 +558,7 @@ void weather_app_launch(void)
   for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
     lv_obj_t *col = lv_obj_create(forecast_card);
     if (!col) {
-      UI_TRACE("Weather", "forecast col alloc failed i=%d", i);
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "forecast col alloc failed i=%d", i);
       break;
     }
     lv_obj_set_size(col, 70, 90);
@@ -571,7 +572,7 @@ void weather_app_launch(void)
 
     lv_obj_t *day_label = lv_label_create(col);
     if (!day_label) {
-      UI_TRACE("Weather", "forecast day alloc failed i=%d", i);
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "forecast day alloc failed i=%d", i);
       lv_obj_delete(col);
       break;
     }
@@ -590,11 +591,11 @@ void weather_app_launch(void)
       icon = weather_icon_create(col, WeatherIconKind::Cloudy, 40);
     }
     if (!icon)
-      UI_TRACE("Weather", "forecast icon alloc failed i=%d", i);
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "forecast icon alloc failed i=%d", i);
 
     lv_obj_t *temp = lv_label_create(col);
     if (!temp) {
-      UI_TRACE("Weather", "forecast temp alloc failed i=%d", i);
+      UI_TRACE(I18n::tr(I18n::TextId::Weather), "forecast temp alloc failed i=%d", i);
       lv_obj_delete(col);
       break;
     }
@@ -618,7 +619,7 @@ void weather_app_launch(void)
   lv_obj_set_style_pad_all(wind_card, 10, 0);
 
   lv_obj_t *wind_title = lv_label_create(wind_card);
-  lv_label_set_text(wind_title, "Wind");
+  lv_label_set_text(wind_title, I18n::tr(I18n::TextId::Wind));
   lv_obj_set_style_text_color(wind_title, lv_color_white(), 0);
   lv_obj_set_style_text_font(wind_title, &lv_font_montserrat_14, 0);
   lv_obj_align(wind_title, LV_ALIGN_TOP_LEFT, 0, 0);
@@ -692,7 +693,7 @@ void weather_app_launch(void)
   WeatherService::instance().resume();
   weather_app_update_ui();
   ui_load_screen(scr, false);
-  UI_TRACE("Weather", "launch loaded screen");
+  UI_TRACE(I18n::tr(I18n::TextId::Weather), "launch loaded screen");
   
   // Set route after screen is loaded
   UiSessionState::set_route("weather");
