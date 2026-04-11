@@ -36,6 +36,7 @@ struct WeatherAppCtx {
   lv_obj_t *forecast_temp_labels[WeatherService::FORECAST_DAYS]{};
   lv_obj_t *refresh_btn = nullptr;
   lv_timer_t *refresh_timer = nullptr;
+  bool compact_list_icons = false;
   bool closing = false;
 };
 
@@ -51,6 +52,18 @@ static const char *weather_text_for_code(int weather_code)
   if (weather_code >= 80 && weather_code <= 82) return "Showers";
   if (weather_code >= 95) return "Thunderstorm";
   return "Unknown";
+}
+
+static const char *weather_token_for_code(int weather_code)
+{
+  if (weather_code == 0) return "SUN";
+  if (weather_code <= 3) return "CLD";
+  if (weather_code >= 45 && weather_code <= 48) return "FOG";
+  if (weather_code >= 51 && weather_code <= 67) return "RAN";
+  if (weather_code >= 71 && weather_code <= 77) return "SNW";
+  if (weather_code >= 80 && weather_code <= 82) return "RAN";
+  if (weather_code >= 95) return "STM";
+  return "CLD";
 }
 
 static const char *wind_direction_short(float degrees)
@@ -198,7 +211,6 @@ static void weather_app_update_ui()
   for (int i = 0; i < 4 && i < WeatherService::FORECAST_DAYS; ++i) {
     if (!app_ctx.forecast_rows[i] || !lv_obj_is_valid(app_ctx.forecast_rows[i])) continue;
     if (!app_ctx.forecast_day_labels[i] || !lv_obj_is_valid(app_ctx.forecast_day_labels[i])) continue;
-    if (!app_ctx.forecast_icons[i] || !lv_obj_is_valid(app_ctx.forecast_icons[i])) continue;
     if (!app_ctx.forecast_temp_labels[i] || !lv_obj_is_valid(app_ctx.forecast_temp_labels[i])) continue;
 
     if (i >= count || !forecast[i].valid) {
@@ -209,7 +221,12 @@ static void weather_app_update_ui()
     lv_obj_clear_flag(app_ctx.forecast_rows[i], LV_OBJ_FLAG_HIDDEN);
     std::string date_text = weekday_label_from_iso(forecast[i].date);
     lv_label_set_text(app_ctx.forecast_day_labels[i], date_text.c_str());
-    weather_icon_update(app_ctx.forecast_icons[i], weather_icon_kind_from_code(forecast[i].weather_code), 40);
+    if (app_ctx.forecast_icons[i] && lv_obj_is_valid(app_ctx.forecast_icons[i])) {
+      if (app_ctx.compact_list_icons)
+        lv_label_set_text(app_ctx.forecast_icons[i], weather_token_for_code(forecast[i].weather_code));
+      else
+        weather_icon_update(app_ctx.forecast_icons[i], weather_icon_kind_from_code(forecast[i].weather_code), 40);
+    }
 
     char day_temp_buf[48] = {0};
     std::snprintf(day_temp_buf,
@@ -225,7 +242,6 @@ static void weather_app_update_ui()
   for (int i = 0; i < WeatherService::FORECAST_HOURS; ++i) {
     if (!app_ctx.hourly_rows[i] || !lv_obj_is_valid(app_ctx.hourly_rows[i])) continue;
     if (!app_ctx.hourly_time_labels[i] || !lv_obj_is_valid(app_ctx.hourly_time_labels[i])) continue;
-    if (!app_ctx.hourly_icons[i] || !lv_obj_is_valid(app_ctx.hourly_icons[i])) continue;
     if (!app_ctx.hourly_temp_labels[i] || !lv_obj_is_valid(app_ctx.hourly_temp_labels[i])) continue;
 
     if (i >= hourly_count || !hourly_forecast[i].valid) {
@@ -236,7 +252,12 @@ static void weather_app_update_ui()
     lv_obj_clear_flag(app_ctx.hourly_rows[i], LV_OBJ_FLAG_HIDDEN);
     std::string hour_text = hour_label_from_iso(hourly_forecast[i].time);
     lv_label_set_text(app_ctx.hourly_time_labels[i], hour_text.c_str());
-    weather_icon_update(app_ctx.hourly_icons[i], weather_icon_kind_from_code(hourly_forecast[i].weather_code), 30);
+    if (app_ctx.hourly_icons[i] && lv_obj_is_valid(app_ctx.hourly_icons[i])) {
+      if (app_ctx.compact_list_icons)
+        lv_label_set_text(app_ctx.hourly_icons[i], weather_token_for_code(hourly_forecast[i].weather_code));
+      else
+        weather_icon_update(app_ctx.hourly_icons[i], weather_icon_kind_from_code(hourly_forecast[i].weather_code), 30);
+    }
 
     char hour_temp_buf[32] = {0};
     std::snprintf(hour_temp_buf, sizeof(hour_temp_buf), "%.0f°", hourly_forecast[i].temperature);
@@ -283,6 +304,11 @@ void weather_app_launch(void)
 {
   UI_TRACE("Weather", "launch begin");
   app_ctx.closing = false;
+  app_ctx.compact_list_icons = false;
+  UI_TRACE("Weather", "compact_list_icons=%d days=%d hours=%d",
+           app_ctx.compact_list_icons ? 1 : 0,
+           WeatherService::FORECAST_DAYS,
+           WeatherService::FORECAST_HOURS);
   lv_obj_t *home_scr = lv_screen_active();
 
   lv_obj_t *scr = lv_obj_create(nullptr);
@@ -426,6 +452,10 @@ void weather_app_launch(void)
 
   for (int i = 0; i < WeatherService::FORECAST_HOURS; ++i) {
     lv_obj_t *col = lv_obj_create(hourly_strip);
+    if (!col) {
+      UI_TRACE("Weather", "hourly col alloc failed i=%d", i);
+      break;
+    }
     lv_obj_set_size(col, 62, 82);
     lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(col, lv_color_hex(0x33374f), 0);
@@ -438,12 +468,34 @@ void weather_app_launch(void)
     lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *hour_label = lv_label_create(col);
+    if (!hour_label) {
+      UI_TRACE("Weather", "hour label alloc failed i=%d", i);
+      lv_obj_delete(col);
+      break;
+    }
     lv_obj_set_style_text_color(hour_label, lv_color_white(), 0);
     lv_obj_set_style_text_font(hour_label, &lv_font_montserrat_14, 0);
 
-    lv_obj_t *icon = weather_icon_create(col, WeatherIconKind::Cloudy, 30);
+    lv_obj_t *icon = nullptr;
+    if (app_ctx.compact_list_icons) {
+      icon = lv_label_create(col);
+      if (icon) {
+        lv_obj_set_style_text_color(icon, lv_color_hex(0xd7dde6), 0);
+        lv_obj_set_style_text_font(icon, &lv_font_montserrat_14, 0);
+        lv_label_set_text(icon, "CLD");
+      }
+    } else {
+      icon = weather_icon_create(col, WeatherIconKind::Cloudy, 30);
+    }
+    if (!icon)
+      UI_TRACE("Weather", "hour icon alloc failed i=%d", i);
 
     lv_obj_t *temp = lv_label_create(col);
+    if (!temp) {
+      UI_TRACE("Weather", "hour temp alloc failed i=%d", i);
+      lv_obj_delete(col);
+      break;
+    }
     lv_obj_set_style_text_color(temp, lv_color_hex(0xd5e2ff), 0);
     lv_obj_set_style_text_font(temp, &lv_font_montserrat_14, 0);
 
@@ -469,6 +521,10 @@ void weather_app_launch(void)
   // Create 4 forecast columns
   for (int i = 0; i < 4 && i < WeatherService::FORECAST_DAYS; ++i) {
     lv_obj_t *col = lv_obj_create(forecast_card);
+    if (!col) {
+      UI_TRACE("Weather", "forecast col alloc failed i=%d", i);
+      break;
+    }
     lv_obj_set_size(col, 70, 90);
     lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
@@ -479,12 +535,34 @@ void weather_app_launch(void)
     lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *day_label = lv_label_create(col);
+    if (!day_label) {
+      UI_TRACE("Weather", "forecast day alloc failed i=%d", i);
+      lv_obj_delete(col);
+      break;
+    }
     lv_obj_set_style_text_color(day_label, lv_color_white(), 0);
     lv_obj_set_style_text_font(day_label, &lv_font_montserrat_14, 0);
 
-    lv_obj_t *icon = weather_icon_create(col, WeatherIconKind::Cloudy, 40);
+    lv_obj_t *icon = nullptr;
+    if (app_ctx.compact_list_icons) {
+      icon = lv_label_create(col);
+      if (icon) {
+        lv_obj_set_style_text_color(icon, lv_color_hex(0xd7dde6), 0);
+        lv_obj_set_style_text_font(icon, &lv_font_montserrat_14, 0);
+        lv_label_set_text(icon, "CLD");
+      }
+    } else {
+      icon = weather_icon_create(col, WeatherIconKind::Cloudy, 40);
+    }
+    if (!icon)
+      UI_TRACE("Weather", "forecast icon alloc failed i=%d", i);
 
     lv_obj_t *temp = lv_label_create(col);
+    if (!temp) {
+      UI_TRACE("Weather", "forecast temp alloc failed i=%d", i);
+      lv_obj_delete(col);
+      break;
+    }
     lv_obj_set_style_text_color(temp, lv_color_hex(0xd5e2ff), 0);
     lv_obj_set_style_text_font(temp, &lv_font_montserrat_14, 0);
 

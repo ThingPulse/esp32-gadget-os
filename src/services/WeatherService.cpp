@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "ui/UiTrace.h"
+
 #if defined(ARDUINO)
 #include <Arduino.h>
 #include <HTTPClient.h>
@@ -305,14 +307,15 @@ bool WeatherService::fetch_payload(std::string &out_payload) const
     const char *precip_unit = _metric ? "mm" : "inch";
     std::snprintf(url,
                   sizeof(url),
-                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code,time&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=3&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s",
+                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=3&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s",
                   _latitude,
                   _longitude,
-                  FORECAST_HOURS + 1,
+                  FORECAST_HOURS,
                   temp_unit,
                   wind_unit,
                   precip_unit);
 
+    UI_TRACE("Weather", "fetch_payload url=%s", url);
 #if defined(ARDUINO)
     WiFiClient client;
     HTTPClient http;
