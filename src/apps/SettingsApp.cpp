@@ -64,7 +64,7 @@ static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target
   lv_obj_set_style_pad_all(bar, 0, 0);
 
   lv_obj_t *back_btn = lv_button_create(bar);
-  lv_obj_set_size(back_btn, 44, 36);
+  lv_obj_set_size(back_btn, 56, 44);
   lv_obj_align(back_btn, LV_ALIGN_LEFT_MID, 4, 0);
   lv_obj_set_style_bg_opa(back_btn, LV_OPA_TRANSP, 0);
   lv_obj_set_style_shadow_width(back_btn, 0, 0);
