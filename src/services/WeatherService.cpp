@@ -2,6 +2,7 @@
 
 #include "EventBus.h"
 #include "services/ConfigStoreService.h"
+#include "services/TimeService.h"
 #include "services/WifiService.h"
 
 #include <ArduinoJson.h>
@@ -24,6 +25,23 @@
 namespace {
 
 constexpr unsigned long WEATHER_REFRESH_MS = 10UL * 60UL * 1000UL;
+
+std::string url_encode_timezone(const char *tz)
+{
+    if (!tz || !*tz)
+        return "auto";
+
+    std::string out;
+    for (const char *p = tz; *p; ++p) {
+        switch (*p) {
+            case '/': out += "%2F"; break;
+            case '+': out += "%2B"; break;
+            case ' ': out += "%20"; break;
+            default: out.push_back(*p); break;
+        }
+    }
+    return out.empty() ? "auto" : out;
+}
 
 const char *icon_for_code(int weather_code)
 {
@@ -301,20 +319,24 @@ bool WeatherService::fetch_and_update()
 
 bool WeatherService::fetch_payload(std::string &out_payload) const
 {
-    char url[640] = {0};
+    char url[768] = {0};
     const char *temp_unit = _metric ? "celsius" : "fahrenheit";
     const char *wind_unit = _metric ? "kmh" : "mph";
     const char *precip_unit = _metric ? "mm" : "inch";
+    const int tz_index = TimeService::instance().timezone_index();
+    const char *tz_name = TimeService::timezone_name(tz_index);
+    const std::string tz_query = url_encode_timezone(tz_name);
     std::snprintf(url,
                   sizeof(url),
-                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=%d&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s",
+                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=%d&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s&timezone=%s",
                   _latitude,
                   _longitude,
                   FORECAST_DAYS,
                   FORECAST_HOURS,
                   temp_unit,
                   wind_unit,
-                  precip_unit);
+                  precip_unit,
+                  tz_query.c_str());
 
     UI_TRACE("Weather", "fetch_payload url=%s", url);
 #if defined(ARDUINO)
@@ -333,10 +355,9 @@ bool WeatherService::fetch_payload(std::string &out_payload) const
     http.end();
     return !out_payload.empty();
 #else
-    char cmd[420] = {0};
-    std::snprintf(cmd, sizeof(cmd), "curl -s --max-time 8 \"%s\"", url);
+    std::string cmd = std::string("curl -s --max-time 8 \"") + url + "\"";
 
-    FILE *pipe = popen(cmd, "r");
+    FILE *pipe = popen(cmd.c_str(), "r");
     if (!pipe)
         return false;
 
