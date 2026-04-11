@@ -21,7 +21,7 @@ struct WeatherForecastHour {
 
 class WeatherService : public SystemService {
 public:
-    static constexpr int FORECAST_DAYS = 3;
+    static constexpr int FORECAST_DAYS = 4;
     static constexpr int FORECAST_HOURS = 12;
 
     static WeatherService &instance();

@@ -208,7 +208,7 @@ static void weather_app_update_ui()
 
   const WeatherForecastDay *forecast = weather.forecast_days();
   int count = weather.forecast_count();
-  for (int i = 0; i < 4 && i < WeatherService::FORECAST_DAYS; ++i) {
+  for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
     if (!app_ctx.forecast_rows[i] || !lv_obj_is_valid(app_ctx.forecast_rows[i])) continue;
     if (!app_ctx.forecast_day_labels[i] || !lv_obj_is_valid(app_ctx.forecast_day_labels[i])) continue;
     if (!app_ctx.forecast_temp_labels[i] || !lv_obj_is_valid(app_ctx.forecast_temp_labels[i])) continue;
@@ -419,35 +419,31 @@ void weather_app_launch(void)
 
   // Hourly forecast card with horizontal scrolling
   lv_obj_t *hourly_card = lv_obj_create(content);
-  lv_obj_set_size(hourly_card, lv_pct(100), 116);
+  lv_obj_set_size(hourly_card, lv_pct(100), 102);
   lv_obj_set_style_bg_color(hourly_card, lv_color_hex(0x2a2d42), 0);
   lv_obj_set_style_bg_opa(hourly_card, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(hourly_card, 0, 0);
   lv_obj_set_style_radius(hourly_card, 10, 0);
   lv_obj_set_style_pad_all(hourly_card, 8, 0);
-  lv_obj_set_style_pad_row(hourly_card, 6, 0);
+  lv_obj_set_style_pad_row(hourly_card, 0, 0);
   lv_obj_set_layout(hourly_card, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(hourly_card, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_scroll_dir(hourly_card, LV_DIR_HOR);
-  lv_obj_set_scrollbar_mode(hourly_card, LV_SCROLLBAR_MODE_AUTO);
-
-  lv_obj_t *hourly_title = lv_label_create(hourly_card);
-  lv_label_set_text(hourly_title, "Next hours");
-  lv_obj_set_style_text_color(hourly_title, lv_color_white(), 0);
-  lv_obj_set_style_text_font(hourly_title, &lv_font_montserrat_14, 0);
+  lv_obj_clear_flag(hourly_card, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollbar_mode(hourly_card, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_t *hourly_strip = lv_obj_create(hourly_card);
   lv_obj_set_width(hourly_strip, lv_pct(100));
-  lv_obj_set_height(hourly_strip, 84);
+  lv_obj_set_height(hourly_strip, 86);
   lv_obj_set_style_bg_opa(hourly_strip, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(hourly_strip, 0, 0);
   lv_obj_set_style_pad_all(hourly_strip, 0, 0);
+  lv_obj_set_style_pad_bottom(hourly_strip, 8, 0);
   lv_obj_set_style_pad_column(hourly_strip, 8, 0);
   lv_obj_set_layout(hourly_strip, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(hourly_strip, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(hourly_strip, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_scroll_dir(hourly_strip, LV_DIR_HOR);
-  lv_obj_set_scrollbar_mode(hourly_strip, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_set_scrollbar_mode(hourly_strip, LV_SCROLLBAR_MODE_OFF);
   lv_obj_clear_flag(hourly_strip, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
 
   for (int i = 0; i < WeatherService::FORECAST_HOURS; ++i) {
@@ -505,7 +501,7 @@ void weather_app_launch(void)
     app_ctx.hourly_temp_labels[i] = temp;
   }
 
-  // Forecast grid: 4-day layout
+  // Forecast grid: show all configured day slots
   lv_obj_t *forecast_card = lv_obj_create(content);
   lv_obj_set_size(forecast_card, lv_pct(100), 110);
   lv_obj_clear_flag(forecast_card, LV_OBJ_FLAG_SCROLLABLE);
@@ -518,8 +514,8 @@ void weather_app_launch(void)
   lv_obj_set_flex_flow(forecast_card, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(forecast_card, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
 
-  // Create 4 forecast columns
-  for (int i = 0; i < 4 && i < WeatherService::FORECAST_DAYS; ++i) {
+  // Create forecast columns for all configured day slots
+  for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
     lv_obj_t *col = lv_obj_create(forecast_card);
     if (!col) {
       UI_TRACE("Weather", "forecast col alloc failed i=%d", i);
