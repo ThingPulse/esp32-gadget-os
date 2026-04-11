@@ -17,7 +17,12 @@
 #include "ui/UiTrace.h"
 #include "ui/DisplayPreferences.h"
 
+#include <cstdlib>
 #include <cstring>
+
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+#include <esp_heap_caps.h>
+#endif
 
 #if defined(SDL_h_)
 static LGFX lcd(320, 480, 2);
@@ -38,7 +43,8 @@ static LGFX lcd;
 
 static lv_display_t *disp;
 // Keep native smooth while reducing ESP32 DRAM pressure.
-static uint8_t draw_buf[320 * 8 * 2];
+static uint8_t *draw_buf = nullptr;
+static size_t draw_buf_size = 0;
 static lv_obj_t *home_screen = nullptr;
 static bool restore_route_pending = true;
 
@@ -256,7 +262,21 @@ void setup(void)
   disp = lv_display_create(lcd.width(), lcd.height());
   lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
   lv_display_set_flush_cb(disp, lvgl_flush);
-  lv_display_set_buffers(disp, draw_buf, nullptr, sizeof(draw_buf),
+
+  draw_buf_size = static_cast<size_t>(lcd.width()) * 8U * 2U;
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+  draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!draw_buf)
+    draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_8BIT));
+#else
+  draw_buf = static_cast<uint8_t *>(std::malloc(draw_buf_size));
+#endif
+  if (!draw_buf) {
+    UI_TRACE("Boot", "draw buffer allocation failed bytes=%u", (unsigned)draw_buf_size);
+    return;
+  }
+
+  lv_display_set_buffers(disp, draw_buf, nullptr, draw_buf_size,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
 
 #if defined(LV_TICK_CUSTOM) && LV_TICK_CUSTOM
