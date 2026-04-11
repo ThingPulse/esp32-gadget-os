@@ -10,7 +10,7 @@
 #include <cmath>
 #include <cstdio>
 
-APP_REGISTER_COLOR("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0);
+APP_REGISTER_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
 
 namespace {
 

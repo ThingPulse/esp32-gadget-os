@@ -11,7 +11,7 @@
 #include <cstring>
 #include <string>
 
-APP_REGISTER_COLOR("Calculator", LV_SYMBOL_PLUS, calculator_app_launch, 0xf08c2e);
+APP_REGISTER_COLOR_RANK("Calculator", LV_SYMBOL_PLUS, calculator_app_launch, 0xf08c2e, 90);
 
 namespace {
 

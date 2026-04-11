@@ -22,7 +22,7 @@
 #include <WiFi.h>
 #endif
 
-APP_REGISTER_COLOR("Settings", LV_SYMBOL_SETTINGS, settings_launch, 0x495057);
+APP_REGISTER_COLOR_RANK("Settings", LV_SYMBOL_SETTINGS, settings_launch, 0x495057, 100);
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
