@@ -347,7 +347,11 @@ static void planes_app_update_map_ui()
                 visible,
                 count);
   lv_label_set_text(app_ctx.map_summary_label, summary);
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
   lv_label_set_text(app_ctx.map_hint_label, "OSM tiles cached in flash and reused until center/range/size changes.");
+#else
+  lv_label_set_text(app_ctx.map_hint_label, "Emulator uses overlay-only mode (OSM tile fetch is ESP32-only).");
+#endif
 }
 
 static void planes_app_update_ui()
