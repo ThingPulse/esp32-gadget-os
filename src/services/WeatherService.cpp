@@ -2,12 +2,16 @@
 
 #include "EventBus.h"
 #include "services/ConfigStoreService.h"
+#include "services/TimeService.h"
 #include "services/WifiService.h"
 
 #include <ArduinoJson.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+
+#include "ui/UiTrace.h"
 
 #if defined(ARDUINO)
 #include <Arduino.h>
@@ -21,6 +25,23 @@
 namespace {
 
 constexpr unsigned long WEATHER_REFRESH_MS = 10UL * 60UL * 1000UL;
+
+std::string url_encode_timezone(const char *tz)
+{
+    if (!tz || !*tz)
+        return "auto";
+
+    std::string out;
+    for (const char *p = tz; *p; ++p) {
+        switch (*p) {
+            case '/': out += "%2F"; break;
+            case '+': out += "%2B"; break;
+            case ' ': out += "%20"; break;
+            default: out.push_back(*p); break;
+        }
+    }
+    return out.empty() ? "auto" : out;
+}
 
 const char *icon_for_code(int weather_code)
 {
@@ -151,6 +172,16 @@ const WeatherForecastDay *WeatherService::forecast_days() const
     return _forecast;
 }
 
+int WeatherService::hourly_forecast_count() const
+{
+    return _hourly_forecast_count;
+}
+
+const WeatherForecastHour *WeatherService::forecast_hours() const
+{
+    return _hourly_forecast;
+}
+
 bool WeatherService::refresh_now()
 {
     if (!_configured || !is_wifi_connected())
@@ -227,8 +258,11 @@ bool WeatherService::fetch_and_update()
     }
 
     _forecast_count = 0;
+    _hourly_forecast_count = 0;
     for (int i = 0; i < FORECAST_DAYS; ++i)
         _forecast[i] = WeatherForecastDay{};
+    for (int i = 0; i < FORECAST_HOURS; ++i)
+        _hourly_forecast[i] = WeatherForecastHour{};
 
     JsonVariant daily = doc["daily"];
     if (!daily.isNull()) {
@@ -248,6 +282,36 @@ bool WeatherService::fetch_and_update()
         _forecast_count = available;
     }
 
+    JsonVariant hourly = doc["hourly"];
+    JsonArray hourly_time = hourly["time"].as<JsonArray>();
+    JsonArray hourly_code = hourly["weather_code"].as<JsonArray>();
+    JsonArray hourly_temp = hourly["temperature_2m"].as<JsonArray>();
+    const char *current_time_iso = doc["current"]["time"].as<const char *>();
+    if (current_time_iso && !hourly_time.isNull() && !hourly_code.isNull() && !hourly_temp.isNull()) {
+        int start_index = 0;
+        size_t hourly_count = hourly_time.size();
+        for (; start_index < (int)hourly_count; ++start_index) {
+            const char *time_iso = hourly_time[start_index].as<const char *>();
+            if (time_iso && std::strcmp(time_iso, current_time_iso) >= 0)
+                break;
+        }
+
+        int available = (int)std::min({(int)hourly_count - start_index,
+                                       (int)hourly_code.size() - start_index,
+                                       (int)hourly_temp.size() - start_index,
+                                       FORECAST_HOURS});
+        if (available > 0) {
+            for (int i = 0; i < available; ++i) {
+                const int source_index = start_index + i;
+                _hourly_forecast[i].valid = true;
+                _hourly_forecast[i].time = hourly_time[source_index].as<std::string>();
+                _hourly_forecast[i].weather_code = hourly_code[source_index].as<int>();
+                _hourly_forecast[i].temperature = hourly_temp[source_index].as<float>();
+            }
+            _hourly_forecast_count = available;
+        }
+    }
+
     _has_weather = true;
     EventBus::instance().publish(SystemEvent{EventType::WeatherUpdated});
     return true;
@@ -255,19 +319,26 @@ bool WeatherService::fetch_and_update()
 
 bool WeatherService::fetch_payload(std::string &out_payload) const
 {
-    char url[640] = {0};
+    char url[768] = {0};
     const char *temp_unit = _metric ? "celsius" : "fahrenheit";
     const char *wind_unit = _metric ? "kmh" : "mph";
     const char *precip_unit = _metric ? "mm" : "inch";
+    const int tz_index = TimeService::instance().timezone_index();
+    const char *tz_name = TimeService::timezone_name(tz_index);
+    const std::string tz_query = url_encode_timezone(tz_name);
     std::snprintf(url,
                   sizeof(url),
-                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=3&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s",
+                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=%d&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s&timezone=%s",
                   _latitude,
                   _longitude,
+                  FORECAST_DAYS,
+                  FORECAST_HOURS,
                   temp_unit,
                   wind_unit,
-                  precip_unit);
+                  precip_unit,
+                  tz_query.c_str());
 
+    UI_TRACE("Weather", "fetch_payload url=%s", url);
 #if defined(ARDUINO)
     WiFiClient client;
     HTTPClient http;
@@ -284,10 +355,9 @@ bool WeatherService::fetch_payload(std::string &out_payload) const
     http.end();
     return !out_payload.empty();
 #else
-    char cmd[420] = {0};
-    std::snprintf(cmd, sizeof(cmd), "curl -s --max-time 8 \"%s\"", url);
+    std::string cmd = std::string("curl -s --max-time 8 \"") + url + "\"";
 
-    FILE *pipe = popen(cmd, "r");
+    FILE *pipe = popen(cmd.c_str(), "r");
     if (!pipe)
         return false;
 
@@ -308,8 +378,11 @@ void WeatherService::clear_weather()
 
     _has_weather = false;
     _forecast_count = 0;
+    _hourly_forecast_count = 0;
     for (int i = 0; i < FORECAST_DAYS; ++i)
         _forecast[i] = WeatherForecastDay{};
+    for (int i = 0; i < FORECAST_HOURS; ++i)
+        _hourly_forecast[i] = WeatherForecastHour{};
     EventBus::instance().publish(SystemEvent{EventType::WeatherCleared});
 }
 

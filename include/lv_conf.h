@@ -18,7 +18,9 @@
 /*====================
    MEMORY SETTINGS
  *====================*/
+#ifndef LV_MEM_SIZE
 #define LV_MEM_SIZE (64 * 1024U)  /* [bytes] */
+#endif
 
 /*====================
    FONT USAGE

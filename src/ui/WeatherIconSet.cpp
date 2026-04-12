@@ -4,6 +4,7 @@ namespace {
 
 void style_base(lv_obj_t *obj)
 {
+    if (!obj) return;
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_border_width(obj, 0, 0);
     lv_obj_set_style_radius(obj, 0, 0);
@@ -14,6 +15,7 @@ void style_base(lv_obj_t *obj)
 lv_obj_t *make_rect(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h, lv_color_t color, lv_opa_t opa = LV_OPA_COVER)
 {
     lv_obj_t *obj = lv_obj_create(parent);
+    if (!obj) return nullptr;
     style_base(obj);
     lv_obj_set_pos(obj, x, y);
     lv_obj_set_size(obj, w, h);
@@ -25,6 +27,7 @@ lv_obj_t *make_rect(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, 
 lv_obj_t *make_circle(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t d, lv_color_t color, lv_opa_t opa = LV_OPA_COVER)
 {
     lv_obj_t *obj = make_rect(parent, x, y, d, d, color, opa);
+    if (!obj) return nullptr;
     lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, 0);
     return obj;
 }
@@ -51,6 +54,10 @@ lv_obj_t *make_line(lv_obj_t *parent,
     points[1] = {x2, y2};
 
     lv_obj_t *line = lv_line_create(parent);
+    if(!line) {
+        lv_free(points);
+        return nullptr;
+    }
     style_base(line);
     lv_obj_set_pos(line, 0, 0);
     lv_obj_set_size(line, size, size);
@@ -156,6 +163,7 @@ WeatherIconKind weather_icon_kind_from_code(int weather_code)
 lv_obj_t *weather_icon_create(lv_obj_t *parent, WeatherIconKind kind, lv_coord_t size)
 {
     lv_obj_t *root = lv_obj_create(parent);
+    if (!root) return nullptr;
     style_base(root);
     weather_icon_update(root, kind, size);
     return root;

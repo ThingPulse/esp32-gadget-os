@@ -10,7 +10,7 @@
 #include <cmath>
 #include <cstdio>
 
-APP_REGISTER_COLOR("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0);
+APP_REGISTER_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
 
 namespace {
 
@@ -215,7 +215,7 @@ void planes_app_launch(void)
   lv_obj_set_style_pad_all(bar, 0, 0);
 
   lv_obj_t *back_btn = lv_button_create(bar);
-  lv_obj_set_size(back_btn, 44, 36);
+  lv_obj_set_size(back_btn, 56, 44);
   lv_obj_align(back_btn, LV_ALIGN_LEFT_MID, 4, 0);
   lv_obj_set_style_bg_opa(back_btn, LV_OPA_TRANSP, 0);
   lv_obj_set_style_shadow_width(back_btn, 0, 0);
