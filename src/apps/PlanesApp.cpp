@@ -72,6 +72,16 @@ struct PlanesAppCtx {
 
 static PlanesAppCtx app_ctx;
 
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(COLOR_KIT_PRO)
+static inline void swap_rgb565_bytes(uint16_t *pixels, size_t pixel_count)
+{
+  for (size_t i = 0; i < pixel_count; ++i) {
+    const uint16_t px = pixels[i];
+    pixels[i] = (uint16_t)((px << 8) | (px >> 8));
+  }
+}
+#endif
+
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
@@ -233,6 +243,9 @@ static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_s
 static void set_map_bg_image(lv_obj_t *img_obj, lv_image_dsc_t &dsc, std::vector<uint16_t> &pixels, lv_coord_t square_size)
 {
   if (!img_obj || !lv_obj_is_valid(img_obj) || pixels.empty()) return;
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(COLOR_KIT_PRO)
+  swap_rgb565_bytes(pixels.data(), pixels.size());
+#endif
   std::memset(&dsc, 0, sizeof(dsc));
   dsc.header.w = (uint32_t)square_size;
   dsc.header.h = (uint32_t)square_size;
@@ -421,6 +434,9 @@ static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_s
 static void set_map_bg_image(lv_obj_t *img_obj, lv_image_dsc_t &dsc, std::vector<uint16_t> &pixels, lv_coord_t square_size)
 {
   if (!img_obj || !lv_obj_is_valid(img_obj) || pixels.empty()) return;
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(COLOR_KIT_PRO)
+  swap_rgb565_bytes(pixels.data(), pixels.size());
+#endif
   std::memset(&dsc, 0, sizeof(dsc));
   dsc.header.w = (uint32_t)square_size;
   dsc.header.h = (uint32_t)square_size;

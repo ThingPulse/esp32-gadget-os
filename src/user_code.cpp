@@ -264,35 +264,15 @@ static void create_home_screen(void)
   }
 }
 
-#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(COLOR_KIT_PRO)
-static inline void swap_rgb565_bytes(uint8_t *px_map, size_t pixel_count)
-{
-  for (size_t i = 0; i < pixel_count; ++i) {
-    uint8_t *px = px_map + i * 2U;
-    const uint8_t hi = px[0];
-    px[0] = px[1];
-    px[1] = hi;
-  }
-}
-#endif
-
 static void lvgl_flush(lv_display_t *d, const lv_area_t *area, uint8_t *px_map)
 {
   int32_t w = lv_area_get_width(area);
   int32_t h = lv_area_get_height(area);
   const size_t px_count = (size_t)w * (size_t)h;
-#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(COLOR_KIT_PRO)
-  // ESP32-S3 Color Kit Pro panel expects swapped RGB565 byte order on the 16-bit bus.
-  swap_rgb565_bytes(px_map, px_count);
-#endif
   lcd.startWrite();
   lcd.setAddrWindow(area->x1, area->y1, w, h);
   lcd.writePixels((lgfx::rgb565_t *)px_map, (int32_t)px_count);
   lcd.endWrite();
-#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(COLOR_KIT_PRO)
-  // Restore LVGL's native byte order for any subsequent in-buffer operations.
-  swap_rgb565_bytes(px_map, px_count);
-#endif
   lv_display_flush_ready(d);
 }
 
