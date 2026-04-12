@@ -64,12 +64,10 @@ struct PlanesAppCtx {
   lv_timer_t *refresh_timer = nullptr;
   bool closing = false;
   bool map_mode = false;
-#if defined(ARDUINO) && defined(ESP_PLATFORM)
   lv_image_dsc_t map_bg_dsc{};
   std::vector<uint16_t> map_bg_pixels{};
   std::string map_cache_sig{};
   bool map_tiles_ready = false;
-#endif
 };
 
 static PlanesAppCtx app_ctx;
@@ -142,8 +140,9 @@ static float km_per_lon_degree(double latitude_deg)
   return (float)(111.320 * std::cos(latitude_deg * D2R));
 }
 
-#if defined(ARDUINO) && defined(ESP_PLATFORM)
 static constexpr const char *PLANES_MAP_CACHE_DIR = "/cache";
+
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
 static constexpr const char *PLANES_MAP_CACHE_META = "/cache/planes_map.meta";
 static constexpr const char *PLANES_MAP_CACHE_RGB565 = "/cache/planes_map.rgb565";
 
