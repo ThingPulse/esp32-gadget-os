@@ -16,6 +16,7 @@ public:
 
     bool read(const char *path, std::string &out) override
     {
+        if (!LittleFS.exists(path)) return false;
         File f = LittleFS.open(path, "r");
         if (!f) return false;
         out.clear();
