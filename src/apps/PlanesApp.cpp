@@ -18,6 +18,9 @@
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
 #include <LovyanGFX.hpp>
 #include <OpenStreetMap-esp32.hpp>
+#else
+#define STB_IMAGE_IMPLEMENTATION
+#include "third_party/stb_image.h"
 #endif
 
 APP_REGISTER_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
@@ -261,6 +264,194 @@ static void planes_app_ensure_map_tiles(const PlanesService &svc, lv_coord_t squ
 }
 #endif
 
+#if !defined(ARDUINO) || !defined(ESP_PLATFORM)
+static constexpr const char *PLANES_MAP_CACHE_NATIVE_META = "/cache/planes_map_native.meta";
+static constexpr const char *PLANES_MAP_CACHE_NATIVE_RGB565 = "/cache/planes_map_native.rgb565";
+
+static uint8_t choose_osm_zoom(double latitude_deg, double range_km, lv_coord_t map_px)
+{
+  const double cos_lat = std::max(0.15, std::cos(latitude_deg * 3.14159265358979323846 / 180.0));
+  const double width_m = std::max(1000.0, range_km * 2000.0 * 1.15);
+  const double px = std::max(64.0, (double)map_px);
+  const double raw_zoom = std::log2((156543.03392 * cos_lat * px) / width_m);
+  const int z = (int)std::lround(raw_zoom);
+  return (uint8_t)LV_CLAMP(1, z, 18);
+}
+
+static std::string map_signature(const PlanesService &svc, lv_coord_t square_size, uint8_t zoom)
+{
+  char sig[128] = {0};
+  std::snprintf(sig,
+                sizeof(sig),
+                "native;lat=%.5f;lon=%.5f;range=%.2f;size=%d;zoom=%u",
+                svc.center_latitude(),
+                svc.center_longitude(),
+                svc.range_km(),
+                (int)square_size,
+                (unsigned)zoom);
+  return std::string(sig);
+}
+
+static bool load_cached_map_rgb565(const std::string &sig, lv_coord_t square_size, std::vector<uint16_t> &pixels_out)
+{
+  IFileSystem &fs = FileSystemService::instance().fs();
+  std::string meta;
+  std::string raw;
+  if (!fs.read(PLANES_MAP_CACHE_NATIVE_META, meta) || meta != sig) return false;
+  if (!fs.read(PLANES_MAP_CACHE_NATIVE_RGB565, raw)) return false;
+  const size_t expected_bytes = (size_t)square_size * (size_t)square_size * sizeof(uint16_t);
+  if (raw.size() != expected_bytes) return false;
+  pixels_out.resize(expected_bytes / sizeof(uint16_t));
+  std::memcpy(pixels_out.data(), raw.data(), expected_bytes);
+  return true;
+}
+
+static void save_cached_map_rgb565(const std::string &sig, const uint16_t *pixels, lv_coord_t square_size)
+{
+  IFileSystem &fs = FileSystemService::instance().fs();
+  (void)fs.mkdir_p(PLANES_MAP_CACHE_DIR);
+  const size_t bytes = (size_t)square_size * (size_t)square_size * sizeof(uint16_t);
+  const std::string raw((const char *)pixels, bytes);
+  (void)fs.write(PLANES_MAP_CACHE_NATIVE_RGB565, raw);
+  (void)fs.write(PLANES_MAP_CACHE_NATIVE_META, sig);
+}
+
+static std::string shell_escape_single(const std::string &s)
+{
+  std::string out;
+  out.reserve(s.size() + 8);
+  out.push_back('\'');
+  for (char c : s) {
+    if (c == '\'') out += "'\\''";
+    else out.push_back(c);
+  }
+  out.push_back('\'');
+  return out;
+}
+
+static bool curl_get_binary(const std::string &url, std::string &out)
+{
+  const std::string cmd = "curl -L --max-time 8 -s " + shell_escape_single(url);
+  FILE *pipe = popen(cmd.c_str(), "r");
+  if (!pipe) return false;
+  out.clear();
+  char buf[4096];
+  while (true) {
+    size_t n = fread(buf, 1, sizeof(buf), pipe);
+    if (n > 0) out.append(buf, n);
+    if (n < sizeof(buf)) break;
+  }
+  const int rc = pclose(pipe);
+  return rc == 0 && !out.empty();
+}
+
+static void lon_lat_to_world_px(double lon, double lat, int z, double &x, double &y)
+{
+  const double n = std::pow(2.0, z) * 256.0;
+  x = (lon + 180.0) / 360.0 * n;
+  const double lat_rad = lat * 3.14159265358979323846 / 180.0;
+  y = (1.0 - std::log(std::tan(lat_rad) + 1.0 / std::cos(lat_rad)) / 3.14159265358979323846) * 0.5 * n;
+}
+
+static uint16_t rgb888_to_565(uint8_t r, uint8_t g, uint8_t b)
+{
+  return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+}
+
+static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_size, std::vector<uint16_t> &pixels_out, std::string &sig_out)
+{
+  const uint8_t zoom = choose_osm_zoom(svc.center_latitude(), svc.range_km(), square_size);
+  sig_out = map_signature(svc, square_size, zoom);
+  if (load_cached_map_rgb565(sig_out, square_size, pixels_out)) return true;
+
+  const int tile_px = 256;
+  const int n = 1 << zoom;
+  pixels_out.assign((size_t)square_size * (size_t)square_size, rgb888_to_565(17, 19, 31));
+
+  double center_x = 0.0;
+  double center_y = 0.0;
+  lon_lat_to_world_px(svc.center_longitude(), svc.center_latitude(), zoom, center_x, center_y);
+  const double start_x = center_x - (double)square_size / 2.0;
+  const double start_y = center_y - (double)square_size / 2.0;
+  const int tx0 = (int)std::floor(start_x / tile_px);
+  const int ty0 = (int)std::floor(start_y / tile_px);
+  const int tx1 = (int)std::floor((start_x + square_size - 1) / tile_px);
+  const int ty1 = (int)std::floor((start_y + square_size - 1) / tile_px);
+
+  bool any_tile = false;
+  for (int ty = ty0; ty <= ty1; ++ty) {
+    if (ty < 0 || ty >= n) continue;
+    for (int tx = tx0; tx <= tx1; ++tx) {
+      int wrapped_tx = tx % n;
+      if (wrapped_tx < 0) wrapped_tx += n;
+      const std::string url = "https://tile.openstreetmap.org/" + std::to_string((int)zoom) + "/" +
+                              std::to_string(wrapped_tx) + "/" + std::to_string(ty) + ".png";
+      std::string png;
+      if (!curl_get_binary(url, png)) continue;
+
+      int w = 0, h = 0, comp = 0;
+      unsigned char *img = stbi_load_from_memory((const stbi_uc *)png.data(), (int)png.size(), &w, &h, &comp, 3);
+      if (!img || w != tile_px || h != tile_px) {
+        if (img) stbi_image_free(img);
+        continue;
+      }
+
+      const int tile_off_x = tx * tile_px - (int)std::floor(start_x);
+      const int tile_off_y = ty * tile_px - (int)std::floor(start_y);
+      for (int py = 0; py < tile_px; ++py) {
+        const int dst_y = tile_off_y + py;
+        if (dst_y < 0 || dst_y >= square_size) continue;
+        for (int px = 0; px < tile_px; ++px) {
+          const int dst_x = tile_off_x + px;
+          if (dst_x < 0 || dst_x >= square_size) continue;
+          const size_t src_i = (size_t)(py * tile_px + px) * 3;
+          pixels_out[(size_t)dst_y * (size_t)square_size + (size_t)dst_x] =
+              rgb888_to_565(img[src_i], img[src_i + 1], img[src_i + 2]);
+        }
+      }
+      stbi_image_free(img);
+      any_tile = true;
+    }
+  }
+
+  if (!any_tile) return false;
+  save_cached_map_rgb565(sig_out, pixels_out.data(), square_size);
+  return true;
+}
+
+static void set_map_bg_image(lv_obj_t *img_obj, lv_image_dsc_t &dsc, std::vector<uint16_t> &pixels, lv_coord_t square_size)
+{
+  if (!img_obj || !lv_obj_is_valid(img_obj) || pixels.empty()) return;
+  std::memset(&dsc, 0, sizeof(dsc));
+  dsc.header.w = (uint32_t)square_size;
+  dsc.header.h = (uint32_t)square_size;
+  dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+  dsc.data_size = pixels.size() * sizeof(uint16_t);
+  dsc.data = (const uint8_t *)pixels.data();
+  lv_image_set_src(img_obj, &dsc);
+}
+
+static void planes_app_ensure_map_tiles(const PlanesService &svc, lv_coord_t square_size)
+{
+  if (!app_ctx.map_bg || !lv_obj_is_valid(app_ctx.map_bg)) return;
+  const uint8_t zoom = choose_osm_zoom(svc.center_latitude(), svc.range_km(), square_size);
+  const std::string sig = map_signature(svc, square_size, zoom);
+  if (app_ctx.map_tiles_ready && sig == app_ctx.map_cache_sig) return;
+
+  std::vector<uint16_t> pixels;
+  std::string loaded_sig;
+  if (fetch_map_tiles_rgb565(svc, square_size, pixels, loaded_sig)) {
+    app_ctx.map_bg_pixels = std::move(pixels);
+    app_ctx.map_cache_sig = loaded_sig;
+    app_ctx.map_tiles_ready = true;
+    set_map_bg_image(app_ctx.map_bg, app_ctx.map_bg_dsc, app_ctx.map_bg_pixels, square_size);
+  } else {
+    app_ctx.map_tiles_ready = false;
+    app_ctx.map_bg_pixels.clear();
+  }
+}
+#endif
+
 static void planes_app_update_map_ui()
 {
   if (!app_ctx.map_square || !lv_obj_is_valid(app_ctx.map_square)) return;
@@ -303,9 +494,7 @@ static void planes_app_update_map_ui()
     return;
   }
 
-#if defined(ARDUINO) && defined(ESP_PLATFORM)
   planes_app_ensure_map_tiles(svc, square_size);
-#endif
 
   const float range_km = (float)LV_MAX(0.1, svc.range_km());
   const float km_lat = 111.32f;
@@ -350,7 +539,7 @@ static void planes_app_update_map_ui()
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
   lv_label_set_text(app_ctx.map_hint_label, "OSM tiles cached in flash and reused until center/range/size changes.");
 #else
-  lv_label_set_text(app_ctx.map_hint_label, "Emulator uses overlay-only mode (OSM tile fetch is ESP32-only).");
+  lv_label_set_text(app_ctx.map_hint_label, "OSM tiles cached locally and reused until center/range/size changes.");
 #endif
 }
 
