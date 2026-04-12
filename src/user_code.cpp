@@ -1,6 +1,38 @@
+#if __has_include(<LovyanGFX.h>)
 #define LGFX_AUTODETECT
 #include <LovyanGFX.h>
 #include <LGFX_AUTODETECT.hpp>
+#else
+#include <cstdint>
+namespace lgfx {
+struct rgb565_t {
+  uint16_t raw;
+};
+struct touch_point_t {
+  int32_t x = 0;
+  int32_t y = 0;
+};
+} // namespace lgfx
+
+class LGFX {
+ public:
+  LGFX(int32_t w = 320, int32_t h = 480, int32_t = 0) : width_(w), height_(h) {}
+  void init() {}
+  void setRotation(int) {}
+  int32_t width() const { return width_; }
+  int32_t height() const { return height_; }
+  void setBrightness(uint8_t) {}
+  bool getTouch(lgfx::touch_point_t *) { return false; }
+  void startWrite() {}
+  void setAddrWindow(int32_t, int32_t, int32_t, int32_t) {}
+  void writePixels(lgfx::rgb565_t *, int32_t) {}
+  void endWrite() {}
+
+ private:
+  int32_t width_ = 320;
+  int32_t height_ = 480;
+};
+#endif
 #include <lvgl.h>
 #include "AppRegistry.h"
 #include "ServiceRegistry.h"
