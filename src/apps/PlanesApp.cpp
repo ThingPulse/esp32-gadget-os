@@ -34,6 +34,8 @@ struct PlanesAppCtx {
   lv_obj_t *callsign_labels[PlanesService::MAX_PLANES]{};
   lv_obj_t *detail_labels[PlanesService::MAX_PLANES]{};
   lv_timer_t *refresh_timer = nullptr;
+  lv_timer_t *startup_timer = nullptr;
+  lv_timer_t *deferred_refresh_timer = nullptr;
   bool closing = false;
 };
 
@@ -49,6 +51,14 @@ static void nav_back_event(lv_event_t *e)
       lv_timer_delete(app_ctx.refresh_timer);
       app_ctx.refresh_timer = nullptr;
       UI_TRACE("Planes", "back deleted refresh timer");
+    }
+    if (app_ctx.startup_timer) {
+      lv_timer_delete(app_ctx.startup_timer);
+      app_ctx.startup_timer = nullptr;
+    }
+    if (app_ctx.deferred_refresh_timer) {
+      lv_timer_delete(app_ctx.deferred_refresh_timer);
+      app_ctx.deferred_refresh_timer = nullptr;
     }
     UiSessionState::set_route("home");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
@@ -157,6 +167,35 @@ static void planes_app_update_ui()
   }
 }
 
+
+static void planes_app_deferred_refresh_cb(lv_timer_t *timer)
+{
+  (void)timer;
+  if (app_ctx.closing) return;
+
+  PlanesService::instance().refresh_now();
+  planes_app_update_ui();
+
+  if (app_ctx.deferred_refresh_timer) {
+    lv_timer_delete(app_ctx.deferred_refresh_timer);
+    app_ctx.deferred_refresh_timer = nullptr;
+  }
+}
+
+static void planes_app_startup_cb(lv_timer_t *timer)
+{
+  (void)timer;
+  if (app_ctx.closing) return;
+
+  PlanesService::instance().resume();
+  planes_app_update_ui();
+
+  if (app_ctx.startup_timer) {
+    lv_timer_delete(app_ctx.startup_timer);
+    app_ctx.startup_timer = nullptr;
+  }
+}
+
 static void planes_app_timer_cb(lv_timer_t *timer)
 {
   (void)timer;
@@ -174,8 +213,10 @@ static void planes_app_refresh_event(lv_event_t *e)
   if (app_ctx.status_label && lv_obj_is_valid(app_ctx.status_label))
     lv_label_set_text(app_ctx.status_label, "Refreshing...");
 
-  PlanesService::instance().refresh_now();
-  planes_app_update_ui();
+  if (!app_ctx.deferred_refresh_timer) {
+    app_ctx.deferred_refresh_timer = lv_timer_create(planes_app_deferred_refresh_cb, 10, nullptr);
+    lv_timer_set_repeat_count(app_ctx.deferred_refresh_timer, 1);
+  }
 }
 
 static void planes_app_screen_delete_event(lv_event_t *e)
@@ -186,6 +227,14 @@ static void planes_app_screen_delete_event(lv_event_t *e)
   if (app_ctx.refresh_timer) {
     lv_timer_delete(app_ctx.refresh_timer);
     app_ctx.refresh_timer = nullptr;
+  }
+  if (app_ctx.startup_timer) {
+    lv_timer_delete(app_ctx.startup_timer);
+    app_ctx.startup_timer = nullptr;
+  }
+  if (app_ctx.deferred_refresh_timer) {
+    lv_timer_delete(app_ctx.deferred_refresh_timer);
+    app_ctx.deferred_refresh_timer = nullptr;
   }
   app_ctx = PlanesAppCtx{};
 }
@@ -303,9 +352,11 @@ void planes_app_launch(void)
   app_ctx.count_label = count_label;
   app_ctx.refresh_timer = lv_timer_create(planes_app_timer_cb, 3000, nullptr);
 
-  PlanesService::instance().resume();
   planes_app_update_ui();
   ui_load_screen(scr, false);
+
+  app_ctx.startup_timer = lv_timer_create(planes_app_startup_cb, 50, nullptr);
+  lv_timer_set_repeat_count(app_ctx.startup_timer, 1);
   UI_TRACE("Planes", "launch loaded screen");
   
   // Set route after screen is loaded
