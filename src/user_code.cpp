@@ -85,9 +85,11 @@ void apply_display_preferences(void)
   ConfigStoreService &cfg = ConfigStoreService::instance();
   int rotation = 0;
   int brightness_percent = 100;
+  bool show_fps = false;
   if (cfg.load("display")) {
     rotation = cfg.get_int("rotation", 0);
     brightness_percent = cfg.get_int("brightness_percent", 100);
+    show_fps = cfg.get_bool("show_fps", false);
   }
 
   if (rotation < 0 || rotation > 3) rotation = 0;
@@ -98,6 +100,12 @@ void apply_display_preferences(void)
 
   if (disp) {
     lv_display_set_resolution(disp, lcd.width(), lcd.height());
+#if LV_USE_PERF_MONITOR
+    if (show_fps)
+      lv_sysmon_show_performance(disp);
+    else
+      lv_sysmon_hide_performance(disp);
+#endif
     lv_obj_invalidate(lv_screen_active());
     lv_refr_now(disp);
   }
@@ -317,6 +325,10 @@ void setup(void)
 
   lv_display_set_buffers(disp, draw_buf, nullptr, draw_buf_size,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
+
+  // The performance monitor is created by LVGL with the display. Apply the
+  // persisted visibility preference now that the display and buffer exist.
+  apply_display_preferences();
 
 #if defined(LV_TICK_CUSTOM) && LV_TICK_CUSTOM
   lv_tick_set_cb(get_tick_ms);

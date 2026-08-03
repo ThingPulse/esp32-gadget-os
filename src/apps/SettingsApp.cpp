@@ -142,6 +142,7 @@ struct DisplayCtx {
   lv_obj_t *brightness_slider;
   lv_obj_t *brightness_value_label;
   lv_obj_t *rotation_dropdown;
+  lv_obj_t *fps_switch;
 };
 static DisplayCtx display_ctx;
 
@@ -1051,6 +1052,7 @@ static void display_save_event(lv_event_t *e)
   if (!display_ctx.settings_scr || !lv_obj_is_valid(display_ctx.settings_scr)) return;
   if (!display_ctx.brightness_slider || !lv_obj_is_valid(display_ctx.brightness_slider)) return;
   if (!display_ctx.rotation_dropdown || !lv_obj_is_valid(display_ctx.rotation_dropdown)) return;
+  if (!display_ctx.fps_switch || !lv_obj_is_valid(display_ctx.fps_switch)) return;
 
   int brightness_percent = (int)lv_slider_get_value(display_ctx.brightness_slider);
   uint16_t selected_rotation = (uint16_t)lv_dropdown_get_selected(display_ctx.rotation_dropdown);
@@ -1059,6 +1061,7 @@ static void display_save_event(lv_event_t *e)
   if (cfg.load("display")) {
     cfg.set("brightness_percent", brightness_percent);
     cfg.set("rotation", (int)selected_rotation);
+    cfg.set("show_fps", lv_obj_has_state(display_ctx.fps_switch, LV_STATE_CHECKED));
     cfg.save("display");
   }
 
@@ -1125,12 +1128,31 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_set_width(rotation_dropdown, lv_pct(100));
   lv_dropdown_set_options(rotation_dropdown, "0\xb0 (Portrait)\n90\xb0 (Landscape)\n180\xb0 (Portrait Inverted)\n270\xb0 (Landscape Inverted)");
 
+  lv_obj_t *fps_row = lv_obj_create(content);
+  lv_obj_set_size(fps_row, lv_pct(100), 56);
+  lv_obj_clear_flag(fps_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(fps_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(fps_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(fps_row, 0, 0);
+  lv_obj_set_style_radius(fps_row, 10, 0);
+  lv_obj_set_style_pad_hor(fps_row, 14, 0);
+
+  lv_obj_t *fps_label = lv_label_create(fps_row);
+  lv_label_set_text(fps_label, "Show FPS monitor");
+  lv_obj_set_style_text_color(fps_label, lv_color_white(), 0);
+  lv_obj_align(fps_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *fps_switch = lv_switch_create(fps_row);
+  lv_obj_align(fps_switch, LV_ALIGN_RIGHT_MID, 0, 0);
+
   ConfigStoreService &cfg = ConfigStoreService::instance();
   int brightness_percent = 100;
   int rotation = 0;
+  bool show_fps = false;
   if (cfg.load("display")) {
     brightness_percent = cfg.get_int("brightness_percent", 100);
     rotation = cfg.get_int("rotation", 0);
+    show_fps = cfg.get_bool("show_fps", false);
   }
   if (brightness_percent < 5) brightness_percent = 5;
   if (brightness_percent > 100) brightness_percent = 100;
@@ -1141,6 +1163,8 @@ static void open_display_screen(lv_event_t *e)
   std::snprintf(brightness_text, sizeof(brightness_text), "%d%%", brightness_percent);
   lv_label_set_text(brightness_value_label, brightness_text);
   lv_dropdown_set_selected(rotation_dropdown, (uint16_t)rotation);
+  if (show_fps)
+    lv_obj_add_state(fps_switch, LV_STATE_CHECKED);
 
   lv_obj_t *save_btn = lv_button_create(content);
   lv_obj_set_width(save_btn, lv_pct(100));
@@ -1155,6 +1179,7 @@ static void open_display_screen(lv_event_t *e)
   display_ctx.brightness_slider = brightness_slider;
   display_ctx.brightness_value_label = brightness_value_label;
   display_ctx.rotation_dropdown = rotation_dropdown;
+  display_ctx.fps_switch = fps_switch;
 
   ui_load_screen(scr, false);
   UI_TRACE("Settings", "open_display_screen loaded");
