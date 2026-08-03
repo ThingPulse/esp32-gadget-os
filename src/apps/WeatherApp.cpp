@@ -58,18 +58,6 @@ static const char *weather_text_for_code(int weather_code)
   return "Unknown";
 }
 
-static const char *weather_token_for_code(int weather_code)
-{
-  if (weather_code == 0) return "SUN";
-  if (weather_code <= 3) return "CLD";
-  if (weather_code >= 45 && weather_code <= 48) return "FOG";
-  if (weather_code >= 51 && weather_code <= 67) return "RAN";
-  if (weather_code >= 71 && weather_code <= 77) return "SNW";
-  if (weather_code >= 80 && weather_code <= 82) return "RAN";
-  if (weather_code >= 95) return "STM";
-  return "CLD";
-}
-
 static const char *wind_direction_short(float degrees)
 {
   static const char *dirs[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
@@ -263,7 +251,7 @@ static void weather_app_update_ui()
     lv_label_set_text(app_ctx.forecast_day_labels[i], date_text.c_str());
     if (app_ctx.forecast_icons[i] && lv_obj_is_valid(app_ctx.forecast_icons[i])) {
       if (app_ctx.compact_list_icons)
-        lv_label_set_text(app_ctx.forecast_icons[i], weather_token_for_code(forecast[i].weather_code));
+        weather_icon_update_lightweight(app_ctx.forecast_icons[i], weather_icon_kind_from_code(forecast[i].weather_code), 40);
       else
         weather_icon_update(app_ctx.forecast_icons[i], weather_icon_kind_from_code(forecast[i].weather_code), 40);
     }
@@ -294,7 +282,7 @@ static void weather_app_update_ui()
     lv_label_set_text(app_ctx.hourly_time_labels[i], hour_text.c_str());
     if (app_ctx.hourly_icons[i] && lv_obj_is_valid(app_ctx.hourly_icons[i])) {
       if (app_ctx.compact_list_icons)
-        lv_label_set_text(app_ctx.hourly_icons[i], weather_token_for_code(hourly_forecast[i].weather_code));
+        weather_icon_update_lightweight(app_ctx.hourly_icons[i], weather_icon_kind_from_code(hourly_forecast[i].weather_code), 30);
       else
         weather_icon_update(app_ctx.hourly_icons[i], weather_icon_kind_from_code(hourly_forecast[i].weather_code), 30);
     }
@@ -520,12 +508,7 @@ void weather_app_launch(void)
 
     lv_obj_t *icon = nullptr;
     if (app_ctx.compact_list_icons) {
-      icon = lv_label_create(col);
-      if (icon) {
-        lv_obj_set_style_text_color(icon, lv_color_hex(0xd7dde6), 0);
-        lv_obj_set_style_text_font(icon, &lv_font_montserrat_14, 0);
-        lv_label_set_text(icon, "CLD");
-      }
+      icon = weather_icon_create_lightweight(col, WeatherIconKind::Cloudy, 30);
     } else {
       icon = weather_icon_create(col, WeatherIconKind::Cloudy, 30);
     }
@@ -587,12 +570,7 @@ void weather_app_launch(void)
 
     lv_obj_t *icon = nullptr;
     if (app_ctx.compact_list_icons) {
-      icon = lv_label_create(col);
-      if (icon) {
-        lv_obj_set_style_text_color(icon, lv_color_hex(0xd7dde6), 0);
-        lv_obj_set_style_text_font(icon, &lv_font_montserrat_14, 0);
-        lv_label_set_text(icon, "CLD");
-      }
+      icon = weather_icon_create_lightweight(col, WeatherIconKind::Cloudy, 40);
     } else {
       icon = weather_icon_create(col, WeatherIconKind::Cloudy, 40);
     }

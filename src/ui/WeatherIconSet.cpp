@@ -205,3 +205,102 @@ void weather_icon_update(lv_obj_t *icon_root, WeatherIconKind kind, lv_coord_t s
             break;
     }
 }
+
+namespace {
+
+void light_rect(lv_layer_t *layer, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h,
+                lv_color_t color, bool round = false)
+{
+    lv_draw_rect_dsc_t dsc;
+    lv_draw_rect_dsc_init(&dsc);
+    dsc.bg_color = color;
+    dsc.bg_opa = LV_OPA_COVER;
+    dsc.radius = round ? LV_RADIUS_CIRCLE : 0;
+    lv_area_t area = {x, y, static_cast<lv_coord_t>(x + w - 1), static_cast<lv_coord_t>(y + h - 1)};
+    lv_draw_rect(layer, &dsc, &area);
+}
+
+void light_line(lv_layer_t *layer, lv_coord_t x1, lv_coord_t y1, lv_coord_t x2, lv_coord_t y2,
+                lv_coord_t width, lv_color_t color)
+{
+    lv_draw_line_dsc_t dsc;
+    lv_draw_line_dsc_init(&dsc);
+    dsc.p1 = {x1, y1};
+    dsc.p2 = {x2, y2};
+    dsc.width = width;
+    dsc.color = color;
+    dsc.opa = LV_OPA_COVER;
+    dsc.round_start = 1;
+    dsc.round_end = 1;
+    lv_draw_line(layer, &dsc);
+}
+
+void lightweight_icon_draw(lv_event_t *e)
+{
+    lv_obj_t *obj = lv_event_get_target_obj(e);
+    lv_layer_t *layer = lv_event_get_layer(e);
+    const WeatherIconKind kind = static_cast<WeatherIconKind>(
+        reinterpret_cast<intptr_t>(lv_obj_get_user_data(obj)) - 1);
+    lv_area_t a;
+    lv_obj_get_coords(obj, &a);
+    const lv_coord_t s = lv_obj_get_width(obj);
+    const lv_coord_t x = a.x1;
+    const lv_coord_t y = a.y1;
+    const lv_coord_t stroke = LV_MAX(2, s / 12);
+
+    if (kind == WeatherIconKind::Clear) {
+        const lv_coord_t c = s / 2;
+        const lv_coord_t r = s / 6;
+        const lv_coord_t ray = s * 2 / 5;
+        const lv_color_t sun = lv_color_hex(0xf4c542);
+        light_rect(layer, x + c - r, y + c - r, r * 2, r * 2, sun, true);
+        static const int8_t dx[] = {0, 7, 10, 7, 0, -7, -10, -7};
+        static const int8_t dy[] = {-10, -7, 0, 7, 10, 7, 0, -7};
+        for (int i = 0; i < 8; ++i)
+            light_line(layer, x + c + dx[i] * (r + 2) / 10, y + c + dy[i] * (r + 2) / 10,
+                       x + c + dx[i] * ray / 10, y + c + dy[i] * ray / 10, stroke, sun);
+        return;
+    }
+
+    const lv_color_t cloud = lv_color_hex(0xd7dde6);
+    light_rect(layer, x + s * 2 / 16, y + s * 7 / 16, s * 12 / 16, s * 5 / 16, cloud, true);
+    light_rect(layer, x + s * 4 / 16, y + s * 4 / 16, s * 6 / 16, s * 7 / 16, cloud, true);
+
+    if (kind == WeatherIconKind::Rain) {
+        const lv_color_t rain = lv_color_hex(0x55b8ff);
+        for (int i = 0; i < 3; ++i)
+            light_line(layer, x + s * (5 + i * 3) / 16, y + s * 12 / 16,
+                       x + s * (4 + i * 3) / 16, y + s * 15 / 16, stroke, rain);
+    } else if (kind == WeatherIconKind::Snow) {
+        for (int i = 0; i < 3; ++i)
+            light_rect(layer, x + s * (4 + i * 4) / 16, y + s * 13 / 16,
+                       stroke, stroke, lv_color_hex(0xcfe8ff), true);
+    } else if (kind == WeatherIconKind::Storm) {
+        light_line(layer, x + s * 9 / 16, y + s * 11 / 16, x + s * 6 / 16,
+                   y + s * 15 / 16, stroke + 1, lv_color_hex(0xffcf33));
+    } else if (kind == WeatherIconKind::Fog) {
+        const lv_color_t fog = lv_color_hex(0xaab3bf);
+        light_line(layer, x + s * 2 / 16, y + s * 13 / 16, x + s * 13 / 16, y + s * 13 / 16, stroke, fog);
+        light_line(layer, x + s * 3 / 16, y + s * 15 / 16, x + s * 12 / 16, y + s * 15 / 16, stroke, fog);
+    }
+}
+
+}  // namespace
+
+lv_obj_t *weather_icon_create_lightweight(lv_obj_t *parent, WeatherIconKind kind, lv_coord_t size)
+{
+    lv_obj_t *icon = lv_obj_create(parent);
+    if (!icon) return nullptr;
+    style_base(icon);
+    lv_obj_add_event_cb(icon, lightweight_icon_draw, LV_EVENT_DRAW_MAIN, nullptr);
+    weather_icon_update_lightweight(icon, kind, size);
+    return icon;
+}
+
+void weather_icon_update_lightweight(lv_obj_t *icon_root, WeatherIconKind kind, lv_coord_t size)
+{
+    if (!icon_root || !lv_obj_is_valid(icon_root)) return;
+    lv_obj_set_user_data(icon_root, reinterpret_cast<void *>(static_cast<intptr_t>(kind) + 1));
+    lv_obj_set_size(icon_root, size, size);
+    lv_obj_invalidate(icon_root);
+}
