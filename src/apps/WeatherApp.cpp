@@ -344,7 +344,14 @@ void weather_app_launch(void)
 {
   UI_TRACE("Weather", "launch begin");
   app_ctx.closing = false;
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+  // The original ESP32 has substantially less internal RAM available to LVGL.
+  // Use labels in the forecast lists instead of constructing ~100 additional
+  // LVGL objects for the vector icons. Keep the detailed current-weather icon.
+  app_ctx.compact_list_icons = true;
+#else
   app_ctx.compact_list_icons = false;
+#endif
   UI_TRACE("Weather", "compact_list_icons=%d days=%d hours=%d",
            app_ctx.compact_list_icons ? 1 : 0,
            WeatherService::FORECAST_DAYS,

@@ -227,15 +227,20 @@ bool WeatherService::fetch_and_update()
 
     std::string payload;
     if (!fetch_payload(payload)) {
+        UI_TRACE("Weather", "fetch failed");
         clear_weather();
         return false;
     }
 
+    UI_TRACE("Weather", "fetch complete bytes=%u", (unsigned)payload.size());
     JsonDocument doc;
-    if (deserializeJson(doc, payload.c_str(), payload.size()) != DeserializationError::Ok) {
+    DeserializationError json_error = deserializeJson(doc, payload.c_str(), payload.size());
+    if (json_error != DeserializationError::Ok) {
+        UI_TRACE("Weather", "parse failed error=%s", json_error.c_str());
         clear_weather();
         return false;
     }
+    UI_TRACE("Weather", "parse complete");
 
     JsonVariant current = doc["current"];
     if (!current.isNull()) {
@@ -313,7 +318,15 @@ bool WeatherService::fetch_and_update()
     }
 
     _has_weather = true;
+
+    // Do not retain the response and ArduinoJson tree while subscribers rebuild
+    // LVGL widgets. This peak matters on the original ESP32/Color Kit Grande.
+    doc.clear();
+    payload.clear();
+    payload.shrink_to_fit();
+    UI_TRACE("Weather", "update complete days=%d hours=%d", _forecast_count, _hourly_forecast_count);
     EventBus::instance().publish(SystemEvent{EventType::WeatherUpdated});
+    UI_TRACE("Weather", "update published");
     return true;
 }
 
