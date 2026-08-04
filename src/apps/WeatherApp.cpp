@@ -39,7 +39,10 @@ struct WeatherAppCtx {
   lv_obj_t *wind_card_dir_label = nullptr;
   lv_obj_t *wind_rose_marker = nullptr;
   lv_obj_t *refresh_btn = nullptr;
+  lv_obj_t *loading_line = nullptr;
   lv_timer_t *refresh_timer = nullptr;
+  unsigned long weather_revision = 0;
+  bool was_fetching = false;
   bool compact_list_icons = false;
   bool closing = false;
 };
@@ -297,7 +300,27 @@ static void weather_app_timer_cb(lv_timer_t *timer)
 {
   (void)timer;
   if (app_ctx.closing) return;
-  weather_app_update_ui();
+  const bool fetching = WeatherService::instance().is_fetching();
+  const unsigned long revision = WeatherService::instance().data_revision();
+  if (fetching != app_ctx.was_fetching) {
+    if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
+      if (fetching)
+        lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+      else
+        lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    // Refresh the data widgets once when the background request completes.
+    if (!fetching) {
+      weather_app_update_ui();
+      app_ctx.weather_revision = revision;
+    }
+  }
+  if (!fetching && revision != app_ctx.weather_revision) {
+    weather_app_update_ui();
+    app_ctx.weather_revision = revision;
+  }
+  app_ctx.was_fetching = fetching;
 }
 
 static void weather_app_refresh_event(lv_event_t *e)
@@ -310,8 +333,22 @@ static void weather_app_refresh_event(lv_event_t *e)
   if (app_ctx.condition_label && lv_obj_is_valid(app_ctx.condition_label))
     lv_label_set_text(app_ctx.condition_label, "Refreshing...");
 
-  WeatherService::instance().refresh_now();
-  weather_app_update_ui();
+  WeatherService &weather = WeatherService::instance();
+  weather.refresh_now();
+  app_ctx.was_fetching = weather.is_fetching();
+  if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
+    if (app_ctx.was_fetching)
+      lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+    else
+      lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Native requests complete synchronously, so there is no fetching state for
+  // the timer to observe. Restore either the new or retained weather now.
+  if (!app_ctx.was_fetching) {
+    weather_app_update_ui();
+    app_ctx.weather_revision = weather.data_revision();
+  }
 }
 
 static void weather_app_screen_delete_event(lv_event_t *e)
@@ -391,6 +428,30 @@ void weather_app_launch(void)
 
   create_time_status_label(bar, 56);
   create_wifi_status_icon(bar, -6);
+
+  // Indeterminate loading indicator. Keeping this on the screen root avoids
+  // affecting the header layout while it moves beneath the bar.
+  lv_obj_t *loading_line = lv_obj_create(scr);
+  lv_obj_set_size(loading_line, 76, 3);
+  lv_obj_set_pos(loading_line, -76, 41);
+  lv_obj_clear_flag(loading_line, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(loading_line, lv_color_hex(0x64c8ff), 0);
+  lv_obj_set_style_bg_opa(loading_line, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(loading_line, 0, 0);
+  lv_obj_set_style_radius(loading_line, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_all(loading_line, 0, 0);
+  lv_obj_add_flag(loading_line, LV_OBJ_FLAG_HIDDEN);
+
+  lv_anim_t loading_anim;
+  lv_anim_init(&loading_anim);
+  lv_anim_set_var(&loading_anim, loading_line);
+  lv_anim_set_exec_cb(&loading_anim, [](void *obj, int32_t x) {
+    lv_obj_set_x(static_cast<lv_obj_t *>(obj), x);
+  });
+  lv_anim_set_values(&loading_anim, -76, 320);
+  lv_anim_set_duration(&loading_anim, 900);
+  lv_anim_set_repeat_count(&loading_anim, LV_ANIM_REPEAT_INFINITE);
+  lv_anim_start(&loading_anim);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, 44);
@@ -672,9 +733,12 @@ void weather_app_launch(void)
   app_ctx.wind_card_dir_label = wind_card_dir_label;
   app_ctx.wind_rose_marker = wind_rose_marker;
   app_ctx.refresh_btn = refresh_btn;
-  app_ctx.refresh_timer = lv_timer_create(weather_app_timer_cb, 5000, nullptr);
+  app_ctx.loading_line = loading_line;
+  app_ctx.refresh_timer = lv_timer_create(weather_app_timer_cb, 100, nullptr);
 
   WeatherService::instance().resume();
+  app_ctx.was_fetching = WeatherService::instance().is_fetching();
+  app_ctx.weather_revision = WeatherService::instance().data_revision();
   weather_app_update_ui();
   ui_load_screen(scr, false);
   UI_TRACE("Weather", "launch loaded screen");

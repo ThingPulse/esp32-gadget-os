@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "ui/UiTrace.h"
 
@@ -18,6 +19,9 @@
 #include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <WiFi.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 #else
 #include <chrono>
 #endif
@@ -25,6 +29,15 @@
 namespace {
 
 constexpr unsigned long WEATHER_REFRESH_MS = 10UL * 60UL * 1000UL;
+
+#if defined(ARDUINO)
+struct WeatherFetchResult {
+    bool ok = false;
+    std::string payload;
+};
+
+QueueHandle_t weather_result_queue = nullptr;
+#endif
 
 std::string url_encode_timezone(const char *tz)
 {
@@ -65,6 +78,10 @@ WeatherService &WeatherService::instance()
 
 bool WeatherService::begin()
 {
+#if defined(ARDUINO)
+    if (!weather_result_queue)
+        weather_result_queue = xQueueCreate(1, sizeof(WeatherFetchResult *));
+#endif
     if (_wifi_connected_sub == 0)
         _wifi_connected_sub = EventBus::instance().subscribe(EventType::WifiConnected, on_wifi_connected, this);
     if (_wifi_disconnected_sub == 0)
@@ -78,6 +95,9 @@ bool WeatherService::begin()
 
 void WeatherService::loop()
 {
+#if defined(ARDUINO)
+    process_async_result();
+#endif
     if (!_enabled || !_configured || !is_wifi_connected())
         return;
 
@@ -211,9 +231,8 @@ void WeatherService::on_wifi_connected(const SystemEvent &event, void *user_data
 void WeatherService::on_wifi_disconnected(const SystemEvent &event, void *user_data)
 {
     (void)event;
-    WeatherService *self = static_cast<WeatherService *>(user_data);
-    if (self)
-        self->clear_weather();
+    (void)user_data;
+    // Keep the last successful reading visible while the network is unavailable.
 }
 
 bool WeatherService::is_wifi_connected() const
@@ -225,19 +244,27 @@ bool WeatherService::fetch_and_update()
 {
     _last_fetch_ms = now_ms();
 
+#if defined(ARDUINO)
+    return start_async_fetch();
+#else
+
     std::string payload;
     if (!fetch_payload(payload)) {
         UI_TRACE("Weather", "fetch failed");
-        clear_weather();
         return false;
     }
 
+    return apply_payload(payload);
+#endif
+}
+
+bool WeatherService::apply_payload(std::string &payload)
+{
     UI_TRACE("Weather", "fetch complete bytes=%u", (unsigned)payload.size());
     JsonDocument doc;
     DeserializationError json_error = deserializeJson(doc, payload.c_str(), payload.size());
     if (json_error != DeserializationError::Ok) {
         UI_TRACE("Weather", "parse failed error=%s", json_error.c_str());
-        clear_weather();
         return false;
     }
     UI_TRACE("Weather", "parse complete");
@@ -318,6 +345,7 @@ bool WeatherService::fetch_and_update()
     }
 
     _has_weather = true;
+    ++_data_revision;
 
     // Do not retain the response and ArduinoJson tree while subscribers rebuild
     // LVGL widgets. This peak matters on the original ESP32/Color Kit Grande.
@@ -329,6 +357,72 @@ bool WeatherService::fetch_and_update()
     UI_TRACE("Weather", "update published");
     return true;
 }
+
+#if defined(ARDUINO)
+bool WeatherService::start_async_fetch()
+{
+    if (_fetch_in_progress)
+        return true;
+    if (!weather_result_queue)
+        return false;
+
+    _fetch_in_progress = true;
+    BaseType_t created = xTaskCreate(
+        fetch_task_entry,
+        "weather_http",
+        8192,
+        this,
+        1,
+        nullptr);
+    if (created != pdPASS) {
+        _fetch_in_progress = false;
+        UI_TRACE("Weather", "failed to create HTTP task");
+        return false;
+    }
+
+    UI_TRACE("Weather", "HTTP task started");
+    return true;
+}
+
+void WeatherService::fetch_task_entry(void *user_data)
+{
+    WeatherService *self = static_cast<WeatherService *>(user_data);
+    WeatherFetchResult *result = new (std::nothrow) WeatherFetchResult{};
+    if (!self || !result) {
+        if (self) self->_fetch_in_progress = false;
+        delete result;
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    result->ok = self->fetch_payload(result->payload);
+    if (xQueueSend(weather_result_queue, &result, 0) != pdTRUE) {
+        delete result;
+        self->_fetch_in_progress = false;
+    }
+    vTaskDelete(nullptr);
+}
+
+void WeatherService::process_async_result()
+{
+    if (!weather_result_queue)
+        return;
+
+    WeatherFetchResult *result = nullptr;
+    if (xQueueReceive(weather_result_queue, &result, 0) != pdTRUE)
+        return;
+
+    _fetch_in_progress = false;
+    if (!result)
+        return;
+
+    if (result->ok)
+        apply_payload(result->payload);
+    else
+        UI_TRACE("Weather", "fetch failed");
+    delete result;
+}
+#endif
 
 bool WeatherService::fetch_payload(std::string &out_payload) const
 {

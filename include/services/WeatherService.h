@@ -32,8 +32,10 @@ public:
 
     bool reload_from_config();
     bool has_weather() const;
+    bool is_fetching() const { return _fetch_in_progress; }
+    unsigned long data_revision() const { return _data_revision; }
     void pause() { _enabled = false; }
-    void resume() { _enabled = true; _last_fetch_ms = 0; }
+    void resume() { _enabled = true; }
     std::string header_text() const;
     float temperature_value() const;
     int weather_code() const;
@@ -55,7 +57,13 @@ private:
 
     bool is_wifi_connected() const;
     bool fetch_and_update();
+    bool apply_payload(std::string &payload);
     bool fetch_payload(std::string &out_payload) const;
+#if defined(ARDUINO)
+    static void fetch_task_entry(void *user_data);
+    bool start_async_fetch();
+    void process_async_result();
+#endif
     void clear_weather();
     unsigned long now_ms() const;
 
@@ -77,6 +85,8 @@ private:
     int _forecast_count = 0;
     int _hourly_forecast_count = 0;
     unsigned long _last_fetch_ms = 0;
+    unsigned long _data_revision = 0;
+    volatile bool _fetch_in_progress = false;
 
     SubscriptionId _wifi_connected_sub = 0;
     SubscriptionId _wifi_disconnected_sub = 0;
