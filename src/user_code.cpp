@@ -50,6 +50,7 @@ class LGFX {
 #include "ui/DisplayPreferences.h"
 
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
@@ -80,6 +81,73 @@ static size_t draw_buf_size = 0;
 static lv_obj_t *home_screen = nullptr;
 static bool restore_route_pending = true;
 
+struct FlushPerfStats {
+  uint32_t frame_start_ms = 0;
+  uint32_t frame_flushes = 0;
+  uint32_t frame_pixels = 0;
+  uint32_t frame_io_ms = 0;
+
+  uint32_t sample_frames = 0;
+  uint32_t total_frame_ms = 0;
+  uint32_t total_flushes = 0;
+  uint32_t total_pixels = 0;
+  uint32_t total_io_ms = 0;
+  uint32_t min_frame_ms = UINT32_MAX;
+  uint32_t max_frame_ms = 0;
+};
+
+static bool flush_perf_enabled = false;
+static FlushPerfStats flush_perf;
+
+static uint32_t flush_perf_now_ms()
+{
+#if defined(ARDUINO)
+  return (uint32_t)millis();
+#elif defined(ESP_PLATFORM)
+  return (uint32_t)(esp_timer_get_time() / 1000ULL);
+#else
+  return SDL_GetTicks();
+#endif
+}
+
+static void flush_perf_reset()
+{
+  flush_perf = FlushPerfStats{};
+}
+
+static void flush_perf_finish_frame(uint32_t finished_ms)
+{
+  if (!flush_perf_enabled || flush_perf.frame_flushes == 0) return;
+
+  const uint32_t frame_ms = finished_ms - flush_perf.frame_start_ms;
+  flush_perf.sample_frames++;
+  flush_perf.total_frame_ms += frame_ms;
+  flush_perf.total_flushes += flush_perf.frame_flushes;
+  flush_perf.total_pixels += flush_perf.frame_pixels;
+  flush_perf.total_io_ms += flush_perf.frame_io_ms;
+  if (frame_ms < flush_perf.min_frame_ms) flush_perf.min_frame_ms = frame_ms;
+  if (frame_ms > flush_perf.max_frame_ms) flush_perf.max_frame_ms = frame_ms;
+
+  flush_perf.frame_start_ms = 0;
+  flush_perf.frame_flushes = 0;
+  flush_perf.frame_pixels = 0;
+  flush_perf.frame_io_ms = 0;
+
+  constexpr uint32_t report_frames = 20;
+  if (flush_perf.sample_frames >= report_frames) {
+    UI_TRACE("Perf",
+             "frames=%u frame_ms avg=%u min=%u max=%u flushes_avg=%u pixels_avg=%u io_ms_avg=%u",
+             (unsigned)flush_perf.sample_frames,
+             (unsigned)(flush_perf.total_frame_ms / flush_perf.sample_frames),
+             (unsigned)flush_perf.min_frame_ms,
+             (unsigned)flush_perf.max_frame_ms,
+             (unsigned)(flush_perf.total_flushes / flush_perf.sample_frames),
+             (unsigned)(flush_perf.total_pixels / flush_perf.sample_frames),
+             (unsigned)(flush_perf.total_io_ms / flush_perf.sample_frames));
+    flush_perf_reset();
+  }
+}
+
 void apply_display_preferences(void)
 {
   ConfigStoreService &cfg = ConfigStoreService::instance();
@@ -90,6 +158,11 @@ void apply_display_preferences(void)
     rotation = cfg.get_int("rotation", 0);
     brightness_percent = cfg.get_int("brightness_percent", 100);
     show_fps = cfg.get_bool("show_fps", false);
+  }
+
+  if (flush_perf_enabled != show_fps) {
+    flush_perf_enabled = show_fps;
+    flush_perf_reset();
   }
 
   if (rotation < 0 || rotation > 3) rotation = 0;
@@ -274,13 +347,25 @@ static void create_home_screen(void)
 
 static void lvgl_flush(lv_display_t *d, const lv_area_t *area, uint8_t *px_map)
 {
+  const uint32_t flush_start_ms = flush_perf_enabled ? flush_perf_now_ms() : 0;
   int32_t w = lv_area_get_width(area);
   int32_t h = lv_area_get_height(area);
   const size_t px_count = (size_t)w * (size_t)h;
+  const bool last_flush = lv_display_flush_is_last(d);
+  if (flush_perf_enabled) {
+    if (flush_perf.frame_flushes == 0) flush_perf.frame_start_ms = flush_start_ms;
+    flush_perf.frame_flushes++;
+    flush_perf.frame_pixels += (uint32_t)px_count;
+  }
   lcd.startWrite();
   lcd.setAddrWindow(area->x1, area->y1, w, h);
   lcd.writePixels((lgfx::rgb565_t *)px_map, (int32_t)px_count);
   lcd.endWrite();
+  if (flush_perf_enabled) {
+    const uint32_t finished_ms = flush_perf_now_ms();
+    flush_perf.frame_io_ms += finished_ms - flush_start_ms;
+    if (last_flush) flush_perf_finish_frame(finished_ms);
+  }
   lv_display_flush_ready(d);
 }
 
@@ -310,20 +395,13 @@ void setup(void)
   lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
   lv_display_set_flush_cb(disp, lvgl_flush);
 
-#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
-  // The SPI-driven Grande benefits from fewer, taller partial refreshes.
-  // 32 rows reduce a full 480-row frame from 60 flushes to 15 while using
-  // only 20 KiB at the default portrait resolution.
-  constexpr size_t draw_buf_rows = 32U;
-#else
-  constexpr size_t draw_buf_rows = 8U;
-#endif
-  draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
+  size_t draw_buf_rows = 8U;
   const char *draw_buf_memory = "heap";
-#if defined(ARDUINO) && defined(ESP_PLATFORM)
-#if !defined(COLOR_KIT_PRO)
-  // Prefer fast internal, DMA-capable RAM on the SPI-driven Grande. Rendering
-  // into PSRAM adds memory-bus overhead before every display transfer.
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+  // A single 32-row internal DMA buffer minimizes transaction overhead while
+  // avoiding the ineffective RGB565-to-ILI9488 double-buffer pipeline.
+  draw_buf_rows = 32U;
+  draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
   draw_buf = static_cast<uint8_t *>(heap_caps_malloc(
       draw_buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
   if (draw_buf) {
@@ -331,17 +409,23 @@ void setup(void)
   } else {
     draw_buf = static_cast<uint8_t *>(heap_caps_malloc(
         draw_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (draw_buf) draw_buf_memory = "psram-fallback";
+    if (draw_buf) {
+      draw_buf_memory = "psram-single-fallback";
+    } else {
+      draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_8BIT));
+      if (draw_buf) draw_buf_memory = "8bit-single-fallback";
+    }
   }
-#else
+#elif defined(ARDUINO) && defined(ESP_PLATFORM)
+  draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
   draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (draw_buf) draw_buf_memory = "psram";
-#endif
   if (!draw_buf) {
     draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_8BIT));
     if (draw_buf) draw_buf_memory = "8bit-fallback";
   }
 #else
+  draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
   draw_buf = static_cast<uint8_t *>(std::malloc(draw_buf_size));
 #endif
   if (!draw_buf) {
