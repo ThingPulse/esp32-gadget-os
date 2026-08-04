@@ -319,10 +319,28 @@ void setup(void)
   constexpr size_t draw_buf_rows = 8U;
 #endif
   draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
+  const char *draw_buf_memory = "heap";
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
+#if !defined(COLOR_KIT_PRO)
+  // Prefer fast internal, DMA-capable RAM on the SPI-driven Grande. Rendering
+  // into PSRAM adds memory-bus overhead before every display transfer.
+  draw_buf = static_cast<uint8_t *>(heap_caps_malloc(
+      draw_buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
+  if (draw_buf) {
+    draw_buf_memory = "internal-dma";
+  } else {
+    draw_buf = static_cast<uint8_t *>(heap_caps_malloc(
+        draw_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (draw_buf) draw_buf_memory = "psram-fallback";
+  }
+#else
   draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  if (!draw_buf)
+  if (draw_buf) draw_buf_memory = "psram";
+#endif
+  if (!draw_buf) {
     draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_8BIT));
+    if (draw_buf) draw_buf_memory = "8bit-fallback";
+  }
 #else
   draw_buf = static_cast<uint8_t *>(std::malloc(draw_buf_size));
 #endif
@@ -330,7 +348,13 @@ void setup(void)
     UI_TRACE("Boot", "draw buffer allocation failed bytes=%u", (unsigned)draw_buf_size);
     return;
   }
-  UI_TRACE("Boot", "draw buffer rows=%u bytes=%u", (unsigned)draw_buf_rows, (unsigned)draw_buf_size);
+  UI_TRACE("Boot", "draw buffer rows=%u bytes=%u memory=%s",
+           (unsigned)draw_buf_rows, (unsigned)draw_buf_size, draw_buf_memory);
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+  UI_TRACE("Boot", "internal RAM free=%u largest=%u",
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+#endif
 
   lv_display_set_buffers(disp, draw_buf, nullptr, draw_buf_size,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
