@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "targets": [
+    {
+      "environment": "esp32-color-kit",
+      "manifestAsset": "app-market-esp32-color-kit.json",
+      "app": {
+        "id": "tp-color-kit-grande-ckos",
+        "name": "ESP32 ePulse OS",
+        "description": "Operating System for Color Kit Devices",
+        "repository": "https://github.com/ThingPulse/esp32-gadget-os",
+        "supportedDevices": [
+          "tp-color-kit-grande"
+        ],
+        "tags": []
+      },
+      "icon": {
+        "source": "documents/app-icon.png",
+        "asset": "app-icon.png"
+      },
+      "partitions": [
+        {
+          "name": "Firmware",
+          "source": "build/firmware.bin",
+          "asset": "firmware.bin",
+          "offset": "0x10000"
+        }
+      ]
+    },
+    {
+      "environment": "esp32-color-kit-pro",
+      "manifestAsset": "app-market-esp32-color-kit-pro.json",
+      "app": {
+        "id": "tp-color-kit-grande-ckos-pro",
+        "name": "ESP32 ePulse OS",
+        "description": "Operating System for Color Kit Devices",
+        "repository": "https://github.com/ThingPulse/esp32-gadget-os",
+        "supportedDevices": [
+          "tp-color-kit-pro"
+        ],
+        "tags": []
+      },
+      "icon": {
+        "source": "documents/app-icon.png",
+        "asset": "app-icon.png"
+      },
+      "partitions": [
+        {
+          "name": "Firmware",
+          "source": "build/firmware.bin",
+          "asset": "firmware.bin",
+          "offset": "0x10000"
+        }
+      ]
+    }
+  ]
+}
