@@ -45,6 +45,11 @@ using PlanesSecureClient = WiFiClientSecure;
 #include <thread>
 #endif
 
+// C++14 requires a definition when std::min binds this member by reference.
+// Newer/local linkers may accept it implicitly, while GCC 13 correctly reports
+// the missing ODR definition.
+constexpr int PlanesService::MAX_PLANES;
+
 namespace {
 
 // Position providers are queried only while the Plane app is open. Fifteen
@@ -540,7 +545,9 @@ bool PlanesService::route_airport_names(const std::string &callsign, std::string
 
 void PlanesService::publish_result(PlaneState *planes, int count, const std::string &provider)
 {
-    _plane_count = std::min(count, MAX_PLANES);
+    // Avoid ODR-using the C++14 static constexpr through std::min's
+    // reference parameters (GCC 13's native linker requires a definition).
+    _plane_count = count < MAX_PLANES ? count : MAX_PLANES;
     for (int i = 0; i < MAX_PLANES; ++i)
         _planes[i] = i < _plane_count ? planes[i] : PlaneState{};
     _has_data = true;
