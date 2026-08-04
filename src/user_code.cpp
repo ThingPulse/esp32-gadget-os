@@ -310,7 +310,15 @@ void setup(void)
   lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
   lv_display_set_flush_cb(disp, lvgl_flush);
 
-  draw_buf_size = static_cast<size_t>(lcd.width()) * 8U * 2U;
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+  // The SPI-driven Grande benefits from fewer, taller partial refreshes.
+  // 32 rows reduce a full 480-row frame from 60 flushes to 15 while using
+  // only 20 KiB at the default portrait resolution.
+  constexpr size_t draw_buf_rows = 32U;
+#else
+  constexpr size_t draw_buf_rows = 8U;
+#endif
+  draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
   draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!draw_buf)
@@ -322,6 +330,7 @@ void setup(void)
     UI_TRACE("Boot", "draw buffer allocation failed bytes=%u", (unsigned)draw_buf_size);
     return;
   }
+  UI_TRACE("Boot", "draw buffer rows=%u bytes=%u", (unsigned)draw_buf_rows, (unsigned)draw_buf_size);
 
   lv_display_set_buffers(disp, draw_buf, nullptr, draw_buf_size,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
