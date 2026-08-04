@@ -224,7 +224,9 @@ void WeatherService::on_wifi_connected(const SystemEvent &event, void *user_data
 {
     (void)event;
     WeatherService *self = static_cast<WeatherService *>(user_data);
-    if (self && self->_enabled && self->_configured)
+    // Weather is also displayed in the global header, so populate it at boot
+    // even when the Weather app itself has not been opened yet.
+    if (self && self->_configured)
         self->fetch_and_update();
 }
 
