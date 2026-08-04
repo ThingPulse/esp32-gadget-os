@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 
 #if defined(ARDUINO)
@@ -17,6 +18,9 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 #if defined(__has_include)
 #if __has_include(<WiFiClientSecure.h>)
 #include <WiFiClientSecure.h>
@@ -37,16 +41,62 @@ using PlanesSecureClient = WiFiClientSecure;
 #endif
 #else
 #include <chrono>
+#include <mutex>
+#include <thread>
 #endif
 
 namespace {
 
-constexpr unsigned long PLANES_REFRESH_MS = 60UL * 1000UL;
-constexpr unsigned long ROUTE_ENRICH_REFRESH_MS = 3000UL;
+// Position providers are queried only while the Plane app is open. Fifteen
+// seconds feels live without approaching the public APIs' per-second limits.
+constexpr unsigned long PLANES_REFRESH_MS = 15UL * 1000UL;
 constexpr unsigned long ROUTE_CACHE_OK_MS = 6UL * 60UL * 60UL * 1000UL;
 constexpr unsigned long ROUTE_CACHE_MISS_MS = 30UL * 60UL * 1000UL;
 constexpr int ROUTE_LOOKUPS_PER_CYCLE = 3;
 constexpr size_t ROUTE_CACHE_MAX_ENTRIES = 512;
+
+struct PlanesFetchResult {
+    bool ok = false;
+    PlaneState planes[PlanesService::MAX_PLANES]{};
+    int count = 0;
+    std::string provider;
+    std::string error;
+};
+
+#if defined(ARDUINO)
+QueueHandle_t planes_result_queue = nullptr;
+#else
+std::mutex planes_result_mutex;
+PlanesFetchResult *planes_pending_result = nullptr;
+#endif
+
+static double deg_to_rad(double degrees)
+{
+    return degrees * 3.14159265358979323846 / 180.0;
+}
+
+static float distance_km(double lat1, double lon1, double lat2, double lon2)
+{
+    const double dlat = deg_to_rad(lat2 - lat1);
+    const double dlon = deg_to_rad(lon2 - lon1);
+    const double a = std::sin(dlat / 2.0) * std::sin(dlat / 2.0) +
+                     std::cos(deg_to_rad(lat1)) * std::cos(deg_to_rad(lat2)) *
+                     std::sin(dlon / 2.0) * std::sin(dlon / 2.0);
+    return (float)(6371.0 * 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a)));
+}
+
+static float bearing_deg(double lat1, double lon1, double lat2, double lon2)
+{
+    const double p1 = deg_to_rad(lat1);
+    const double p2 = deg_to_rad(lat2);
+    const double dl = deg_to_rad(lon2 - lon1);
+    const double y = std::sin(dl) * std::cos(p2);
+    const double x = std::cos(p1) * std::sin(p2) -
+                     std::sin(p1) * std::cos(p2) * std::cos(dl);
+    double value = std::atan2(y, x) * 180.0 / 3.14159265358979323846;
+    if (value < 0.0) value += 360.0;
+    return (float)value;
+}
 
 static std::string trim_copy(const std::string &in)
 {
@@ -57,6 +107,12 @@ static std::string trim_copy(const std::string &in)
     while (end > start && (in[end - 1] == ' ' || in[end - 1] == '\t')) end--;
 
     return in.substr(start, end - start);
+}
+
+static std::string json_string_or_empty(JsonVariantConst value)
+{
+    const char *text = value.is<const char *>() ? value.as<const char *>() : nullptr;
+    return text ? std::string(text) : std::string();
 }
 
 static std::string normalize_callsign_key(const std::string &callsign)
@@ -76,6 +132,69 @@ static std::string airport_code_from_obj(const JsonVariantConst &airport)
     if (!iata.empty()) return iata;
     std::string icao = airport["icao_code"].as<std::string>();
     return icao;
+}
+
+// The compact LVGL fonts only contain ASCII. Fold the most common Latin UTF-8
+// characters used in place names rather than showing LVGL's missing-glyph box.
+static std::string airport_name_ascii(const std::string &text)
+{
+    std::string out;
+    out.reserve(text.size());
+    for (size_t i = 0; i < text.size();) {
+        const unsigned char first = (unsigned char)text[i];
+        if (first < 0x80) {
+            out.push_back((char)first);
+            ++i;
+            continue;
+        }
+
+        uint32_t cp = 0;
+        size_t count = 0;
+        if ((first & 0xe0) == 0xc0 && i + 1 < text.size()) {
+            cp = ((uint32_t)(first & 0x1f) << 6) |
+                 ((uint32_t)text[i + 1] & 0x3f);
+            count = 2;
+        } else if ((first & 0xf0) == 0xe0 && i + 2 < text.size()) {
+            cp = ((uint32_t)(first & 0x0f) << 12) |
+                 (((uint32_t)text[i + 1] & 0x3f) << 6) |
+                 ((uint32_t)text[i + 2] & 0x3f);
+            count = 3;
+        } else {
+            ++i;
+            continue;
+        }
+        i += count;
+
+        if ((cp >= 0x00c0 && cp <= 0x00c5) || cp == 0x0100 || cp == 0x0102 || cp == 0x0104) out += 'A';
+        else if ((cp >= 0x00e0 && cp <= 0x00e5) || cp == 0x0101 || cp == 0x0103 || cp == 0x0105) out += 'a';
+        else if (cp == 0x00c7 || cp == 0x0106 || cp == 0x010c) out += 'C';
+        else if (cp == 0x00e7 || cp == 0x0107 || cp == 0x010d) out += 'c';
+        else if (cp >= 0x00c8 && cp <= 0x00cb) out += 'E';
+        else if (cp >= 0x00e8 && cp <= 0x00eb) out += 'e';
+        else if (cp >= 0x00cc && cp <= 0x00cf) out += 'I';
+        else if (cp >= 0x00ec && cp <= 0x00ef) out += 'i';
+        else if (cp == 0x00d1) out += 'N';
+        else if (cp == 0x00f1) out += 'n';
+        else if ((cp >= 0x00d2 && cp <= 0x00d6) || cp == 0x00d8) out += 'O';
+        else if ((cp >= 0x00f2 && cp <= 0x00f6) || cp == 0x00f8) out += 'o';
+        else if (cp >= 0x00d9 && cp <= 0x00dc) out += 'U';
+        else if (cp >= 0x00f9 && cp <= 0x00fc) out += 'u';
+        else if (cp == 0x00dd || cp == 0x0178) out += 'Y';
+        else if (cp == 0x00fd || cp == 0x00ff) out += 'y';
+        else if (cp == 0x00df) out += "ss";
+        else if (cp == 0x0141) out += 'L';
+        else if (cp == 0x0142) out += 'l';
+        else if (cp == 0x2013 || cp == 0x2014) out += '-';
+        else if (cp == 0x2018 || cp == 0x2019) out += '\'';
+    }
+    return out;
+}
+
+static std::string airport_display_name_from_obj(const JsonVariantConst &airport)
+{
+    std::string municipality = json_string_or_empty(airport["municipality"]);
+    if (!municipality.empty()) return airport_name_ascii(municipality);
+    return airport_name_ascii(json_string_or_empty(airport["name"]));
 }
 
 #if !defined(ARDUINO)
@@ -175,6 +294,10 @@ PlanesService &PlanesService::instance()
 
 bool PlanesService::begin()
 {
+#if defined(ARDUINO)
+    if (!planes_result_queue)
+        planes_result_queue = xQueueCreate(1, sizeof(PlanesFetchResult *));
+#endif
     if (_wifi_connected_sub == 0)
         _wifi_connected_sub = EventBus::instance().subscribe(EventType::WifiConnected, on_wifi_connected, this);
     if (_wifi_disconnected_sub == 0)
@@ -189,15 +312,13 @@ bool PlanesService::begin()
 
 void PlanesService::loop()
 {
+    process_async_result();
     if (!_enabled || !_configured || !is_wifi_connected())
         return;
 
     const unsigned long now = now_ms();
     if (_last_fetch_ms == 0 || (now - _last_fetch_ms) >= PLANES_REFRESH_MS)
         fetch_and_update();
-
-    if (_has_data && (_last_enrich_ms == 0 || (now - _last_enrich_ms) >= ROUTE_ENRICH_REFRESH_MS))
-        enrich_routes_step();
 }
 
 bool PlanesService::reload_from_config()
@@ -260,9 +381,8 @@ void PlanesService::on_wifi_connected(const SystemEvent &event, void *user_data)
 void PlanesService::on_wifi_disconnected(const SystemEvent &event, void *user_data)
 {
     (void)event;
-    PlanesService *self = static_cast<PlanesService *>(user_data);
-    if (self)
-        self->clear_planes();
+    (void)user_data;
+    // Keep the last successful snapshot visible during transient disconnects.
 }
 
 bool PlanesService::is_wifi_connected() const
@@ -273,93 +393,177 @@ bool PlanesService::is_wifi_connected() const
 bool PlanesService::fetch_and_update()
 {
     _last_fetch_ms = now_ms();
+    return start_async_fetch();
+}
 
-    std::string payload;
-    if (!fetch_payload(payload)) {
-        clear_planes();
-        if (_last_error.empty()) _last_error = "Network request failed";
-        return false;
-    }
-
+bool PlanesService::parse_payload(const std::string &payload,
+                                  PlaneState *out_planes,
+                                  int &out_count,
+                                  std::string &out_error)
+{
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload.c_str(), payload.size());
     if (err != DeserializationError::Ok) {
 #if !defined(ARDUINO)
-        UI_TRACE("PlanesOpenSky", "JSON parse failed err=%s body=%s", err.c_str(), snippet_copy(payload).c_str());
+        UI_TRACE("Planes", "JSON parse failed err=%s body=%s", err.c_str(), snippet_copy(payload).c_str());
 #endif
-        clear_planes();
-        _last_error = "Invalid API response";
+        out_error = "Invalid API response";
         return false;
     }
 
-    _plane_count = 0;
-    _next_enrich_index = 0;
-    for (int i = 0; i < MAX_PLANES; ++i)
-        _planes[i] = PlaneState{};
+    out_count = 0;
+    auto retain_nearest = [&](PlaneState &candidate) {
+        if (!candidate.valid || candidate.distance_km > _range_km)
+            return;
+        if (_hide_ground && candidate.on_ground)
+            return;
 
-    JsonArray states = doc["states"].as<JsonArray>();
-    int route_network_budget = ROUTE_LOOKUPS_PER_CYCLE;
-    if (!states.isNull()) {
-        for (JsonVariant row_var : states) {
-            if (_plane_count >= MAX_PLANES) break;
+        if (out_count < MAX_PLANES) {
+            out_planes[out_count++] = candidate;
+            return;
+        }
 
-            JsonArray row = row_var.as<JsonArray>();
-            if (row.isNull() || row.size() < 11) continue;
+        int farthest = 0;
+        for (int i = 1; i < out_count; ++i) {
+            if (out_planes[i].distance_km > out_planes[farthest].distance_km)
+                farthest = i;
+        }
+        if (candidate.distance_km < out_planes[farthest].distance_km)
+            out_planes[farthest] = candidate;
+    };
 
-            if (row[5].isNull() || row[6].isNull()) continue;
+    JsonArray aircraft = doc["ac"].as<JsonArray>();
+    if (!aircraft.isNull()) {
+        for (JsonVariant item : aircraft) {
+            JsonObjectConst ac = item.as<JsonObjectConst>();
+            if (ac.isNull() || ac["lat"].isNull() || ac["lon"].isNull())
+                continue;
 
-            PlaneState &dst = _planes[_plane_count++];
-            dst.valid = true;
-            dst.icao24 = row[0].as<std::string>();
-            dst.callsign = trim_copy(row[1].as<std::string>());
-            if (dst.callsign.empty()) dst.callsign = "(no callsign)";
-            dst.route = route_for_callsign(dst.callsign, route_network_budget);
-            dst.longitude = row[5].as<float>();
-            dst.latitude = row[6].as<float>();
-            dst.altitude_m = row[7].isNull() ? 0.0f : row[7].as<float>();
-            dst.on_ground = row[8].isNull() ? false : row[8].as<bool>();
-            dst.velocity_ms = row[9].isNull() ? 0.0f : row[9].as<float>();
+            PlaneState candidate;
+            candidate.valid = true;
+            candidate.icao24 = json_string_or_empty(ac["hex"]);
+            candidate.callsign = trim_copy(json_string_or_empty(ac["flight"]));
+            if (candidate.callsign.empty()) candidate.callsign = candidate.icao24;
+            candidate.registration = json_string_or_empty(ac["r"]);
+            candidate.aircraft_type = json_string_or_empty(ac["t"]);
+            candidate.aircraft_description = json_string_or_empty(ac["desc"]);
+            candidate.category = json_string_or_empty(ac["category"]);
+            candidate.squawk = json_string_or_empty(ac["squawk"]);
+            candidate.latitude = ac["lat"].as<float>();
+            candidate.longitude = ac["lon"].as<float>();
+
+            JsonVariantConst altitude = ac["alt_baro"];
+            if (altitude.is<const char *>() && std::string(altitude.as<const char *>()) == "ground") {
+                candidate.on_ground = true;
+            } else if (altitude.is<float>() || altitude.is<int>()) {
+                candidate.altitude_m = altitude.as<float>() / 3.28084f;
+            }
+            candidate.velocity_ms = ac["gs"].isNull() ? 0.0f : ac["gs"].as<float>() / 1.943844f;
+            candidate.heading_valid = !ac["track"].isNull();
+            candidate.heading_deg = candidate.heading_valid ? ac["track"].as<float>() : 0.0f;
+            candidate.vertical_rate_ms = ac["baro_rate"].isNull()
+                ? 0.0f : ac["baro_rate"].as<float>() * 0.00508f;
+            candidate.military = (ac["dbFlags"].as<int>() & 1) != 0;
+            candidate.distance_km = distance_km(_center_lat, _center_lon,
+                                                 candidate.latitude, candidate.longitude);
+            candidate.bearing_deg = bearing_deg(_center_lat, _center_lon,
+                                                 candidate.latitude, candidate.longitude);
+            retain_nearest(candidate);
+        }
+    } else {
+        JsonArray states = doc["states"].as<JsonArray>();
+        if (states.isNull()) {
+            out_error = "Provider returned no aircraft list";
+            return false;
+        }
+
+        for (JsonVariant row_value : states) {
+            JsonArray row = row_value.as<JsonArray>();
+            if (row.isNull() || row.size() < 11 || row[5].isNull() || row[6].isNull())
+                continue;
+
+            PlaneState candidate;
+            candidate.valid = true;
+            candidate.icao24 = json_string_or_empty(row[0]);
+            candidate.callsign = trim_copy(json_string_or_empty(row[1]));
+            if (candidate.callsign.empty()) candidate.callsign = candidate.icao24;
+            candidate.origin_country = json_string_or_empty(row[2]);
+            candidate.longitude = row[5].as<float>();
+            candidate.latitude = row[6].as<float>();
+            candidate.altitude_m = row[7].isNull() ? 0.0f : row[7].as<float>();
+            candidate.on_ground = row[8].isNull() ? false : row[8].as<bool>();
+            candidate.velocity_ms = row[9].isNull() ? 0.0f : row[9].as<float>();
+            candidate.heading_valid = !row[10].isNull();
+            candidate.heading_deg = candidate.heading_valid ? row[10].as<float>() : 0.0f;
+            candidate.vertical_rate_ms = row.size() > 11 && !row[11].isNull() ? row[11].as<float>() : 0.0f;
+            candidate.squawk = row.size() > 14 ? json_string_or_empty(row[14]) : "";
+            if (row.size() > 17 && !row[17].isNull())
+                candidate.category = std::to_string(row[17].as<int>());
+            candidate.distance_km = distance_km(_center_lat, _center_lon,
+                                                 candidate.latitude, candidate.longitude);
+            candidate.bearing_deg = bearing_deg(_center_lat, _center_lon,
+                                                 candidate.latitude, candidate.longitude);
+            retain_nearest(candidate);
         }
     }
 
-    _has_data = true;
-    _last_enrich_ms = now_ms();
-    _last_error.clear();
+    std::sort(out_planes, out_planes + out_count,
+              [](const PlaneState &a, const PlaneState &b) {
+                  return a.distance_km < b.distance_km;
+              });
     return true;
 }
 
-void PlanesService::enrich_routes_step()
+void PlanesService::enrich_routes(PlaneState *planes, int count)
 {
-    _last_enrich_ms = now_ms();
-    if (!_has_data || _plane_count <= 0) return;
-
     int network_budget = ROUTE_LOOKUPS_PER_CYCLE;
-    int visited = 0;
-
-    while (visited < _plane_count && network_budget > 0) {
-        if (_next_enrich_index >= _plane_count)
-            _next_enrich_index = 0;
-
-        PlaneState &plane = _planes[_next_enrich_index];
-        _next_enrich_index++;
-        visited++;
-
-        if (!plane.valid) continue;
-        if (_hide_ground && plane.on_ground) continue;
-        if (!plane.route.empty()) continue;
-
-        plane.route = route_for_callsign(plane.callsign, network_budget);
+    for (int i = 0; i < count; ++i) {
+        std::string origin_name;
+        std::string destination_name;
+        planes[i].route = route_for_callsign(planes[i].callsign, network_budget,
+                                             origin_name, destination_name);
     }
 }
 
-std::string PlanesService::route_for_callsign(const std::string &callsign_raw, int &network_budget)
+bool PlanesService::route_airport_names(const std::string &callsign, std::string &origin,
+                                        std::string &destination) const
 {
+    origin.clear();
+    destination.clear();
+    const std::string key = normalize_callsign_key(callsign);
+    auto it = _route_cache.find(key);
+    if (it == _route_cache.end()) return false;
+    origin = it->second.origin_name;
+    destination = it->second.destination_name;
+    return !origin.empty() || !destination.empty();
+}
+
+void PlanesService::publish_result(PlaneState *planes, int count, const std::string &provider)
+{
+    _plane_count = std::min(count, MAX_PLANES);
+    for (int i = 0; i < MAX_PLANES; ++i)
+        _planes[i] = i < _plane_count ? planes[i] : PlaneState{};
+    _has_data = true;
+    _provider_name = provider;
+    _last_error.clear();
+    ++_data_revision;
+    UI_TRACE("Planes", "update complete provider=%s planes=%d", provider.c_str(), _plane_count);
+}
+
+std::string PlanesService::route_for_callsign(const std::string &callsign_raw, int &network_budget,
+                                              std::string &out_origin_name,
+                                              std::string &out_destination_name)
+{
+    out_origin_name.clear();
+    out_destination_name.clear();
     const std::string key = normalize_callsign_key(callsign_raw);
     if (key.empty() || key == "(NOCALLSIGN)") return "N/A";
 
     const unsigned long now = now_ms();
     auto it = _route_cache.find(key);
     if (it != _route_cache.end() && it->second.expires_at_ms > now) {
+        out_origin_name = it->second.origin_name;
+        out_destination_name = it->second.destination_name;
         if (it->second.route.empty()) return "N/A";
         return it->second.route;
     }
@@ -368,10 +572,11 @@ std::string PlanesService::route_for_callsign(const std::string &callsign_raw, i
     network_budget--;
 
     std::string route;
-    if (fetch_route_for_callsign(key, route)) {
-        _route_cache[key] = RouteCacheEntry{route, now + ROUTE_CACHE_OK_MS};
+    if (fetch_route_for_callsign(key, route, out_origin_name, out_destination_name)) {
+        _route_cache[key] = RouteCacheEntry{route, out_origin_name, out_destination_name,
+                                            now + ROUTE_CACHE_OK_MS};
     } else {
-        _route_cache[key] = RouteCacheEntry{"", now + ROUTE_CACHE_MISS_MS};
+        _route_cache[key] = RouteCacheEntry{"", "", "", now + ROUTE_CACHE_MISS_MS};
         route = "N/A";
     }
 
@@ -381,9 +586,13 @@ std::string PlanesService::route_for_callsign(const std::string &callsign_raw, i
     return route;
 }
 
-bool PlanesService::fetch_route_for_callsign(const std::string &callsign_key, std::string &out_route)
+bool PlanesService::fetch_route_for_callsign(const std::string &callsign_key, std::string &out_route,
+                                             std::string &out_origin_name,
+                                             std::string &out_destination_name)
 {
     out_route.clear();
+    out_origin_name.clear();
+    out_destination_name.clear();
     std::string payload;
 
     char url[256] = {0};
@@ -443,11 +652,128 @@ bool PlanesService::fetch_route_for_callsign(const std::string &callsign_key, st
     if (origin.empty() || destination.empty()) return false;
 
     out_route = origin + "->" + destination;
+    out_origin_name = airport_display_name_from_obj(flightroute["origin"]);
+    out_destination_name = airport_display_name_from_obj(flightroute["destination"]);
     return true;
 }
 
-bool PlanesService::fetch_payload(std::string &out_payload)
+bool PlanesService::start_async_fetch()
 {
+    if (_fetch_in_progress)
+        return true;
+#if defined(ARDUINO)
+    if (!planes_result_queue) {
+        _last_error = "Result queue unavailable";
+        return false;
+    }
+
+    _fetch_in_progress = true;
+    BaseType_t created = xTaskCreate(fetch_task_entry, "planes_http", 12288, this, 1, nullptr);
+    if (created != pdPASS) {
+        _fetch_in_progress = false;
+        _last_error = "Could not start Plane request";
+        UI_TRACE("Planes", "failed to create HTTP task");
+        return false;
+    }
+    UI_TRACE("Planes", "HTTP task started");
+    return true;
+#else
+    _fetch_in_progress = true;
+    try {
+        std::thread([this]() {
+            PlanesFetchResult *result = new (std::nothrow) PlanesFetchResult{};
+            if (!result) {
+                _fetch_in_progress = false;
+                return;
+            }
+            std::string payload;
+            result->ok = fetch_payload(payload, result->provider, result->error);
+            if (result->ok)
+                result->ok = parse_payload(payload, result->planes, result->count, result->error);
+            if (result->ok)
+                enrich_routes(result->planes, result->count);
+
+            std::lock_guard<std::mutex> lock(planes_result_mutex);
+            delete planes_pending_result;
+            planes_pending_result = result;
+        }).detach();
+    } catch (...) {
+        _fetch_in_progress = false;
+        _last_error = "Could not start Plane request";
+        return false;
+    }
+    UI_TRACE("Planes", "native HTTP thread started");
+    return true;
+#endif
+}
+
+#if defined(ARDUINO)
+void PlanesService::fetch_task_entry(void *user_data)
+{
+    PlanesService *self = static_cast<PlanesService *>(user_data);
+    PlanesFetchResult *result = new (std::nothrow) PlanesFetchResult{};
+    if (!self || !result) {
+        if (self) self->_fetch_in_progress = false;
+        delete result;
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    std::string payload;
+    result->ok = self->fetch_payload(payload, result->provider, result->error);
+    if (result->ok)
+        result->ok = self->parse_payload(payload, result->planes, result->count, result->error);
+    if (result->ok)
+        self->enrich_routes(result->planes, result->count);
+
+    payload.clear();
+    payload.shrink_to_fit();
+    if (xQueueSend(planes_result_queue, &result, 0) != pdTRUE) {
+        delete result;
+        self->_fetch_in_progress = false;
+    }
+    vTaskDelete(nullptr);
+}
+#endif
+
+void PlanesService::process_async_result()
+{
+#if defined(ARDUINO)
+    if (!planes_result_queue)
+        return;
+
+    PlanesFetchResult *result = nullptr;
+    if (xQueueReceive(planes_result_queue, &result, 0) != pdTRUE)
+        return;
+#else
+    PlanesFetchResult *result = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(planes_result_mutex);
+        result = planes_pending_result;
+        planes_pending_result = nullptr;
+    }
+    if (!result)
+        return;
+#endif
+
+    _fetch_in_progress = false;
+    if (!result)
+        return;
+
+    if (result->ok) {
+        publish_result(result->planes, result->count, result->provider);
+    } else {
+        _last_error = result->error.empty() ? "All aircraft providers failed" : result->error;
+        UI_TRACE("Planes", "fetch failed error=%s", _last_error.c_str());
+    }
+    delete result;
+}
+
+bool PlanesService::fetch_payload(std::string &out_payload,
+                                  std::string &out_provider,
+                                  std::string &out_error)
+{
+    const int radius_nm = std::max(1, std::min(250, (int)std::ceil(_range_km / 1.852)));
     const double lat_rad = _center_lat * 3.14159265358979323846 / 180.0;
     const double cos_lat = std::max(0.2, std::fabs(std::cos(lat_rad)));
     const double dlat = _range_km / 111.0;
@@ -458,83 +784,73 @@ bool PlanesService::fetch_payload(std::string &out_payload)
     const double lomin = std::max(-180.0, _center_lon - dlon);
     const double lomax = std::min(180.0, _center_lon + dlon);
 
-    char url[320] = {0};
-    std::snprintf(url,
-                  sizeof(url),
+    char urls[4][320]{};
+    std::snprintf(urls[0], sizeof(urls[0]),
+                  "https://api.adsb.lol/v2/point/%.4f/%.4f/%d",
+                  _center_lat, _center_lon, radius_nm);
+    std::snprintf(urls[1], sizeof(urls[1]),
+                  "https://api.airplanes.live/v2/point/%.4f/%.4f/%d",
+                  _center_lat, _center_lon, radius_nm);
+    std::snprintf(urls[2], sizeof(urls[2]),
+                  "https://opendata.adsb.fi/api/v2/lat/%.4f/lon/%.4f/dist/%d",
+                  _center_lat, _center_lon, radius_nm);
+    std::snprintf(urls[3], sizeof(urls[3]),
                   "https://opensky-network.org/api/states/all?lamin=%.6f&lomin=%.6f&lamax=%.6f&lomax=%.6f",
-                  lamin,
-                  lomin,
-                  lamax,
-                  lomax);
+                  lamin, lomin, lamax, lomax);
+    static const char *providers[] = {"adsb.lol", "airplanes.live", "adsb.fi", "OpenSky"};
+
+    out_payload.clear();
+    out_provider.clear();
+    out_error.clear();
 
 #if defined(ARDUINO)
-    HTTPClient http;
-    PlanesSecureClient client;
 #if PLANES_HAS_SECURE_CLIENT
-    client.setInsecure();
-    if (!http.begin(client, url)) {
-        _last_error = "HTTP begin failed (secure client)";
-        return false;
+    for (int i = 0; i < 4; ++i) {
+        HTTPClient http;
+        PlanesSecureClient client;
+        client.setInsecure();
+        if (!http.begin(client, urls[i]))
+            continue;
+
+        http.setConnectTimeout(5000);
+        http.setTimeout(10000);
+        http.addHeader("Accept", "application/json");
+        http.addHeader("User-Agent", "esp32-gadget-os/1.0");
+        http.addHeader("Connection", "close");
+
+        UI_TRACE("Planes", "request provider=%s url=%s", providers[i], urls[i]);
+        int code = http.GET();
+        if (code == HTTP_CODE_OK) {
+            out_payload = http.getString().c_str();
+            http.end();
+            if (!out_payload.empty()) {
+                out_provider = providers[i];
+                return true;
+            }
+        } else {
+            UI_TRACE("Planes", "provider=%s HTTP code=%d", providers[i], code);
+        }
+        http.end();
     }
+    out_error = "All aircraft providers failed";
+    return false;
 #else
-    (void)client;
-    _last_error = "HTTPS requires WiFiClientSecure/NetworkClientSecure; update ESP32 platform package";
+    out_error = "HTTPS client unavailable";
     return false;
 #endif
-
-    http.setConnectTimeout(8000);
-    http.setTimeout(12000);
-    http.addHeader("Accept", "application/json");
-    http.addHeader("User-Agent", "esp32-gadget-os/1.0");
-    http.addHeader("Connection", "close");
-
-    const char *collect_hdrs[] = {"X-Rate-Limit-Remaining"};
-    http.collectHeaders(collect_hdrs, 1);
-
-    int code = http.GET();
-    if (code != HTTP_CODE_OK) {
-        std::string err = "HTTP error " + std::to_string(code);
-        const String body = http.getString();
-        if (!body.isEmpty()) {
-            err += ": ";
-            if (body.length() > 140) {
-                err += body.substring(0, 140).c_str();
-                err += "...";
-            } else {
-                err += body.c_str();
-            }
-        }
-        _last_error = err;
-        http.end();
-        return false;
-    }
-
-    out_payload = http.getString().c_str();
-    {
-        String rl_str = http.header("X-Rate-Limit-Remaining");
-        if (!rl_str.isEmpty())
-            _rate_limit_remaining = (int)rl_str.toInt();
-    }
-    http.end();
-    if (out_payload.empty()) {
-        _last_error = "Empty response";
-        return false;
-    }
-    return true;
 #else
-    long http_code = 0;
-    int exit_code = 0;
-    long rate_limit = -1L;
-    if (!emulator_http_get_logged("PlanesOpenSky", url, 10, out_payload, http_code, exit_code, &rate_limit)) {
-        _last_error = "Network request failed";
-        return false;
+    for (int i = 0; i < 4; ++i) {
+        long http_code = 0;
+        int exit_code = 0;
+        if (emulator_http_get_logged("Planes", urls[i], 10,
+                                     out_payload, http_code, exit_code) &&
+            http_code == 200) {
+            out_provider = providers[i];
+            return true;
+        }
     }
-    _rate_limit_remaining = (int)rate_limit;
-    if (http_code != 200) {
-        _last_error = "HTTP error " + std::to_string(http_code);
-        return false;
-    }
-    return true;
+    out_error = "All aircraft providers failed";
+    return false;
 #endif
 }
 
@@ -542,8 +858,7 @@ void PlanesService::clear_planes()
 {
     _has_data = false;
     _plane_count = 0;
-    _last_enrich_ms = 0;
-    _next_enrich_index = 0;
+    _provider_name.clear();
     for (int i = 0; i < MAX_PLANES; ++i)
         _planes[i] = PlaneState{};
 }
