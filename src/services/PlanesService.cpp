@@ -792,9 +792,18 @@ bool PlanesService::fetch_payload(std::string &out_payload,
     const double lomax = std::min(180.0, _center_lon + dlon);
 
     char urls[4][320]{};
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+    // The original Color Kit cannot reliably reserve enough contiguous
+    // internal RAM for an mbedTLS handshake while the Plane UI is resident.
+    // adsb.lol also serves this anonymous, read-only endpoint over HTTP.
+    std::snprintf(urls[0], sizeof(urls[0]),
+                  "http://api.adsb.lol/v2/point/%.4f/%.4f/%d",
+                  _center_lat, _center_lon, radius_nm);
+#else
     std::snprintf(urls[0], sizeof(urls[0]),
                   "https://api.adsb.lol/v2/point/%.4f/%.4f/%d",
                   _center_lat, _center_lon, radius_nm);
+#endif
     std::snprintf(urls[1], sizeof(urls[1]),
                   "https://api.airplanes.live/v2/point/%.4f/%.4f/%d",
                   _center_lat, _center_lon, radius_nm);
@@ -814,10 +823,16 @@ bool PlanesService::fetch_payload(std::string &out_payload,
 #if PLANES_HAS_SECURE_CLIENT
     for (int i = 0; i < 4; ++i) {
         HTTPClient http;
+#if defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+        WiFiClient plain_client;
+        if (i == 0) {
+            if (!http.begin(plain_client, urls[i])) continue;
+        } else
+#endif
+        {
         PlanesSecureClient client;
         client.setInsecure();
-        if (!http.begin(client, urls[i]))
-            continue;
+        if (!http.begin(client, urls[i])) continue;
 
         http.setConnectTimeout(5000);
         http.setTimeout(10000);
@@ -838,6 +853,29 @@ bool PlanesService::fetch_payload(std::string &out_payload,
             UI_TRACE("Planes", "provider=%s HTTP code=%d", providers[i], code);
         }
         http.end();
+        continue;
+        }
+
+#if defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+        http.setConnectTimeout(5000);
+        http.setTimeout(10000);
+        http.addHeader("Accept", "application/json");
+        http.addHeader("User-Agent", "esp32-gadget-os/1.0");
+        http.addHeader("Connection", "close");
+        UI_TRACE("Planes", "request provider=%s url=%s", providers[i], urls[i]);
+        int code = http.GET();
+        if (code == HTTP_CODE_OK) {
+            out_payload = http.getString().c_str();
+            http.end();
+            if (!out_payload.empty()) {
+                out_provider = providers[i];
+                return true;
+            }
+        } else {
+            UI_TRACE("Planes", "provider=%s HTTP code=%d", providers[i], code);
+        }
+        http.end();
+#endif
     }
     out_error = "All aircraft providers failed";
     return false;

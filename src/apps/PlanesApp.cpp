@@ -29,6 +29,15 @@ APP_REGISTER_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20
 
 namespace {
 
+// The original Color Kit has substantially less free internal RAM than the
+// Pro. Keep the nearest ten aircraft in its list; the service and map still
+// retain all MAX_PLANES aircraft.
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+static constexpr int PLANES_LIST_CARD_COUNT = 10;
+#else
+static constexpr int PLANES_LIST_CARD_COUNT = PlanesService::MAX_PLANES;
+#endif
+
 struct PlanesAppCtx {
   lv_obj_t *screen = nullptr;
   lv_obj_t *content = nullptr;
@@ -230,6 +239,36 @@ static float km_per_lon_degree(double latitude_deg)
 {
   constexpr double D2R = 3.14159265358979323846 / 180.0;
   return (float)(111.320 * std::cos(latitude_deg * D2R));
+}
+
+static void planes_app_ensure_map_markers()
+{
+  if (!app_ctx.map_square || !lv_obj_is_valid(app_ctx.map_square)) return;
+  if (!app_ctx.map_plane_tails.empty()) return;
+
+  app_ctx.map_plane_tails.resize(PlanesService::MAX_PLANES, nullptr);
+  app_ctx.map_plane_tail_points.resize(PlanesService::MAX_PLANES * 2);
+  for (int i = 0; i < PlanesService::MAX_PLANES; ++i) {
+    lv_obj_t *tail = lv_line_create(app_ctx.map_square);
+    lv_obj_set_size(tail, lv_pct(100), lv_pct(100));
+    lv_obj_set_pos(tail, 0, 0);
+    lv_obj_set_style_line_width(tail, 2, 0);
+    lv_obj_set_style_line_rounded(tail, true, 0);
+    lv_obj_set_style_line_color(tail, lv_color_hex(0x4dabf7), 0);
+    lv_obj_add_flag(tail, LV_OBJ_FLAG_HIDDEN);
+    app_ctx.map_plane_tails[i] = tail;
+
+    lv_obj_t *dot = lv_obj_create(app_ctx.map_square);
+    lv_obj_set_size(dot, 6, 6);
+    lv_obj_set_style_bg_color(dot, lv_color_hex(0xfa5252), 0);
+    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(dot, 0, 0);
+    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
+    app_ctx.map_plane_dots[i] = dot;
+  }
+  UI_TRACE("Planes", "map markers created count=%d", PlanesService::MAX_PLANES);
 }
 
 static constexpr const char *PLANES_MAP_CACHE_DIR = "/cache";
@@ -590,7 +629,8 @@ static void planes_app_update_map_ui()
     for (int i = 0; i < PlanesService::MAX_PLANES; ++i)
       if (app_ctx.map_plane_dots[i] && lv_obj_is_valid(app_ctx.map_plane_dots[i])) {
         lv_obj_add_flag(app_ctx.map_plane_dots[i], LV_OBJ_FLAG_HIDDEN);
-        if (app_ctx.map_plane_tails[i] && lv_obj_is_valid(app_ctx.map_plane_tails[i]))
+        if (i < (int)app_ctx.map_plane_tails.size() && app_ctx.map_plane_tails[i] &&
+            lv_obj_is_valid(app_ctx.map_plane_tails[i]))
           lv_obj_add_flag(app_ctx.map_plane_tails[i], LV_OBJ_FLAG_HIDDEN);
       }
     return;
@@ -601,6 +641,7 @@ static void planes_app_update_map_ui()
   if (!app_ctx.map_mode)
     return;
 
+  planes_app_ensure_map_markers();
   planes_app_ensure_map_tiles(svc, square_size);
 
   const float range_km = (float)LV_MAX(0.1, svc.range_km());
@@ -1123,7 +1164,7 @@ void planes_app_launch(void)
   lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
   app_ctx.card_widgets.resize(PlanesService::MAX_PLANES * CARD_WIDGET_COUNT, nullptr);
-  for (int i = 0; i < PlanesService::MAX_PLANES; ++i) {
+  for (int i = 0; i < PLANES_LIST_CARD_COUNT; ++i) {
     lv_obj_t *row = lv_obj_create(list);
     lv_obj_set_size(row, lv_pct(100), 64);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
@@ -1190,6 +1231,8 @@ void planes_app_launch(void)
     app_ctx.card_widgets[card_base + CARD_TYPE] = type;
     app_ctx.card_widgets[card_base + CARD_ROUTE] = route;
   }
+  UI_TRACE("Planes", "launch list cards created count=%d tracked=%d",
+           PLANES_LIST_CARD_COUNT, PlanesService::MAX_PLANES);
 
   lv_obj_t *detail_view = lv_obj_create(content);
   lv_obj_set_size(detail_view, lv_pct(100), lv_pct(100));
@@ -1340,6 +1383,7 @@ void planes_app_launch(void)
   app_ctx.detail_widgets[DETAIL_REGISTRATION] = detail_registration;
   app_ctx.detail_widgets[DETAIL_EXTRA] = detail_extra;
   app_ctx.detail_widgets[DETAIL_LOOK] = detail_look;
+  UI_TRACE("Planes", "launch detail view created");
 
   lv_obj_t *map_view = lv_obj_create(content);
   lv_obj_set_size(map_view, lv_pct(100), lv_pct(100));
@@ -1395,29 +1439,6 @@ void planes_app_launch(void)
   lv_label_set_text(map_north_label, "N");
   lv_obj_set_style_text_color(map_north_label, lv_color_hex(0xffd166), 0);
 
-  app_ctx.map_plane_tails.resize(PlanesService::MAX_PLANES, nullptr);
-  app_ctx.map_plane_tail_points.resize(PlanesService::MAX_PLANES * 2);
-  for (int i = 0; i < PlanesService::MAX_PLANES; ++i) {
-    lv_obj_t *tail = lv_line_create(map_square);
-    lv_obj_set_size(tail, lv_pct(100), lv_pct(100));
-    lv_obj_set_pos(tail, 0, 0);
-    lv_obj_set_style_line_width(tail, 2, 0);
-    lv_obj_set_style_line_rounded(tail, true, 0);
-    lv_obj_set_style_line_color(tail, lv_color_hex(0x4dabf7), 0);
-    lv_obj_add_flag(tail, LV_OBJ_FLAG_HIDDEN);
-    app_ctx.map_plane_tails[i] = tail;
-
-    lv_obj_t *dot = lv_obj_create(map_square);
-    lv_obj_set_size(dot, 6, 6);
-    lv_obj_set_style_bg_color(dot, lv_color_hex(0xfa5252), 0);
-    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(dot, 0, 0);
-    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
-    app_ctx.map_plane_dots[i] = dot;
-  }
-
   lv_obj_t *map_summary = lv_label_create(map_view);
   lv_obj_set_style_text_color(map_summary, lv_color_white(), 0);
   lv_obj_set_style_text_font(map_summary, &lv_font_montserrat_14, 0);
@@ -1425,6 +1446,7 @@ void planes_app_launch(void)
   lv_obj_t *map_hint = lv_label_create(map_view);
   lv_obj_set_style_text_color(map_hint, lv_color_hex(0xb7bdd7), 0);
   lv_label_set_long_mode(map_hint, LV_LABEL_LONG_WRAP);
+  UI_TRACE("Planes", "launch map shell created");
 
   app_ctx.screen = scr;
   app_ctx.content = content;
