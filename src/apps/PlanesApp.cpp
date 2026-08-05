@@ -1058,7 +1058,10 @@ void planes_app_launch(void)
   create_time_status_label(bar, 56);
   create_wifi_status_icon(bar, -156);
 
-  lv_obj_t *loading_line = lv_obj_create(scr);
+  // Keep the off-screen portion of the animation inside the non-scrollable
+  // header. If parented to the screen it expands the screen's scrollable
+  // extents while moving and briefly creates a horizontal scrollbar.
+  lv_obj_t *loading_line = lv_obj_create(bar);
   lv_obj_set_size(loading_line, 76, 3);
   lv_obj_set_pos(loading_line, -76, 41);
   lv_obj_clear_flag(loading_line, LV_OBJ_FLAG_SCROLLABLE);
