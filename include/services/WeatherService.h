@@ -59,10 +59,10 @@ private:
     bool fetch_and_update();
     bool apply_payload(std::string &payload);
     bool fetch_payload(std::string &out_payload) const;
-#if defined(ARDUINO)
-    static void fetch_task_entry(void *user_data);
     bool start_async_fetch();
     void process_async_result();
+#if defined(ARDUINO)
+    static void fetch_task_entry(void *user_data);
 #endif
     void clear_weather();
     unsigned long now_ms() const;

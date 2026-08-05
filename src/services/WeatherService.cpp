@@ -2,6 +2,7 @@
 
 #include "EventBus.h"
 #include "services/ConfigStoreService.h"
+#include "services/FileSystemService.h"
 #include "services/TimeService.h"
 #include "services/WeatherLocationStore.h"
 #include "services/WifiService.h"
@@ -9,6 +10,7 @@
 #include <ArduinoJson.h>
 #include <algorithm>
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -25,19 +27,25 @@
 #include <freertos/task.h>
 #else
 #include <chrono>
+#include <mutex>
+#include <thread>
 #endif
 
 namespace {
 
 constexpr unsigned long WEATHER_REFRESH_MS = 10UL * 60UL * 1000UL;
 
-#if defined(ARDUINO)
 struct WeatherFetchResult {
     bool ok = false;
+    uint32_t cache_id = 0;
     std::string payload;
 };
 
+#if defined(ARDUINO)
 QueueHandle_t weather_result_queue = nullptr;
+#else
+std::mutex weather_result_mutex;
+WeatherFetchResult *weather_pending_result = nullptr;
 #endif
 
 std::string url_encode_timezone(const char *tz)
@@ -69,6 +77,26 @@ const char *icon_for_code(int weather_code)
     return "CLD";
 }
 
+uint32_t weather_cache_id(double latitude, double longitude, bool metric)
+{
+    char key[64] = {};
+    std::snprintf(key, sizeof(key), "%.6f,%.6f,%c", latitude, longitude, metric ? 'm' : 'i');
+    uint32_t hash = 2166136261u;
+    for (const unsigned char *p = (const unsigned char *)key; *p; ++p) {
+        hash ^= *p;
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+std::string weather_cache_path(double latitude, double longitude, bool metric)
+{
+    char path[48] = {};
+    std::snprintf(path, sizeof(path), "/weather/%08lx.json",
+                  (unsigned long)weather_cache_id(latitude, longitude, metric));
+    return path;
+}
+
 }  // namespace
 
 WeatherService &WeatherService::instance()
@@ -96,9 +124,7 @@ bool WeatherService::begin()
 
 void WeatherService::loop()
 {
-#if defined(ARDUINO)
     process_async_result();
-#endif
     if (!_enabled || !_configured || !is_wifi_connected())
         return;
 
@@ -118,16 +144,30 @@ bool WeatherService::reload_from_config()
     }
 
     cfg.load("weather");
-    _metric = cfg.get_bool("metric", true);
+    const bool new_metric = cfg.get_bool("metric", true);
     WeatherLocation location;
     if (!WeatherLocationStore::active(location)) {
         _configured = false;
         clear_weather();
         return false;
     }
+    const bool location_changed = !_configured || _latitude != location.latitude ||
+                                  _longitude != location.longitude || _metric != new_metric;
+    _metric = new_metric;
     _latitude = location.latitude;
     _longitude = location.longitude;
     _configured = true;
+
+    if (location_changed) {
+        _last_fetch_ms = 0;
+        std::string cached_payload;
+        FileSystemService &files = FileSystemService::instance();
+        files.begin();
+        if (files.fs().read(weather_cache_path(_latitude, _longitude, _metric).c_str(), cached_payload))
+            apply_payload(cached_payload);
+        else
+            clear_weather();
+    }
 
     if (_enabled && is_wifi_connected())
         fetch_and_update();
@@ -243,19 +283,7 @@ bool WeatherService::is_wifi_connected() const
 bool WeatherService::fetch_and_update()
 {
     _last_fetch_ms = now_ms();
-
-#if defined(ARDUINO)
     return start_async_fetch();
-#else
-
-    std::string payload;
-    if (!fetch_payload(payload)) {
-        UI_TRACE("Weather", "fetch failed");
-        return false;
-    }
-
-    return apply_payload(payload);
-#endif
 }
 
 bool WeatherService::apply_payload(std::string &payload)
@@ -358,15 +386,16 @@ bool WeatherService::apply_payload(std::string &payload)
     return true;
 }
 
-#if defined(ARDUINO)
 bool WeatherService::start_async_fetch()
 {
     if (_fetch_in_progress)
         return true;
+#if defined(ARDUINO)
     if (!weather_result_queue)
         return false;
-
+#endif
     _fetch_in_progress = true;
+#if defined(ARDUINO)
     BaseType_t created = xTaskCreate(
         fetch_task_entry,
         "weather_http",
@@ -379,11 +408,23 @@ bool WeatherService::start_async_fetch()
         UI_TRACE("Weather", "failed to create HTTP task");
         return false;
     }
-
     UI_TRACE("Weather", "HTTP task started");
+#else
+    std::thread([this]() {
+        WeatherFetchResult *result = new (std::nothrow) WeatherFetchResult{};
+        if (result) {
+            result->cache_id = weather_cache_id(_latitude, _longitude, _metric);
+            result->ok = fetch_payload(result->payload);
+        }
+        std::lock_guard<std::mutex> lock(weather_result_mutex);
+        delete weather_pending_result;
+        weather_pending_result = result;
+    }).detach();
+#endif
     return true;
 }
 
+#if defined(ARDUINO)
 void WeatherService::fetch_task_entry(void *user_data)
 {
     WeatherService *self = static_cast<WeatherService *>(user_data);
@@ -395,6 +436,7 @@ void WeatherService::fetch_task_entry(void *user_data)
         return;
     }
 
+    result->cache_id = weather_cache_id(self->_latitude, self->_longitude, self->_metric);
     result->ok = self->fetch_payload(result->payload);
     if (xQueueSend(weather_result_queue, &result, 0) != pdTRUE) {
         delete result;
@@ -402,27 +444,47 @@ void WeatherService::fetch_task_entry(void *user_data)
     }
     vTaskDelete(nullptr);
 }
+#endif
 
 void WeatherService::process_async_result()
 {
+#if defined(ARDUINO)
     if (!weather_result_queue)
         return;
 
     WeatherFetchResult *result = nullptr;
     if (xQueueReceive(weather_result_queue, &result, 0) != pdTRUE)
         return;
+#else
+    WeatherFetchResult *result = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(weather_result_mutex);
+        result = weather_pending_result;
+        weather_pending_result = nullptr;
+    }
+    if (!result) return;
+#endif
 
     _fetch_in_progress = false;
     if (!result)
         return;
 
-    if (result->ok)
+    const uint32_t current_id = weather_cache_id(_latitude, _longitude, _metric);
+    if (result->ok && result->cache_id == current_id) {
+        FileSystemService &files = FileSystemService::instance();
+        files.begin();
+        files.fs().mkdir_p("/weather");
+        files.fs().write(weather_cache_path(_latitude, _longitude, _metric).c_str(), result->payload);
         apply_payload(result->payload);
+    } else if (result->cache_id != current_id) {
+        // A location changed during this request. Let loop() immediately start
+        // the request for the newly active location.
+        _last_fetch_ms = 0;
+    }
     else
         UI_TRACE("Weather", "fetch failed");
     delete result;
 }
-#endif
 
 bool WeatherService::fetch_payload(std::string &out_payload) const
 {
@@ -430,9 +492,8 @@ bool WeatherService::fetch_payload(std::string &out_payload) const
     const char *temp_unit = _metric ? "celsius" : "fahrenheit";
     const char *wind_unit = _metric ? "kmh" : "mph";
     const char *precip_unit = _metric ? "mm" : "inch";
-    const int tz_index = TimeService::instance().timezone_index();
-    const char *tz_name = TimeService::timezone_name(tz_index);
-    const std::string tz_query = url_encode_timezone(tz_name);
+    // Each saved location should use its own local forecast timestamps.
+    const std::string tz_query = "auto";
     std::snprintf(url,
                   sizeof(url),
                   "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=%d&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s&timezone=%s",

@@ -2,6 +2,7 @@
 
 #include "AppRegistry.h"
 #include "services/WeatherService.h"
+#include "services/WeatherLocationStore.h"
 #include "ui/UiNav.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
@@ -12,6 +13,7 @@
 #include <cstdio>
 #include <ctime>
 #include <string>
+#include <vector>
 
 APP_REGISTER_COLOR_RANK("Weather", LV_SYMBOL_EYE_OPEN, weather_app_launch, 0x339af0, 10);
 
@@ -351,6 +353,35 @@ static void weather_app_refresh_event(lv_event_t *e)
   }
 }
 
+static void weather_location_step_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED || app_ctx.closing) return;
+  WeatherService &weather = WeatherService::instance();
+  if (weather.is_fetching()) return;
+
+  std::vector<WeatherLocation> locations;
+  int active_index = 0;
+  if (!WeatherLocationStore::load(locations, active_index) || locations.size() < 2) return;
+  const int delta = (int)(intptr_t)lv_event_get_user_data(e);
+  active_index = (active_index + delta + (int)locations.size()) % (int)locations.size();
+  if (!WeatherLocationStore::save(locations, active_index)) return;
+
+  lv_obj_t *button = (lv_obj_t *)lv_event_get_target(e);
+  lv_obj_t *selector = lv_obj_get_parent(button);
+  lv_obj_t *name_label = selector ? lv_obj_get_child(selector, 1) : nullptr;
+  if (name_label && lv_obj_is_valid(name_label))
+    lv_label_set_text(name_label, locations[active_index].name.c_str());
+
+  weather.reload_from_config();
+  app_ctx.was_fetching = weather.is_fetching();
+  if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
+    if (app_ctx.was_fetching) lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+  }
+  weather_app_update_ui();
+  app_ctx.weather_revision = weather.data_revision();
+}
+
 static void weather_app_screen_delete_event(lv_event_t *e)
 {
   (void)e;
@@ -429,9 +460,7 @@ void weather_app_launch(void)
   create_time_status_label(bar, 56);
   create_wifi_status_icon(bar, -6);
 
-  // Indeterminate loading indicator. Keeping this on the screen root avoids
-  // affecting the header layout while it moves beneath the bar.
-  lv_obj_t *loading_line = lv_obj_create(scr);
+  lv_obj_t *loading_line = lv_obj_create(bar);
   lv_obj_set_size(loading_line, 76, 3);
   lv_obj_set_pos(loading_line, -76, 41);
   lv_obj_clear_flag(loading_line, LV_OBJ_FLAG_SCROLLABLE);
@@ -462,6 +491,48 @@ void weather_app_launch(void)
   lv_obj_set_style_pad_row(content, 8, 0);
   lv_obj_set_layout(content, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+
+  std::vector<WeatherLocation> locations;
+  int active_location = 0;
+  WeatherLocationStore::load(locations, active_location);
+  lv_obj_t *location_selector = lv_obj_create(content);
+  lv_obj_set_size(location_selector, lv_pct(100), 32);
+  lv_obj_clear_flag(location_selector, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_opa(location_selector, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(location_selector, 0, 0);
+  lv_obj_set_style_pad_all(location_selector, 0, 0);
+
+  lv_obj_t *previous_location = lv_button_create(location_selector);
+  lv_obj_set_size(previous_location, 40, 30);
+  lv_obj_align(previous_location, LV_ALIGN_LEFT_MID, 0, 0);
+  lv_obj_add_event_cb(previous_location, weather_location_step_event, LV_EVENT_CLICKED,
+                      (void *)(intptr_t)-1);
+  lv_obj_t *previous_label = lv_label_create(previous_location);
+  lv_label_set_text(previous_label, LV_SYMBOL_LEFT);
+  lv_obj_center(previous_label);
+
+  lv_obj_t *location_name = lv_label_create(location_selector);
+  lv_obj_set_width(location_name, 184);
+  lv_obj_set_style_text_align(location_name, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_long_mode(location_name, LV_LABEL_LONG_DOT);
+  lv_obj_align(location_name, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_text_color(location_name, lv_color_hex(0x63e6be), 0);
+  lv_obj_set_style_text_font(location_name, &lv_font_montserrat_14, 0);
+  lv_label_set_text(location_name,
+                    locations.empty() ? "No saved location" : locations[active_location].name.c_str());
+
+  lv_obj_t *next_location = lv_button_create(location_selector);
+  lv_obj_set_size(next_location, 40, 30);
+  lv_obj_align(next_location, LV_ALIGN_RIGHT_MID, 0, 0);
+  lv_obj_add_event_cb(next_location, weather_location_step_event, LV_EVENT_CLICKED,
+                      (void *)(intptr_t)1);
+  lv_obj_t *next_label = lv_label_create(next_location);
+  lv_label_set_text(next_label, LV_SYMBOL_RIGHT);
+  lv_obj_center(next_label);
+  if (locations.size() < 2) {
+    lv_obj_add_flag(previous_location, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(next_location, LV_OBJ_FLAG_HIDDEN);
+  }
 
   // Date and time header
   lv_obj_t *date_label = lv_label_create(content);
