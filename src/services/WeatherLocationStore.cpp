@@ -1,6 +1,7 @@
 #include "services/WeatherLocationStore.h"
 
 #include "services/ConfigStoreService.h"
+#include "ui/AsciiFold.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -39,9 +40,9 @@ bool WeatherLocationStore::load(std::vector<WeatherLocation> &locations, int &ac
         const std::string lat = cfg.get(indexed_key("latitude", i).c_str(), "");
         const std::string lon = cfg.get(indexed_key("longitude", i).c_str(), "");
         if (lat.empty() || lon.empty()) continue;
-        location.name = cfg.get(indexed_key("name", i).c_str(), "Location");
-        location.region = cfg.get(indexed_key("region", i).c_str(), "");
-        location.country = cfg.get(indexed_key("country", i).c_str(), "");
+        location.name = ascii_fold_latin(cfg.get(indexed_key("name", i).c_str(), "Location"));
+        location.region = ascii_fold_latin(cfg.get(indexed_key("region", i).c_str(), ""));
+        location.country = ascii_fold_latin(cfg.get(indexed_key("country", i).c_str(), ""));
         location.timezone = cfg.get(indexed_key("timezone", i).c_str(), "auto");
         location.latitude = std::strtod(lat.c_str(), nullptr);
         location.longitude = std::strtod(lon.c_str(), nullptr);

@@ -670,6 +670,28 @@ static void weather_kb_event(lv_event_t *e)
   }
 }
 
+static void weather_keyboard_apply_repeat_policy(lv_obj_t *keyboard)
+{
+  if (!keyboard || !lv_obj_is_valid(keyboard)) return;
+  const char * const *map = lv_buttonmatrix_get_map(keyboard);
+  if (!map) return;
+  uint32_t button_id = 0;
+  for (uint32_t i = 0; map[i] && map[i][0] != '\0'; ++i) {
+    if (std::strcmp(map[i], "\n") == 0) continue;
+    if (std::strcmp(map[i], LV_SYMBOL_BACKSPACE) == 0)
+      lv_buttonmatrix_clear_button_ctrl(keyboard, button_id, LV_BUTTONMATRIX_CTRL_NO_REPEAT);
+    else
+      lv_buttonmatrix_set_button_ctrl(keyboard, button_id, LV_BUTTONMATRIX_CTRL_NO_REPEAT);
+    ++button_id;
+  }
+}
+
+static void weather_keyboard_value_event(lv_event_t *e)
+{
+  // Reapply after a mode change because LVGL replaces the keyboard control map.
+  weather_keyboard_apply_repeat_policy((lv_obj_t *)lv_event_get_target(e));
+}
+
 static std::string weather_location_subtitle(const WeatherLocation &location)
 {
   std::string text;
@@ -951,6 +973,8 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_LOWER);
   lv_keyboard_set_popovers(kb, true);
+  weather_keyboard_apply_repeat_policy(kb);
+  lv_obj_add_event_cb(kb, weather_keyboard_value_event, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_READY, nullptr);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_CANCEL, nullptr);
