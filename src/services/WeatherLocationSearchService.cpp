@@ -1,6 +1,7 @@
 #include "services/WeatherLocationSearchService.h"
 
 #include "ui/UiTrace.h"
+#include "ui/AsciiFold.h"
 
 #include <ArduinoJson.h>
 #include <cctype>
@@ -10,7 +11,7 @@
 #if defined(ARDUINO)
 #include <Arduino.h>
 #include <HTTPClient.h>
-#include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -52,12 +53,14 @@ std::string url_encode(const std::string &text)
 
 bool fetch_search(const std::string &query, SearchResult &result)
 {
-    const std::string url = "https://geocoding-api.open-meteo.com/v1/search?name=" +
+    // This public, non-sensitive lookup is available directly over HTTP. On
+    // the original ESP32, avoiding TLS here saves the large temporary mbedTLS
+    // handshake allocation that otherwise competes with the Settings UI.
+    const std::string url = "http://geocoding-api.open-meteo.com/v1/search?name=" +
                             url_encode(query) + "&count=5&language=en&format=json";
     std::string payload;
 #if defined(ARDUINO)
-    WiFiClientSecure client;
-    client.setInsecure();
+    WiFiClient client;
     HTTPClient http;
     if (!http.begin(client, url.c_str())) {
         result.error = "Could not start lookup";
@@ -97,9 +100,9 @@ bool fetch_search(const std::string &query, SearchResult &result)
     JsonArray items = doc["results"].as<JsonArray>();
     for (JsonObject item : items) {
         WeatherLocation location;
-        location.name = item["name"].as<std::string>();
-        location.region = item["admin1"].as<std::string>();
-        location.country = item["country"].as<std::string>();
+        location.name = ascii_fold_latin(item["name"].as<std::string>());
+        location.region = ascii_fold_latin(item["admin1"].as<std::string>());
+        location.country = ascii_fold_latin(item["country"].as<std::string>());
         location.timezone = item["timezone"].as<std::string>();
         location.latitude = item["latitude"].as<double>();
         location.longitude = item["longitude"].as<double>();
