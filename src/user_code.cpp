@@ -41,6 +41,7 @@ class LGFX {
 #include "apps/SettingsApp.h"
 #include "apps/WeatherApp.h"
 #include "apps/WeatherIconTestApp.h"
+#include "assets/ThingPulseLogo.h"
 #include "services/ConfigStoreService.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
@@ -80,6 +81,55 @@ static uint8_t *draw_buf = nullptr;
 static size_t draw_buf_size = 0;
 static lv_obj_t *home_screen = nullptr;
 static bool restore_route_pending = true;
+
+static uint32_t splash_now_ms()
+{
+#if defined(ARDUINO)
+  return (uint32_t)millis();
+#elif defined(SDL_h_)
+  return SDL_GetTicks();
+#elif defined(ESP_PLATFORM)
+  return (uint32_t)(esp_timer_get_time() / 1000ULL);
+#else
+  return 0;
+#endif
+}
+
+static void show_splash_screen(uint32_t duration_ms)
+{
+  lv_obj_t *splash = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(splash, lv_color_hex(0x1e2030), 0);
+  lv_obj_set_style_bg_opa(splash, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(splash, 0, 0);
+  lv_obj_set_style_pad_all(splash, 0, 0);
+  lv_obj_clear_flag(splash, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *title = lv_label_create(splash);
+  lv_label_set_text(title, "Gadget OS by");
+  lv_obj_set_style_text_color(title, lv_color_white(), 0);
+  lv_obj_align(title, LV_ALIGN_CENTER, 0, -76);
+
+  lv_obj_t *logo = lv_image_create(splash);
+  lv_image_set_src(logo, &thingpulse_logo);
+  lv_obj_align(logo, LV_ALIGN_CENTER, 0, 18);
+
+  lv_screen_load(splash);
+  lv_refr_now(nullptr);
+
+  const uint32_t started_ms = splash_now_ms();
+  while ((uint32_t)(splash_now_ms() - started_ms) < duration_ms) {
+    lv_timer_handler();
+#if defined(SDL_h_)
+    SDL_Delay(5);
+#elif defined(ARDUINO)
+    delay(5);
+#endif
+  }
+
+  lv_obj_t *home = lv_obj_create(nullptr);
+  lv_screen_load(home);
+  lv_obj_delete(splash);
+}
 
 struct FlushPerfStats {
   uint32_t frame_start_ms = 0;
@@ -543,6 +593,7 @@ void setup(void)
 #endif
 
   UiSessionState::begin();
+  show_splash_screen(1000);
   create_home_screen();
 
   // Defer route restoration until first loop so home screen is fully ready

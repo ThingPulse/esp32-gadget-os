@@ -1,5 +1,6 @@
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"
+#include "SystemVersion.h"
 #include "services/ConfigStoreService.h"
 #include "services/PlanesService.h"
 #include "services/TimeService.h"
@@ -22,6 +23,7 @@
 #include <vector>
 
 #if defined(ARDUINO)
+#include <Esp.h>
 #include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <WiFi.h>
@@ -35,6 +37,122 @@ static lv_obj_t *route_restore_settings_screen = nullptr;
 
 static void configure_settings_keyboard(lv_obj_t *keyboard);
 static void settings_keyboard_value_event(lv_event_t *e);
+static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target, bool back_to_home);
+
+static void format_memory_size(char *buffer, size_t buffer_size, size_t bytes)
+{
+  if (bytes >= 1024U * 1024U)
+    std::snprintf(buffer, buffer_size, "%.1f MiB", (double)bytes / (1024.0 * 1024.0));
+  else
+    std::snprintf(buffer, buffer_size, "%.1f KiB", (double)bytes / 1024.0);
+}
+
+static void add_system_info_row(lv_obj_t *content, const char *name, const char *value)
+{
+  lv_obj_t *row = lv_obj_create(content);
+  lv_obj_set_size(row, lv_pct(100), 58);
+  lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(row, 0, 0);
+  lv_obj_set_style_radius(row, 10, 0);
+  lv_obj_set_style_pad_hor(row, 14, 0);
+  lv_obj_set_style_pad_ver(row, 7, 0);
+
+  lv_obj_t *name_label = lv_label_create(row);
+  lv_label_set_text(name_label, name);
+  lv_obj_set_style_text_color(name_label, lv_color_hex(0xadb5bd), 0);
+  lv_obj_align(name_label, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  lv_obj_t *value_label = lv_label_create(row);
+  lv_obj_set_width(value_label, lv_pct(100));
+  lv_label_set_long_mode(value_label, LV_LABEL_LONG_DOT);
+  lv_label_set_text(value_label, value);
+  lv_obj_set_style_text_color(value_label, lv_color_white(), 0);
+  lv_obj_align(value_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+}
+
+static void open_system_screen(lv_event_t *e)
+{
+  lv_obj_t *settings_scr = route_restore_settings_screen;
+  if (e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    settings_scr = (lv_obj_t *)lv_event_get_user_data(e);
+  }
+  if (!settings_scr || !lv_obj_is_valid(settings_scr)) return;
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(scr, 0, 0);
+  lv_obj_set_style_border_width(scr, 0, 0);
+  make_top_bar(scr, "System", settings_scr, false);
+
+  lv_obj_t *content = lv_obj_create(scr);
+  lv_obj_set_pos(content, 0, 44);
+  lv_obj_set_size(content, lv_pct(100), 480 - 44);
+  lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(content, 0, 0);
+  lv_obj_set_style_pad_all(content, 12, 0);
+  lv_obj_set_style_pad_row(content, 8, 0);
+  lv_obj_set_layout(content, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+
+  add_system_info_row(content, "Gadget OS version", GADGET_OS_VERSION);
+  add_system_info_row(content, "Build", __DATE__ " " __TIME__);
+
+  char value[96] = {0};
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+  std::snprintf(value, sizeof(value), "%s rev %u, %u cores @ %u MHz",
+                ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(),
+                (unsigned)ESP.getCpuFreqMHz());
+  add_system_info_row(content, "Hardware", value);
+  add_system_info_row(content, "ESP-IDF", ESP.getSdkVersion());
+
+  char free_size[20], total_size[20], extra_size[20];
+  format_memory_size(free_size, sizeof(free_size), ESP.getFreeHeap());
+  format_memory_size(total_size, sizeof(total_size), ESP.getHeapSize());
+  std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
+  add_system_info_row(content, "Internal heap", value);
+
+  format_memory_size(free_size, sizeof(free_size), ESP.getMaxAllocHeap());
+  format_memory_size(extra_size, sizeof(extra_size), ESP.getMinFreeHeap());
+  std::snprintf(value, sizeof(value), "%s largest / %s minimum free", free_size, extra_size);
+  add_system_info_row(content, "Internal heap health", value);
+
+  if (ESP.getPsramSize() > 0) {
+    format_memory_size(free_size, sizeof(free_size), ESP.getFreePsram());
+    format_memory_size(total_size, sizeof(total_size), ESP.getPsramSize());
+    std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
+  } else {
+    std::snprintf(value, sizeof(value), "Not available");
+  }
+  add_system_info_row(content, "PSRAM", value);
+
+  format_memory_size(free_size, sizeof(free_size), ESP.getSketchSize());
+  format_memory_size(total_size, sizeof(total_size), ESP.getFlashChipSize());
+  std::snprintf(value, sizeof(value), "%s firmware / %s flash", free_size, total_size);
+  add_system_info_row(content, "Flash", value);
+#else
+  add_system_info_row(content, "Hardware", "Native simulator");
+  add_system_info_row(content, "Framework", "Host build");
+#endif
+
+  lv_mem_monitor_t memory{};
+  lv_mem_monitor(&memory);
+  char lvgl_free[20], lvgl_total[20];
+  format_memory_size(lvgl_free, sizeof(lvgl_free), memory.free_size);
+  format_memory_size(lvgl_total, sizeof(lvgl_total), memory.total_size);
+  std::snprintf(value, sizeof(value), "%s free / %s total, %u%% used",
+                lvgl_free, lvgl_total, (unsigned)memory.used_pct);
+  add_system_info_row(content, "LVGL heap", value);
+
+  std::snprintf(value, sizeof(value), "%lu seconds", (unsigned long)(lv_tick_get() / 1000U));
+  add_system_info_row(content, "Uptime", value);
+
+  ui_load_screen(scr, false);
+  UiSessionState::set_route("settings_system");
+}
 
 static void nav_to_home_screen(lv_event_t *e)
 {
@@ -1405,13 +1523,36 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   /* Settings list */
   lv_obj_t *list = lv_obj_create(scr);
   lv_obj_set_pos(list, 0, 44);
-  lv_obj_set_size(list, lv_pct(100), LV_SIZE_CONTENT);
+  lv_obj_set_size(list, lv_pct(100), 480 - 44);
   lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(list, 0, 0);
   lv_obj_set_style_pad_all(list, 12, 0);
   lv_obj_set_style_pad_row(list, 8, 0);
   lv_obj_set_layout(list, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+
+  /* System row */
+  lv_obj_t *system_row = lv_obj_create(list);
+  lv_obj_set_size(system_row, lv_pct(100), 52);
+  lv_obj_clear_flag(system_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(system_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(system_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(system_row, 0, 0);
+  lv_obj_set_style_radius(system_row, 10, 0);
+  lv_obj_set_style_pad_hor(system_row, 16, 0);
+  lv_obj_set_style_pad_ver(system_row, 0, 0);
+  lv_obj_add_flag(system_row, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(system_row, open_system_screen, LV_EVENT_CLICKED, scr);
+
+  lv_obj_t *system_label = lv_label_create(system_row);
+  lv_label_set_text(system_label, LV_SYMBOL_SETTINGS "  System");
+  lv_obj_set_style_text_color(system_label, lv_color_white(), 0);
+  lv_obj_align(system_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t *system_chevron = lv_label_create(system_row);
+  lv_label_set_text(system_chevron, LV_SYMBOL_RIGHT);
+  lv_obj_set_style_text_color(system_chevron, lv_color_hex(0x888888), 0);
+  lv_obj_align(system_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
   /* WiFi row */
   lv_obj_t *row = lv_obj_create(list);
@@ -1545,7 +1686,9 @@ void settings_launch_with_route(const char *route)
     return;
   }
 
-  if (std::strcmp(route, "settings_wifi") == 0) {
+  if (std::strcmp(route, "settings_system") == 0) {
+    open_system_screen(nullptr);
+  } else if (std::strcmp(route, "settings_wifi") == 0) {
     open_wifi_screen(nullptr);
   } else if (std::strcmp(route, "settings_time") == 0) {
     open_time_screen(nullptr);
