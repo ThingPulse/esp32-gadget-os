@@ -33,6 +33,9 @@ APP_REGISTER_COLOR_RANK("Settings", LV_SYMBOL_SETTINGS, settings_launch, 0x49505
 
 static lv_obj_t *route_restore_settings_screen = nullptr;
 
+static void configure_settings_keyboard(lv_obj_t *keyboard);
+static void settings_keyboard_value_event(lv_event_t *e);
+
 static void nav_to_home_screen(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
@@ -450,13 +453,15 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, wifi_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, "Save & Back");
   lv_obj_center(save_label);
 
   /* On-screen keyboard — hidden until a textarea is focused */
   lv_obj_t *kb = lv_keyboard_create(scr);
   lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
   lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  configure_settings_keyboard(kb);
+  lv_obj_add_event_cb(kb, settings_keyboard_value_event, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(kb, wifi_kb_event, LV_EVENT_READY, nullptr);
   lv_obj_add_event_cb(kb, wifi_kb_event, LV_EVENT_CANCEL, nullptr);
@@ -619,7 +624,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, time_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, "Save & Back");
   lv_obj_center(save_label);
 
   time_ctx.settings_scr = settings_scr;
@@ -670,9 +675,10 @@ static void weather_kb_event(lv_event_t *e)
   }
 }
 
-static void weather_keyboard_apply_repeat_policy(lv_obj_t *keyboard)
+static void configure_settings_keyboard(lv_obj_t *keyboard)
 {
   if (!keyboard || !lv_obj_is_valid(keyboard)) return;
+  lv_keyboard_set_popovers(keyboard, true);
   const char * const *map = lv_buttonmatrix_get_map(keyboard);
   if (!map) return;
   uint32_t button_id = 0;
@@ -686,10 +692,10 @@ static void weather_keyboard_apply_repeat_policy(lv_obj_t *keyboard)
   }
 }
 
-static void weather_keyboard_value_event(lv_event_t *e)
+static void settings_keyboard_value_event(lv_event_t *e)
 {
   // Reapply after a mode change because LVGL replaces the keyboard control map.
-  weather_keyboard_apply_repeat_policy((lv_obj_t *)lv_event_get_target(e));
+  configure_settings_keyboard((lv_obj_t *)lv_event_get_target(e));
 }
 
 static std::string weather_location_subtitle(const WeatherLocation &location)
@@ -972,9 +978,8 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
   lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_LOWER);
-  lv_keyboard_set_popovers(kb, true);
-  weather_keyboard_apply_repeat_policy(kb);
-  lv_obj_add_event_cb(kb, weather_keyboard_value_event, LV_EVENT_VALUE_CHANGED, nullptr);
+  configure_settings_keyboard(kb);
+  lv_obj_add_event_cb(kb, settings_keyboard_value_event, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_READY, nullptr);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_CANCEL, nullptr);
@@ -1201,7 +1206,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, planes_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, "Save & Back");
   lv_obj_center(save_label);
 
   lv_obj_t *kb = lv_keyboard_create(scr);
@@ -1209,6 +1214,8 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_USER_1, weather_coord_kb_map, weather_coord_kb_ctrl);
   lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_USER_1);
+  configure_settings_keyboard(kb);
+  lv_obj_add_event_cb(kb, settings_keyboard_value_event, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(kb, planes_kb_event, LV_EVENT_READY, nullptr);
   lv_obj_add_event_cb(kb, planes_kb_event, LV_EVENT_CANCEL, nullptr);
@@ -1370,7 +1377,7 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, display_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save");
+  lv_label_set_text(save_label, "Save & Back");
   lv_obj_center(save_label);
 
   display_ctx.settings_scr = settings_scr;
