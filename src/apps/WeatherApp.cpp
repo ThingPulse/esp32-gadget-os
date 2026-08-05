@@ -496,15 +496,16 @@ void weather_app_launch(void)
   int active_location = 0;
   WeatherLocationStore::load(locations, active_location);
   lv_obj_t *location_selector = lv_obj_create(content);
-  lv_obj_set_size(location_selector, lv_pct(100), 32);
+  lv_obj_set_size(location_selector, lv_pct(100), 48);
   lv_obj_clear_flag(location_selector, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_opa(location_selector, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(location_selector, 0, 0);
   lv_obj_set_style_pad_all(location_selector, 0, 0);
 
   lv_obj_t *previous_location = lv_button_create(location_selector);
-  lv_obj_set_size(previous_location, 40, 30);
-  lv_obj_align(previous_location, LV_ALIGN_LEFT_MID, 0, 0);
+  lv_obj_set_size(previous_location, 56, 44);
+  lv_obj_align(previous_location, LV_ALIGN_LEFT_MID, 2, 0);
+  lv_obj_add_flag(previous_location, LV_OBJ_FLAG_PRESS_LOCK);
   lv_obj_add_event_cb(previous_location, weather_location_step_event, LV_EVENT_CLICKED,
                       (void *)(intptr_t)-1);
   lv_obj_t *previous_label = lv_label_create(previous_location);
@@ -512,7 +513,7 @@ void weather_app_launch(void)
   lv_obj_center(previous_label);
 
   lv_obj_t *location_name = lv_label_create(location_selector);
-  lv_obj_set_width(location_name, 184);
+  lv_obj_set_width(location_name, 160);
   lv_obj_set_style_text_align(location_name, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_long_mode(location_name, LV_LABEL_LONG_DOT);
   lv_obj_align(location_name, LV_ALIGN_CENTER, 0, 0);
@@ -522,8 +523,10 @@ void weather_app_launch(void)
                     locations.empty() ? "No saved location" : locations[active_location].name.c_str());
 
   lv_obj_t *next_location = lv_button_create(location_selector);
-  lv_obj_set_size(next_location, 40, 30);
-  lv_obj_align(next_location, LV_ALIGN_RIGHT_MID, 0, 0);
+  lv_obj_set_size(next_location, 56, 44);
+  // Keep the touch target away from the vertical scrollbar at the screen edge.
+  lv_obj_align(next_location, LV_ALIGN_RIGHT_MID, -6, 0);
+  lv_obj_add_flag(next_location, LV_OBJ_FLAG_PRESS_LOCK);
   lv_obj_add_event_cb(next_location, weather_location_step_event, LV_EVENT_CLICKED,
                       (void *)(intptr_t)1);
   lv_obj_t *next_label = lv_label_create(next_location);
