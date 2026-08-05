@@ -293,11 +293,20 @@ static void create_app_tile(lv_obj_t *grid, const App &app, int app_index)
   lv_obj_add_event_cb(icon_btn, app_icon_clicked, LV_EVENT_CLICKED,
                       (void *)(intptr_t)app_index);
 
-  lv_obj_t *icon_label = lv_label_create(icon_btn);
-  lv_label_set_text(icon_label, app.symbol);
-  lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_24, 0);
-  lv_obj_set_style_text_color(icon_label, lv_color_white(), 0);
-  lv_obj_center(icon_label);
+  if (app.icon_create) {
+    lv_obj_t *custom_icon = app.icon_create(icon_btn, 40);
+    if (custom_icon) {
+      // Decorative icon children must not consume the button's pointer events.
+      lv_obj_clear_flag(custom_icon, LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_center(custom_icon);
+    }
+  } else {
+    lv_obj_t *icon_label = lv_label_create(icon_btn);
+    lv_label_set_text(icon_label, app.symbol ? app.symbol : "");
+    lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(icon_label, lv_color_white(), 0);
+    lv_obj_center(icon_label);
+  }
 
   lv_obj_t *name_label = lv_label_create(tile);
   lv_label_set_text(name_label, app.name);

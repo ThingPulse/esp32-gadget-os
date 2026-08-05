@@ -15,7 +15,15 @@
 #include <string>
 #include <vector>
 
-APP_REGISTER_COLOR_RANK("Weather", LV_SYMBOL_EYE_OPEN, weather_app_launch, 0x339af0, 10);
+static lv_obj_t *weather_launcher_icon_create(lv_obj_t *parent, lv_coord_t size)
+{
+  lv_obj_t *icon = weather_icon_create_lightweight(parent, WeatherIconKind::Clear, size);
+  if (icon) lv_obj_set_style_text_color(icon, lv_color_white(), 0);
+  return icon;
+}
+
+APP_REGISTER_CUSTOM_ICON_COLOR_RANK("Weather", weather_launcher_icon_create,
+                                    weather_app_launch, 0x339af0, 10);
 
 namespace {
 
@@ -40,11 +48,12 @@ struct WeatherAppCtx {
   lv_obj_t *wind_card_speed_label = nullptr;
   lv_obj_t *wind_card_dir_label = nullptr;
   lv_obj_t *wind_rose_marker = nullptr;
-  lv_obj_t *refresh_btn = nullptr;
+  lv_obj_t *pull_indicator = nullptr;
   lv_obj_t *loading_line = nullptr;
   lv_timer_t *refresh_timer = nullptr;
   unsigned long weather_revision = 0;
   bool was_fetching = false;
+  bool pull_armed = false;
   bool compact_list_icons = false;
   bool closing = false;
 };
@@ -325,17 +334,17 @@ static void weather_app_timer_cb(lv_timer_t *timer)
   app_ctx.was_fetching = fetching;
 }
 
-static void weather_app_refresh_event(lv_event_t *e)
+static void weather_app_start_refresh(const char *source)
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   if (app_ctx.closing) return;
+  WeatherService &weather = WeatherService::instance();
+  if (weather.is_fetching()) return;
 
-  UI_TRACE("Weather", "refresh clicked");
+  UI_TRACE("Weather", "refresh requested source=%s", source ? source : "unknown");
 
   if (app_ctx.condition_label && lv_obj_is_valid(app_ctx.condition_label))
     lv_label_set_text(app_ctx.condition_label, "Refreshing...");
 
-  WeatherService &weather = WeatherService::instance();
   weather.refresh_now();
   app_ctx.was_fetching = weather.is_fetching();
   if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
@@ -350,6 +359,39 @@ static void weather_app_refresh_event(lv_event_t *e)
   if (!app_ctx.was_fetching) {
     weather_app_update_ui();
     app_ctx.weather_revision = weather.data_revision();
+  }
+}
+
+static void weather_pull_to_refresh_event(lv_event_t *e)
+{
+  static constexpr int32_t PULL_SHOW_PX = 8;
+  static constexpr int32_t PULL_TRIGGER_PX = 56;
+
+  lv_obj_t *content = (lv_obj_t *)lv_event_get_target(e);
+  if (!content || app_ctx.closing) return;
+
+  const lv_event_code_t code = lv_event_get_code(e);
+  if (code == LV_EVENT_SCROLL) {
+    const int32_t scroll_y = lv_obj_get_scroll_y(content);
+    const int32_t pull = scroll_y < 0 ? -scroll_y : 0;
+    if (WeatherService::instance().is_fetching()) return;
+
+    if (pull >= PULL_TRIGGER_PX) app_ctx.pull_armed = true;
+    if (app_ctx.pull_indicator && lv_obj_is_valid(app_ctx.pull_indicator)) {
+      if (pull >= PULL_SHOW_PX || app_ctx.pull_armed) {
+        lv_label_set_text(app_ctx.pull_indicator,
+                          app_ctx.pull_armed ? "Release to refresh" : "Pull to refresh");
+        lv_obj_clear_flag(app_ctx.pull_indicator, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(app_ctx.pull_indicator, LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+  } else if (code == LV_EVENT_SCROLL_END) {
+    const bool refresh = app_ctx.pull_armed;
+    app_ctx.pull_armed = false;
+    if (app_ctx.pull_indicator && lv_obj_is_valid(app_ctx.pull_indicator))
+      lv_obj_add_flag(app_ctx.pull_indicator, LV_OBJ_FLAG_HIDDEN);
+    if (refresh) weather_app_start_refresh("pull");
   }
 }
 
@@ -448,15 +490,6 @@ void weather_app_launch(void)
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
 
-  lv_obj_t *refresh_btn = lv_button_create(bar);
-  lv_obj_set_size(refresh_btn, 74, 32);
-  lv_obj_align(refresh_btn, LV_ALIGN_RIGHT_MID, -34, 0);
-  lv_obj_add_event_cb(refresh_btn, weather_app_refresh_event, LV_EVENT_CLICKED, nullptr);
-
-  lv_obj_t *refresh_lbl = lv_label_create(refresh_btn);
-  lv_label_set_text(refresh_lbl, "Refresh");
-  lv_obj_center(refresh_lbl);
-
   create_time_status_label(bar, 56);
   create_wifi_status_icon(bar, -6);
 
@@ -491,6 +524,7 @@ void weather_app_launch(void)
   lv_obj_set_style_pad_row(content, 8, 0);
   lv_obj_set_layout(content, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+  lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
   std::vector<WeatherLocation> locations;
   int active_location = 0;
@@ -794,6 +828,17 @@ void weather_app_launch(void)
   lv_obj_set_style_radius(wind_rose_marker, LV_RADIUS_CIRCLE, 0);
   update_wind_rose_marker(wind_rose_marker, 0.0f);
 
+  lv_obj_t *pull_indicator = lv_label_create(scr);
+  lv_label_set_text(pull_indicator, "Pull to refresh");
+  lv_obj_set_style_text_color(pull_indicator, lv_color_hex(0xd7dde6), 0);
+  lv_obj_set_style_bg_color(pull_indicator, lv_color_hex(0x14162a), 0);
+  lv_obj_set_style_bg_opa(pull_indicator, LV_OPA_80, 0);
+  lv_obj_set_style_pad_hor(pull_indicator, 10, 0);
+  lv_obj_set_style_pad_ver(pull_indicator, 4, 0);
+  lv_obj_set_style_radius(pull_indicator, LV_RADIUS_CIRCLE, 0);
+  lv_obj_align(pull_indicator, LV_ALIGN_TOP_MID, 0, 50);
+  lv_obj_add_flag(pull_indicator, LV_OBJ_FLAG_HIDDEN);
+
   app_ctx.screen = scr;
   app_ctx.date_label = date_label;
   app_ctx.current_icon = current_icon;
@@ -806,9 +851,11 @@ void weather_app_launch(void)
   app_ctx.wind_card_speed_label = wind_card_speed_label;
   app_ctx.wind_card_dir_label = wind_card_dir_label;
   app_ctx.wind_rose_marker = wind_rose_marker;
-  app_ctx.refresh_btn = refresh_btn;
+  app_ctx.pull_indicator = pull_indicator;
   app_ctx.loading_line = loading_line;
   app_ctx.refresh_timer = lv_timer_create(weather_app_timer_cb, 100, nullptr);
+  lv_obj_add_event_cb(content, weather_pull_to_refresh_event, LV_EVENT_SCROLL, nullptr);
+  lv_obj_add_event_cb(content, weather_pull_to_refresh_event, LV_EVENT_SCROLL_END, nullptr);
 
   WeatherService::instance().resume();
   app_ctx.was_fetching = WeatherService::instance().is_fetching();

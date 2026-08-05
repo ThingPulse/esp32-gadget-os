@@ -252,7 +252,7 @@ void lightweight_icon_draw(lv_event_t *e)
         const lv_coord_t c = s / 2;
         const lv_coord_t r = s / 6;
         const lv_coord_t ray = s * 2 / 5;
-        const lv_color_t sun = lv_color_hex(0xf4c542);
+        const lv_color_t sun = lv_obj_get_style_text_color(obj, LV_PART_MAIN);
         light_rect(layer, x + c - r, y + c - r, r * 2, r * 2, sun, true);
         static const int8_t dx[] = {0, 7, 10, 7, 0, -7, -10, -7};
         static const int8_t dy[] = {-10, -7, 0, 7, 10, 7, 0, -7};
@@ -300,6 +300,8 @@ lv_obj_t *weather_icon_create_lightweight(lv_obj_t *parent, WeatherIconKind kind
 void weather_icon_update_lightweight(lv_obj_t *icon_root, WeatherIconKind kind, lv_coord_t size)
 {
     if (!icon_root || !lv_obj_is_valid(icon_root)) return;
+    if (kind == WeatherIconKind::Clear)
+        lv_obj_set_style_text_color(icon_root, lv_color_hex(0xf4c542), 0);
     lv_obj_set_user_data(icon_root, reinterpret_cast<void *>(static_cast<intptr_t>(kind) + 1));
     lv_obj_set_size(icon_root, size, size);
     lv_obj_invalidate(icon_root);
