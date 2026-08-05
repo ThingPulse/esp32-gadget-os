@@ -9,10 +9,43 @@
 
 struct WifiIconCtx {
     lv_obj_t *label;
+    bool pulse_running;
     SubscriptionId connecting_sub;
     SubscriptionId connected_sub;
     SubscriptionId disconnected_sub;
 };
+
+static void set_wifi_icon_opacity(void *object, int32_t value)
+{
+    lv_obj_set_style_text_opa(static_cast<lv_obj_t *>(object), static_cast<lv_opa_t>(value), 0);
+}
+
+static void stop_wifi_pulse(WifiIconCtx *ctx)
+{
+    if (!ctx || !ctx->label)
+        return;
+
+    lv_anim_delete(ctx->label, set_wifi_icon_opacity);
+    lv_obj_set_style_text_opa(ctx->label, LV_OPA_COVER, 0);
+    ctx->pulse_running = false;
+}
+
+static void start_wifi_pulse(WifiIconCtx *ctx)
+{
+    if (!ctx || !ctx->label || ctx->pulse_running)
+        return;
+
+    lv_anim_t animation;
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, ctx->label);
+    lv_anim_set_exec_cb(&animation, set_wifi_icon_opacity);
+    lv_anim_set_values(&animation, LV_OPA_COVER, LV_OPA_30);
+    lv_anim_set_duration(&animation, 450);
+    lv_anim_set_playback_duration(&animation, 450);
+    lv_anim_set_repeat_count(&animation, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_start(&animation);
+    ctx->pulse_running = true;
+}
 
 static void wifi_ctx_delete_async(void *user_data)
 {
@@ -20,20 +53,25 @@ static void wifi_ctx_delete_async(void *user_data)
     delete ctx;
 }
 
-static void update_wifi_icon(lv_obj_t *label)
+static void update_wifi_icon(WifiIconCtx *ctx)
 {
+    lv_obj_t *label = ctx ? ctx->label : nullptr;
     if (!label || !lv_obj_is_valid(label))
         return;
 
     WifiService &wifi = WifiService::instance();
     lv_label_set_text(label, LV_SYMBOL_WIFI);
 
-    if (wifi.is_connected())
+    if (wifi.is_connected()) {
+        stop_wifi_pulse(ctx);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
-    else if (wifi.is_connecting())
+    } else if (wifi.is_connecting()) {
         lv_obj_set_style_text_color(label, lv_color_hex(0xd9a441), 0);
-    else
+        start_wifi_pulse(ctx);
+    } else {
+        stop_wifi_pulse(ctx);
         lv_obj_set_style_text_color(label, lv_color_hex(0x666666), 0);
+    }
 }
 
 static void wifi_status_event(const SystemEvent &event, void *user_data)
@@ -43,7 +81,7 @@ static void wifi_status_event(const SystemEvent &event, void *user_data)
     if (!ctx)
         return;
 
-    update_wifi_icon(ctx->label);
+    update_wifi_icon(ctx);
 }
 
 static void wifi_icon_deleted(lv_event_t *e)
@@ -55,6 +93,7 @@ static void wifi_icon_deleted(lv_event_t *e)
     EventBus::instance().unsubscribe(ctx->connecting_sub);
     EventBus::instance().unsubscribe(ctx->connected_sub);
     EventBus::instance().unsubscribe(ctx->disconnected_sub);
+    stop_wifi_pulse(ctx);
     ctx->label = nullptr;
     lv_async_call(wifi_ctx_delete_async, ctx);
 }
@@ -71,7 +110,7 @@ lv_obj_t *create_wifi_status_icon(lv_obj_t *parent, lv_coord_t x_offset)
     ctx->disconnected_sub = EventBus::instance().subscribe(EventType::WifiDisconnected, wifi_status_event, ctx);
 
     lv_obj_add_event_cb(label, wifi_icon_deleted, LV_EVENT_DELETE, ctx);
-    update_wifi_icon(label);
+    update_wifi_icon(ctx);
     return label;
 }
 
