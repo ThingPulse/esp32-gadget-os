@@ -47,10 +47,11 @@ static void format_memory_size(char *buffer, size_t buffer_size, size_t bytes)
     std::snprintf(buffer, buffer_size, "%.1f KiB", (double)bytes / 1024.0);
 }
 
-static void add_system_info_row(lv_obj_t *content, const char *name, const char *value)
+static lv_obj_t *add_system_info_row(lv_obj_t *content, const char *name, const char *value)
 {
   lv_obj_t *row = lv_obj_create(content);
-  lv_obj_set_size(row, lv_pct(100), 58);
+  // Leave enough vertical room when a longer value wraps to two lines.
+  lv_obj_set_size(row, lv_pct(100), 76);
   lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(row, lv_color_hex(0x2a2d42), 0);
   lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
@@ -70,6 +71,67 @@ static void add_system_info_row(lv_obj_t *content, const char *name, const char 
   lv_label_set_text(value_label, value);
   lv_obj_set_style_text_color(value_label, lv_color_white(), 0);
   lv_obj_align(value_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+
+  return value_label;
+}
+
+struct SystemInfoRefreshContext {
+  lv_timer_t *timer = nullptr;
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+  lv_obj_t *internal_heap = nullptr;
+  lv_obj_t *internal_heap_health = nullptr;
+  lv_obj_t *psram = nullptr;
+#endif
+  lv_obj_t *lvgl_heap = nullptr;
+  lv_obj_t *uptime = nullptr;
+};
+
+static void refresh_system_info(lv_timer_t *timer)
+{
+  auto *context = static_cast<SystemInfoRefreshContext *>(lv_timer_get_user_data(timer));
+  if (!context) return;
+
+  char value[96] = {0};
+  char free_size[20], total_size[20], extra_size[20];
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+  format_memory_size(free_size, sizeof(free_size), ESP.getFreeHeap());
+  format_memory_size(total_size, sizeof(total_size), ESP.getHeapSize());
+  std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
+  lv_label_set_text(context->internal_heap, value);
+
+  format_memory_size(free_size, sizeof(free_size), ESP.getMaxAllocHeap());
+  format_memory_size(extra_size, sizeof(extra_size), ESP.getMinFreeHeap());
+  std::snprintf(value, sizeof(value), "%s largest / %s minimum free", free_size, extra_size);
+  lv_label_set_text(context->internal_heap_health, value);
+
+  if (ESP.getPsramSize() > 0) {
+    format_memory_size(free_size, sizeof(free_size), ESP.getFreePsram());
+    format_memory_size(total_size, sizeof(total_size), ESP.getPsramSize());
+    std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
+  } else {
+    std::snprintf(value, sizeof(value), "Not available");
+  }
+  lv_label_set_text(context->psram, value);
+#endif
+
+  lv_mem_monitor_t memory{};
+  lv_mem_monitor(&memory);
+  format_memory_size(free_size, sizeof(free_size), memory.free_size);
+  format_memory_size(total_size, sizeof(total_size), memory.total_size);
+  std::snprintf(value, sizeof(value), "%s free / %s total, %u%% used",
+                free_size, total_size, (unsigned)memory.used_pct);
+  lv_label_set_text(context->lvgl_heap, value);
+
+  std::snprintf(value, sizeof(value), "%lu seconds", (unsigned long)(lv_tick_get() / 1000U));
+  lv_label_set_text(context->uptime, value);
+}
+
+static void delete_system_info_timer(lv_event_t *event)
+{
+  auto *context = static_cast<SystemInfoRefreshContext *>(lv_event_get_user_data(event));
+  if (!context) return;
+  if (context->timer) lv_timer_delete(context->timer);
+  delete context;
 }
 
 static void open_system_screen(lv_event_t *e)
@@ -101,6 +163,8 @@ static void open_system_screen(lv_event_t *e)
   add_system_info_row(content, "Gadget OS version", GADGET_OS_VERSION);
   add_system_info_row(content, "Build", __DATE__ " " __TIME__);
 
+  auto *refresh_context = new SystemInfoRefreshContext();
+
   char value[96] = {0};
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
   std::snprintf(value, sizeof(value), "%s rev %u, %u cores @ %u MHz",
@@ -113,12 +177,12 @@ static void open_system_screen(lv_event_t *e)
   format_memory_size(free_size, sizeof(free_size), ESP.getFreeHeap());
   format_memory_size(total_size, sizeof(total_size), ESP.getHeapSize());
   std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
-  add_system_info_row(content, "Internal heap", value);
+  refresh_context->internal_heap = add_system_info_row(content, "Internal heap", value);
 
   format_memory_size(free_size, sizeof(free_size), ESP.getMaxAllocHeap());
   format_memory_size(extra_size, sizeof(extra_size), ESP.getMinFreeHeap());
   std::snprintf(value, sizeof(value), "%s largest / %s minimum free", free_size, extra_size);
-  add_system_info_row(content, "Internal heap health", value);
+  refresh_context->internal_heap_health = add_system_info_row(content, "Internal heap health", value);
 
   if (ESP.getPsramSize() > 0) {
     format_memory_size(free_size, sizeof(free_size), ESP.getFreePsram());
@@ -127,7 +191,7 @@ static void open_system_screen(lv_event_t *e)
   } else {
     std::snprintf(value, sizeof(value), "Not available");
   }
-  add_system_info_row(content, "PSRAM", value);
+  refresh_context->psram = add_system_info_row(content, "PSRAM", value);
 
   format_memory_size(free_size, sizeof(free_size), ESP.getSketchSize());
   format_memory_size(total_size, sizeof(total_size), ESP.getFlashChipSize());
@@ -145,10 +209,13 @@ static void open_system_screen(lv_event_t *e)
   format_memory_size(lvgl_total, sizeof(lvgl_total), memory.total_size);
   std::snprintf(value, sizeof(value), "%s free / %s total, %u%% used",
                 lvgl_free, lvgl_total, (unsigned)memory.used_pct);
-  add_system_info_row(content, "LVGL heap", value);
+  refresh_context->lvgl_heap = add_system_info_row(content, "LVGL heap", value);
 
   std::snprintf(value, sizeof(value), "%lu seconds", (unsigned long)(lv_tick_get() / 1000U));
-  add_system_info_row(content, "Uptime", value);
+  refresh_context->uptime = add_system_info_row(content, "Uptime", value);
+
+  refresh_context->timer = lv_timer_create(refresh_system_info, 1000, refresh_context);
+  lv_obj_add_event_cb(scr, delete_system_info_timer, LV_EVENT_DELETE, refresh_context);
 
   ui_load_screen(scr, false);
   UiSessionState::set_route("settings_system");

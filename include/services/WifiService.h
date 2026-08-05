@@ -23,10 +23,14 @@ private:
     };
 
     bool connect_with_credentials(const std::string &ssid, const std::string &password);
+    void start_connection();
+    void schedule_retry();
     void set_state(State next_state);
 
     State _state = State::Disconnected;
     std::string _ssid;
     std::string _password;
     unsigned long _connect_started_ms = 0;
+    unsigned long _retry_at_ms = 0;
+    unsigned long _retry_delay_ms = 5000;
 };

@@ -19,6 +19,9 @@
 namespace {
 
 constexpr const char *NTP_SERVER = "pool.ntp.org";
+constexpr unsigned long NTP_TIMEOUT_MS = 15000;
+constexpr unsigned long NTP_RETRY_INITIAL_MS = 30000;
+constexpr unsigned long NTP_RETRY_MAX_MS = 300000;
 
 struct TimezoneEntry {
     const char *name;
@@ -147,8 +150,12 @@ bool TimeService::begin()
 
 void TimeService::loop()
 {
-    if (!_sync_in_progress)
+    if (!_sync_in_progress) {
+        if (!_synchronized && WifiService::instance().is_connected() && _retry_at_ms != 0 &&
+            static_cast<long>(now_ms() - _retry_at_ms) >= 0)
+            start_sync();
         return;
+    }
 
 #if defined(ARDUINO)
     time_t now = time(nullptr);
@@ -157,8 +164,15 @@ void TimeService::loop()
         return;
     }
 
-    if (now_ms() - _sync_start_ms > 15000)
+    if (now_ms() - _sync_start_ms > NTP_TIMEOUT_MS) {
         _sync_in_progress = false;
+        _retry_at_ms = now_ms() + _retry_delay_ms;
+        if (_retry_delay_ms < NTP_RETRY_MAX_MS) {
+            _retry_delay_ms *= 2;
+            if (_retry_delay_ms > NTP_RETRY_MAX_MS)
+                _retry_delay_ms = NTP_RETRY_MAX_MS;
+        }
+    }
 #else
     if (now_ms() - _sync_start_ms > 1500)
         finish_sync();
@@ -322,14 +336,17 @@ void TimeService::on_wifi_connected(const SystemEvent &event, void *user_data)
 {
     (void)event;
     TimeService *self = static_cast<TimeService *>(user_data);
-    if (self)
+    if (self) {
+        self->_retry_delay_ms = NTP_RETRY_INITIAL_MS;
         self->start_sync();
+    }
 }
 
 void TimeService::start_sync()
 {
     _sync_in_progress = true;
     _sync_start_ms = now_ms();
+    _retry_at_ms = 0;
 
 #if defined(ARDUINO)
     configTzTime(TIMEZONES[_timezone_index].posix_tz, NTP_SERVER);
@@ -339,6 +356,8 @@ void TimeService::start_sync()
 void TimeService::finish_sync()
 {
     _sync_in_progress = false;
+    _retry_at_ms = 0;
+    _retry_delay_ms = NTP_RETRY_INITIAL_MS;
     if (_synchronized)
         return;
 

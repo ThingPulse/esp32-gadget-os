@@ -12,6 +12,10 @@
 
 namespace {
 
+constexpr unsigned long CONNECT_TIMEOUT_MS = 15000;
+constexpr unsigned long RETRY_INITIAL_MS = 5000;
+constexpr unsigned long RETRY_MAX_MS = 60000;
+
 unsigned long now_ms()
 {
 #if defined(ARDUINO)
@@ -37,19 +41,35 @@ bool WifiService::begin()
 
 void WifiService::loop()
 {
-    if (_state != State::Connecting)
-        return;
-
 #if defined(ARDUINO)
-    if (WiFi.status() == WL_CONNECTED) {
+    const wl_status_t wifi_status = WiFi.status();
+    if (wifi_status == WL_CONNECTED) {
+        _retry_delay_ms = RETRY_INITIAL_MS;
+        _retry_at_ms = 0;
         set_state(State::Connected);
         return;
     }
 
-    if (now_ms() - _connect_started_ms > 15000)
+    if (_state == State::Connected) {
         set_state(State::Disconnected);
+        schedule_retry();
+        return;
+    }
+
+    if (_state == State::Connecting) {
+        if (now_ms() - _connect_started_ms > CONNECT_TIMEOUT_MS) {
+            WiFi.disconnect(false);
+            set_state(State::Disconnected);
+            schedule_retry();
+        }
+        return;
+    }
+
+    if (!_ssid.empty() && _retry_at_ms != 0 &&
+        static_cast<long>(now_ms() - _retry_at_ms) >= 0)
+        start_connection();
 #else
-    if (now_ms() - _connect_started_ms > 2000)
+    if (_state == State::Connecting && now_ms() - _connect_started_ms > 2000)
         set_state(State::Connected);
 #endif
 }
@@ -78,17 +98,36 @@ bool WifiService::connect_with_credentials(const std::string &ssid, const std::s
         WiFi.disconnect();
 #endif
         set_state(State::Disconnected);
+        _retry_at_ms = 0;
         return false;
     }
 
+    _retry_delay_ms = RETRY_INITIAL_MS;
+    start_connection();
+    return true;
+}
+
+void WifiService::start_connection()
+{
 #if defined(ARDUINO)
     WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(_ssid.c_str(), _password.c_str());
 #endif
 
+    _retry_at_ms = 0;
     _connect_started_ms = now_ms();
     set_state(State::Connecting);
-    return true;
+}
+
+void WifiService::schedule_retry()
+{
+    _retry_at_ms = now_ms() + _retry_delay_ms;
+    if (_retry_delay_ms < RETRY_MAX_MS) {
+        _retry_delay_ms *= 2;
+        if (_retry_delay_ms > RETRY_MAX_MS)
+            _retry_delay_ms = RETRY_MAX_MS;
+    }
 }
 
 void WifiService::set_state(State next_state)

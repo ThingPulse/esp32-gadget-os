@@ -40,6 +40,8 @@ private:
     bool _sync_in_progress = false;
     bool _synchronized = false;
     unsigned long _sync_start_ms = 0;
+    unsigned long _retry_at_ms = 0;
+    unsigned long _retry_delay_ms = 30000;
     SubscriptionId _wifi_connected_sub = 0;
     int _timezone_index = 0;
     bool _use_24h = true;
