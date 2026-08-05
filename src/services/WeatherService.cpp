@@ -3,6 +3,7 @@
 #include "EventBus.h"
 #include "services/ConfigStoreService.h"
 #include "services/TimeService.h"
+#include "services/WeatherLocationStore.h"
 #include "services/WifiService.h"
 
 #include <ArduinoJson.h>
@@ -117,18 +118,15 @@ bool WeatherService::reload_from_config()
     }
 
     cfg.load("weather");
-    std::string lat = cfg.get("latitude", "");
-    std::string lon = cfg.get("longitude", "");
     _metric = cfg.get_bool("metric", true);
-
-    if (lat.empty() || lon.empty()) {
+    WeatherLocation location;
+    if (!WeatherLocationStore::active(location)) {
         _configured = false;
         clear_weather();
         return false;
     }
-
-    _latitude = std::strtod(lat.c_str(), nullptr);
-    _longitude = std::strtod(lon.c_str(), nullptr);
+    _latitude = location.latitude;
+    _longitude = location.longitude;
     _configured = true;
 
     if (_enabled && is_wifi_connected())

@@ -1,0 +1,205 @@
+#include "services/WeatherLocationSearchService.h"
+
+#include "ui/UiTrace.h"
+
+#include <ArduinoJson.h>
+#include <cctype>
+#include <cstdio>
+#include <new>
+
+#if defined(ARDUINO)
+#include <Arduino.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
+#else
+#include <mutex>
+#include <thread>
+#endif
+
+namespace {
+
+struct SearchResult {
+    bool ok = false;
+    std::vector<WeatherLocation> locations;
+    std::string error;
+};
+
+#if defined(ARDUINO)
+QueueHandle_t result_queue = nullptr;
+#else
+std::mutex result_mutex;
+SearchResult *pending_result = nullptr;
+#endif
+
+std::string url_encode(const std::string &text)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    std::string out;
+    for (unsigned char ch : text) {
+        if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.') out.push_back((char)ch);
+        else if (ch == ' ') out.push_back('+');
+        else {
+            out.push_back('%');
+            out.push_back(hex[ch >> 4]);
+            out.push_back(hex[ch & 15]);
+        }
+    }
+    return out;
+}
+
+bool fetch_search(const std::string &query, SearchResult &result)
+{
+    const std::string url = "https://geocoding-api.open-meteo.com/v1/search?name=" +
+                            url_encode(query) + "&count=5&language=en&format=json";
+    std::string payload;
+#if defined(ARDUINO)
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    if (!http.begin(client, url.c_str())) {
+        result.error = "Could not start lookup";
+        return false;
+    }
+    http.setConnectTimeout(5000);
+    http.setTimeout(8000);
+    http.addHeader("User-Agent", "esp32-gadget-os/1.0");
+    const int code = http.GET();
+    if (code != HTTP_CODE_OK) {
+        result.error = "Lookup HTTP error";
+        http.end();
+        return false;
+    }
+    payload = http.getString().c_str();
+    http.end();
+#else
+    const std::string command = "curl -sS -L --max-time 8 \"" + url + "\"";
+    FILE *pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        result.error = "Could not start lookup";
+        return false;
+    }
+    char buffer[512];
+    while (fgets(buffer, sizeof(buffer), pipe)) payload += buffer;
+    if (pclose(pipe) != 0 || payload.empty()) {
+        result.error = "Lookup request failed";
+        return false;
+    }
+#endif
+
+    JsonDocument doc;
+    if (deserializeJson(doc, payload.c_str(), payload.size()) != DeserializationError::Ok) {
+        result.error = "Invalid lookup response";
+        return false;
+    }
+    JsonArray items = doc["results"].as<JsonArray>();
+    for (JsonObject item : items) {
+        WeatherLocation location;
+        location.name = item["name"].as<std::string>();
+        location.region = item["admin1"].as<std::string>();
+        location.country = item["country"].as<std::string>();
+        location.timezone = item["timezone"].as<std::string>();
+        location.latitude = item["latitude"].as<double>();
+        location.longitude = item["longitude"].as<double>();
+        if (!location.name.empty()) result.locations.push_back(location);
+    }
+    if (result.locations.empty()) {
+        result.error = "No matching locations";
+        return false;
+    }
+    result.ok = true;
+    return true;
+}
+
+}  // namespace
+
+WeatherLocationSearchService &WeatherLocationSearchService::instance()
+{
+    static WeatherLocationSearchService service;
+    return service;
+}
+
+bool WeatherLocationSearchService::begin()
+{
+#if defined(ARDUINO)
+    if (!result_queue) result_queue = xQueueCreate(1, sizeof(SearchResult *));
+    return result_queue != nullptr;
+#else
+    return true;
+#endif
+}
+
+void WeatherLocationSearchService::loop()
+{
+    process_result();
+}
+
+bool WeatherLocationSearchService::search(const std::string &query)
+{
+    if (_fetching || query.size() < 2) return false;
+    _pending_query = query;
+    _error.clear();
+    _results.clear();
+    return start_fetch(query);
+}
+
+bool WeatherLocationSearchService::start_fetch(const std::string &query)
+{
+    _fetching = true;
+#if defined(ARDUINO)
+    BaseType_t created = xTaskCreate(task_entry, "weather_places", 8192, this, 1, nullptr);
+    if (created != pdPASS) {
+        _fetching = false;
+        _error = "Could not start lookup";
+        return false;
+    }
+#else
+    std::thread([this, query]() {
+        SearchResult *result = new (std::nothrow) SearchResult{};
+        if (result) fetch_search(query, *result);
+        std::lock_guard<std::mutex> lock(result_mutex);
+        delete pending_result;
+        pending_result = result;
+    }).detach();
+#endif
+    return true;
+}
+
+#if defined(ARDUINO)
+void WeatherLocationSearchService::task_entry(void *user_data)
+{
+    WeatherLocationSearchService *self = static_cast<WeatherLocationSearchService *>(user_data);
+    SearchResult *result = new (std::nothrow) SearchResult{};
+    if (result) fetch_search(self->_pending_query, *result);
+    if (!result || xQueueSend(result_queue, &result, 0) != pdTRUE) {
+        delete result;
+        self->_fetching = false;
+    }
+    vTaskDelete(nullptr);
+}
+#endif
+
+void WeatherLocationSearchService::process_result()
+{
+    SearchResult *result = nullptr;
+#if defined(ARDUINO)
+    if (!result_queue || xQueueReceive(result_queue, &result, 0) != pdTRUE) return;
+#else
+    {
+        std::lock_guard<std::mutex> lock(result_mutex);
+        result = pending_result;
+        pending_result = nullptr;
+    }
+    if (!result) return;
+#endif
+    _fetching = false;
+    if (result->ok) _results.swap(result->locations);
+    else _error = result->error.empty() ? "Location lookup failed" : result->error;
+    ++_revision;
+    UI_TRACE("Weather", "location search complete results=%u", (unsigned)_results.size());
+    delete result;
+}
+
+SERVICE_REGISTER(WeatherLocationSearchService);

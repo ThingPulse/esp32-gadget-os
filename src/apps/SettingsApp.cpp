@@ -4,6 +4,8 @@
 #include "services/PlanesService.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
+#include "services/WeatherLocationSearchService.h"
+#include "services/WeatherLocationStore.h"
 #include "services/WifiService.h"
 #include "ui/UiNav.h"
 #include "ui/UiSessionState.h"
@@ -14,7 +16,10 @@
 #include <lvgl.h>
 
 #include <cstdio>
+#include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <vector>
 
 #if defined(ARDUINO)
 #include <HTTPClient.h>
@@ -120,6 +125,16 @@ struct WeatherCtx {
   lv_obj_t *lon_input;
   lv_obj_t *unit_switch;
   lv_obj_t *guess_result_label;
+  lv_obj_t *search_input;
+  lv_obj_t *search_status;
+  lv_obj_t *saved_rows[WeatherLocationStore::MAX_LOCATIONS]{};
+  lv_obj_t *saved_labels[WeatherLocationStore::MAX_LOCATIONS]{};
+  lv_obj_t *result_buttons[WeatherLocationStore::MAX_LOCATIONS]{};
+  lv_obj_t *result_labels[WeatherLocationStore::MAX_LOCATIONS]{};
+  lv_timer_t *search_timer = nullptr;
+  unsigned long search_revision = 0;
+  std::vector<WeatherLocation> locations;
+  int active_index = 0;
 };
 static WeatherCtx weather_ctx;
 
@@ -655,14 +670,139 @@ static void weather_kb_event(lv_event_t *e)
   }
 }
 
+static std::string weather_location_subtitle(const WeatherLocation &location)
+{
+  std::string text;
+  if (!location.region.empty() && location.region != location.name) text = location.region;
+  if (!location.country.empty()) {
+    if (!text.empty()) text += ", ";
+    text += location.country;
+  }
+  return text;
+}
+
+static void weather_update_location_rows()
+{
+  for (int i = 0; i < WeatherLocationStore::MAX_LOCATIONS; ++i) {
+    if (!weather_ctx.saved_rows[i] || !lv_obj_is_valid(weather_ctx.saved_rows[i])) continue;
+    if (i >= (int)weather_ctx.locations.size()) {
+      lv_obj_add_flag(weather_ctx.saved_rows[i], LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+    lv_obj_clear_flag(weather_ctx.saved_rows[i], LV_OBJ_FLAG_HIDDEN);
+    std::string label = i == weather_ctx.active_index ? LV_SYMBOL_OK " " : "";
+    label += weather_ctx.locations[i].name;
+    const std::string subtitle = weather_location_subtitle(weather_ctx.locations[i]);
+    if (!subtitle.empty()) label += "\n" + subtitle;
+    lv_label_set_text(weather_ctx.saved_labels[i], label.c_str());
+  }
+}
+
+static void weather_select_location_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  const int index = (int)(intptr_t)lv_event_get_user_data(e);
+  if (index < 0 || index >= (int)weather_ctx.locations.size()) return;
+  weather_ctx.active_index = index;
+  WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index);
+  WeatherService::instance().reload_from_config();
+  weather_update_location_rows();
+}
+
+static void weather_delete_location_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  const int index = (int)(intptr_t)lv_event_get_user_data(e);
+  if (index < 0 || index >= (int)weather_ctx.locations.size()) return;
+  weather_ctx.locations.erase(weather_ctx.locations.begin() + index);
+  if (weather_ctx.active_index > index) --weather_ctx.active_index;
+  if (weather_ctx.active_index >= (int)weather_ctx.locations.size())
+    weather_ctx.active_index = std::max(0, (int)weather_ctx.locations.size() - 1);
+  WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index);
+  WeatherService::instance().reload_from_config();
+  weather_update_location_rows();
+}
+
+static void weather_add_search_result_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  const int index = (int)(intptr_t)lv_event_get_user_data(e);
+  const auto &results = WeatherLocationSearchService::instance().results();
+  if (index < 0 || index >= (int)results.size()) return;
+  if ((int)weather_ctx.locations.size() >= WeatherLocationStore::MAX_LOCATIONS) {
+    lv_label_set_text(weather_ctx.search_status, "Five-location limit reached");
+    return;
+  }
+  for (const WeatherLocation &saved : weather_ctx.locations) {
+    if (std::fabs(saved.latitude - results[index].latitude) < 0.00001 &&
+        std::fabs(saved.longitude - results[index].longitude) < 0.00001) {
+      lv_label_set_text(weather_ctx.search_status, "Location already saved");
+      return;
+    }
+  }
+  weather_ctx.locations.push_back(results[index]);
+  weather_ctx.active_index = (int)weather_ctx.locations.size() - 1;
+  WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index);
+  WeatherService::instance().reload_from_config();
+  weather_update_location_rows();
+  lv_label_set_text(weather_ctx.search_status, "Location saved and selected");
+}
+
+static void weather_search_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED || !weather_ctx.search_input) return;
+  const char *query = lv_textarea_get_text(weather_ctx.search_input);
+  if (!query || std::strlen(query) < 2) {
+    lv_label_set_text(weather_ctx.search_status, "Enter at least two characters");
+    return;
+  }
+  if (weather_ctx.kb && lv_obj_is_valid(weather_ctx.kb)) {
+    lv_obj_add_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(weather_ctx.kb, nullptr);
+    lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  }
+  if (WeatherLocationSearchService::instance().search(query))
+    lv_label_set_text(weather_ctx.search_status, "Searching...");
+}
+
+static void weather_search_timer_event(lv_timer_t *timer)
+{
+  (void)timer;
+  WeatherLocationSearchService &search = WeatherLocationSearchService::instance();
+  if (search.revision() == weather_ctx.search_revision) return;
+  weather_ctx.search_revision = search.revision();
+  const auto &results = search.results();
+  for (int i = 0; i < WeatherLocationStore::MAX_LOCATIONS; ++i) {
+    if (!weather_ctx.result_buttons[i] || !lv_obj_is_valid(weather_ctx.result_buttons[i])) continue;
+    if (i >= (int)results.size()) {
+      lv_obj_add_flag(weather_ctx.result_buttons[i], LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+    lv_obj_clear_flag(weather_ctx.result_buttons[i], LV_OBJ_FLAG_HIDDEN);
+    std::string label = results[i].name;
+    const std::string subtitle = weather_location_subtitle(results[i]);
+    if (!subtitle.empty()) label += "\n" + subtitle;
+    lv_label_set_text(weather_ctx.result_labels[i], label.c_str());
+  }
+  lv_label_set_text(weather_ctx.search_status,
+                    search.error().empty() ? "Tap a result to save it" : search.error().c_str());
+}
+
+static void weather_settings_delete_event(lv_event_t *e)
+{
+  (void)e;
+  if (weather_ctx.search_timer) {
+    lv_timer_delete(weather_ctx.search_timer);
+    weather_ctx.search_timer = nullptr;
+  }
+}
+
 static void weather_save_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("weather")) {
-    cfg.set("latitude", normalize_coord_text(lv_textarea_get_text(weather_ctx.lat_input)));
-    cfg.set("longitude", normalize_coord_text(lv_textarea_get_text(weather_ctx.lon_input)));
     cfg.set("metric", lv_obj_has_state(weather_ctx.unit_switch, LV_STATE_CHECKED));
     cfg.save();
     WeatherService::instance().reload_from_config();
@@ -702,42 +842,72 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_layout(content, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
-  lv_obj_t *lat_label = lv_label_create(content);
-  lv_label_set_text(lat_label, "Latitude");
-  lv_obj_set_style_text_color(lat_label, lv_color_white(), 0);
+  lv_obj_t *saved_title = lv_label_create(content);
+  lv_label_set_text(saved_title, "Saved locations (tap to select)");
+  lv_obj_set_style_text_color(saved_title, lv_color_white(), 0);
 
-  lv_obj_t *lat_input = lv_textarea_create(content);
-  lv_obj_set_width(lat_input, lv_pct(100));
-  lv_textarea_set_one_line(lat_input, true);
-  lv_textarea_set_accepted_chars(lat_input, "0123456789-.,");
-  lv_textarea_set_placeholder_text(lat_input, "47.37");
-  lv_obj_add_event_cb(lat_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
-  lv_obj_add_event_cb(lat_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
+  for (int i = 0; i < WeatherLocationStore::MAX_LOCATIONS; ++i) {
+    lv_obj_t *row = lv_obj_create(content);
+    lv_obj_set_size(row, lv_pct(100), 54);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_t *select = lv_button_create(row);
+    lv_obj_set_size(select, 238, 50);
+    lv_obj_align(select, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_bg_color(select, lv_color_hex(0x2a2d42), 0);
+    lv_obj_add_event_cb(select, weather_select_location_event, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    lv_obj_t *label = lv_label_create(select);
+    lv_obj_set_width(label, 210);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_t *remove = lv_button_create(row);
+    lv_obj_set_size(remove, 42, 42);
+    lv_obj_align(remove, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_style_bg_color(remove, lv_color_hex(0x5c2b35), 0);
+    lv_obj_add_event_cb(remove, weather_delete_location_event, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    lv_obj_t *remove_label = lv_label_create(remove);
+    lv_label_set_text(remove_label, LV_SYMBOL_TRASH);
+    lv_obj_center(remove_label);
+    weather_ctx.saved_rows[i] = row;
+    weather_ctx.saved_labels[i] = label;
+  }
 
-  lv_obj_t *lon_label = lv_label_create(content);
-  lv_label_set_text(lon_label, "Longitude");
-  lv_obj_set_style_text_color(lon_label, lv_color_white(), 0);
+  lv_obj_t *search_title = lv_label_create(content);
+  lv_label_set_text(search_title, "Add a location");
+  lv_obj_set_style_text_color(search_title, lv_color_white(), 0);
+  lv_obj_t *search_input = lv_textarea_create(content);
+  lv_obj_set_width(search_input, lv_pct(100));
+  lv_textarea_set_one_line(search_input, true);
+  lv_textarea_set_placeholder_text(search_input, "City or postal code");
+  lv_obj_add_event_cb(search_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
+  lv_obj_add_event_cb(search_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
+  lv_obj_t *search_btn = lv_button_create(content);
+  lv_obj_set_size(search_btn, lv_pct(100), 42);
+  lv_obj_add_event_cb(search_btn, weather_search_event, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *search_btn_label = lv_label_create(search_btn);
+  lv_label_set_text(search_btn_label, "Search");
+  lv_obj_center(search_btn_label);
+  lv_obj_t *search_status = lv_label_create(content);
+  lv_label_set_text(search_status, "Search uses Open-Meteo geocoding");
+  lv_obj_set_width(search_status, lv_pct(100));
+  lv_label_set_long_mode(search_status, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_color(search_status, lv_color_hex(0xb7bdd7), 0);
 
-  lv_obj_t *lon_input = lv_textarea_create(content);
-  lv_obj_set_width(lon_input, lv_pct(100));
-  lv_textarea_set_one_line(lon_input, true);
-  lv_textarea_set_accepted_chars(lon_input, "0123456789-.,");
-  lv_textarea_set_placeholder_text(lon_input, "8.54");
-  lv_obj_add_event_cb(lon_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
-  lv_obj_add_event_cb(lon_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
-
-  lv_obj_t *guess_btn = lv_button_create(content);
-  lv_obj_set_width(guess_btn, lv_pct(100));
-  lv_obj_set_height(guess_btn, 44);
-  lv_obj_add_event_cb(guess_btn, weather_guess_location_event, LV_EVENT_CLICKED, nullptr);
-
-  lv_obj_t *guess_label = lv_label_create(guess_btn);
-  lv_label_set_text(guess_label, "Guess from IP");
-  lv_obj_center(guess_label);
-
-  lv_obj_t *guess_result_label = lv_label_create(content);
-  lv_label_set_text(guess_result_label, "");
-  lv_obj_set_style_text_color(guess_result_label, lv_color_hex(0xb7bdd7), 0);
+  for (int i = 0; i < WeatherLocationStore::MAX_LOCATIONS; ++i) {
+    lv_obj_t *button = lv_button_create(content);
+    lv_obj_set_size(button, lv_pct(100), 50);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x173827), 0);
+    lv_obj_add_event_cb(button, weather_add_search_result_event, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    lv_obj_add_flag(button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *label = lv_label_create(button);
+    lv_obj_set_width(label, lv_pct(100));
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
+    weather_ctx.result_buttons[i] = button;
+    weather_ctx.result_labels[i] = label;
+  }
 
   lv_obj_t *unit_row = lv_obj_create(content);
   lv_obj_set_size(unit_row, lv_pct(100), 52);
@@ -759,11 +929,7 @@ static void open_weather_screen(lv_event_t *e)
 
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("weather")) {
-    std::string lat = cfg.get("latitude", "");
-    std::string lon = cfg.get("longitude", "");
     bool metric = cfg.get_bool("metric", true);
-    lv_textarea_set_text(lat_input, lat.c_str());
-    lv_textarea_set_text(lon_input, lon.c_str());
     if (metric)
       lv_obj_add_state(unit_switch, LV_STATE_CHECKED);
     else
@@ -782,8 +948,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_t *kb = lv_keyboard_create(scr);
   lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
   lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_USER_1, weather_coord_kb_map, weather_coord_kb_ctrl);
-  lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_USER_1);
+  lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_LOWER);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_READY, nullptr);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_CANCEL, nullptr);
@@ -791,10 +956,17 @@ static void open_weather_screen(lv_event_t *e)
   weather_ctx.content = content;
   weather_ctx.kb = kb;
   weather_ctx.settings_scr = settings_scr;
-  weather_ctx.lat_input = lat_input;
-  weather_ctx.lon_input = lon_input;
+  weather_ctx.lat_input = nullptr;
+  weather_ctx.lon_input = nullptr;
   weather_ctx.unit_switch = unit_switch;
-  weather_ctx.guess_result_label = guess_result_label;
+  weather_ctx.guess_result_label = nullptr;
+  weather_ctx.search_input = search_input;
+  weather_ctx.search_status = search_status;
+  WeatherLocationStore::load(weather_ctx.locations, weather_ctx.active_index);
+  weather_update_location_rows();
+  weather_ctx.search_revision = WeatherLocationSearchService::instance().revision();
+  weather_ctx.search_timer = lv_timer_create(weather_search_timer_event, 100, nullptr);
+  lv_obj_add_event_cb(scr, weather_settings_delete_event, LV_EVENT_DELETE, nullptr);
 
   ui_load_screen(scr, false);
   
