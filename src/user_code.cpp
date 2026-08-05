@@ -272,6 +272,83 @@ static void app_icon_clicked(lv_event_t *e)
   }
 }
 
+static void create_app_tile(lv_obj_t *grid, const App &app, int app_index)
+{
+  lv_obj_t *tile = lv_obj_create(grid);
+  lv_obj_set_size(tile, 88, 112);
+  lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(tile, 0, 0);
+  lv_obj_set_style_pad_all(tile, 2, 0);
+
+  lv_obj_t *icon_btn = lv_button_create(tile);
+  lv_obj_set_size(icon_btn, 68, 68);
+  lv_obj_align(icon_btn, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_set_style_radius(icon_btn, 18, 0);
+  lv_obj_set_style_bg_color(icon_btn, lv_color_hex(app.button_color), 0);
+  lv_obj_set_style_border_width(icon_btn, 0, 0);
+  lv_obj_set_style_shadow_width(icon_btn, 8, 0);
+  lv_obj_set_style_shadow_color(icon_btn, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_shadow_opa(icon_btn, LV_OPA_20, 0);
+  lv_obj_add_event_cb(icon_btn, app_icon_clicked, LV_EVENT_CLICKED,
+                      (void *)(intptr_t)app_index);
+
+  lv_obj_t *icon_label = lv_label_create(icon_btn);
+  lv_label_set_text(icon_label, app.symbol);
+  lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_color(icon_label, lv_color_white(), 0);
+  lv_obj_center(icon_label);
+
+  lv_obj_t *name_label = lv_label_create(tile);
+  lv_label_set_text(name_label, app.name);
+  lv_obj_set_style_text_color(name_label, lv_color_white(), 0);
+  lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+}
+
+static lv_obj_t *create_app_page(lv_obj_t *pager, const char *title)
+{
+  lv_obj_t *page = lv_obj_create(pager);
+  lv_obj_set_size(page, lv_pct(100), lv_pct(100));
+  lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_opa(page, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(page, 0, 0);
+  lv_obj_set_style_radius(page, 0, 0);
+  lv_obj_set_style_pad_all(page, 0, 0);
+
+  lv_obj_t *grid = lv_obj_create(page);
+  const bool has_title = title && title[0];
+  lv_obj_set_pos(grid, 0, has_title ? 28 : 0);
+  lv_obj_set_size(grid, lv_pct(100), has_title ? 392 : 420);
+  lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(grid, 0, 0);
+  lv_obj_set_style_pad_all(grid, 10, 0);
+  lv_obj_set_style_pad_column(grid, 4, 0);
+  lv_obj_set_style_pad_row(grid, 10, 0);
+  lv_obj_set_layout(grid, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
+  lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_SPACE_EVENLY,
+                        LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+  if (has_title) {
+    lv_obj_t *label = lv_label_create(page);
+    lv_label_set_text(label, title);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xadb5bd), 0);
+    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 5);
+  }
+  return grid;
+}
+
+static void home_pager_scrolled(lv_event_t *e)
+{
+  lv_obj_t *pager = (lv_obj_t *)lv_event_get_target(e);
+  lv_obj_t *indicator = (lv_obj_t *)lv_event_get_user_data(e);
+  if (!pager || !indicator || !lv_obj_is_valid(indicator)) return;
+  const lv_coord_t page_width = lv_obj_get_width(pager);
+  const bool labs_page = page_width > 0 && lv_obj_get_scroll_x(pager) >= page_width / 2;
+  lv_label_set_text(indicator, labs_page ? "2 / 2" : "1 / 2");
+}
+
 static void create_home_screen(void)
 {
   lv_obj_t *scr = lv_screen_active();
@@ -296,52 +373,51 @@ static void create_home_screen(void)
   create_time_status_label(bar, 8);
   create_wifi_status_icon(bar, -8);
 
-  /* App grid */
-  lv_obj_t *grid = lv_obj_create(scr);
-  lv_obj_set_pos(grid, 0, 30);
-  lv_obj_set_size(grid, lv_pct(100), 450);
-  lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(grid, 0, 0);
-  lv_obj_set_style_pad_all(grid, 10, 0);
-  lv_obj_set_style_pad_column(grid, 4, 0);
-  lv_obj_set_style_pad_row(grid, 10, 0);
-  lv_obj_set_layout(grid, LV_LAYOUT_FLEX);
-  lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
-  lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  /* Horizontally snapping launcher pages. */
+  lv_obj_t *pager = lv_obj_create(scr);
+  lv_obj_set_pos(pager, 0, 30);
+  lv_obj_set_size(pager, lv_pct(100), 430);
+  lv_obj_set_style_bg_opa(pager, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(pager, 0, 0);
+  lv_obj_set_style_radius(pager, 0, 0);
+  lv_obj_set_style_pad_all(pager, 0, 0);
+  lv_obj_set_style_pad_column(pager, 0, 0);
+  lv_obj_set_scroll_dir(pager, LV_DIR_HOR);
+  lv_obj_set_scroll_snap_x(pager, LV_SCROLL_SNAP_CENTER);
+  lv_obj_add_flag(pager, LV_OBJ_FLAG_SCROLL_ONE);
+  lv_obj_set_scrollbar_mode(pager, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_layout(pager, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(pager, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(pager, LV_FLEX_ALIGN_START,
+                        LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-  /* App tiles from registry */
+  lv_obj_t *stable_grid = create_app_page(pager, nullptr);
   const AppRegistry &reg = AppRegistry::instance();
+  bool has_experimental_apps = false;
+  for (int i = 0; i < reg.count(); ++i) {
+    if (reg.apps()[i].availability == AppAvailability::Experimental) {
+      has_experimental_apps = true;
+      break;
+    }
+  }
+  lv_obj_t *labs_grid = has_experimental_apps
+                            ? create_app_page(pager, "Labs  -  swipe right to return")
+                            : nullptr;
+
+  if (has_experimental_apps) {
+    lv_obj_t *indicator = lv_label_create(scr);
+    lv_label_set_text(indicator, "1 / 2");
+    lv_obj_set_style_text_color(indicator, lv_color_hex(0x868e96), 0);
+    lv_obj_align(indicator, LV_ALIGN_BOTTOM_MID, 0, -2);
+    lv_obj_add_event_cb(pager, home_pager_scrolled, LV_EVENT_SCROLL, indicator);
+  }
+
   for (int i = 0; i < reg.count(); i++) {
     const App &app = reg.apps()[i];
-
-    lv_obj_t *tile = lv_obj_create(grid);
-    lv_obj_set_size(tile, 88, 112);
-    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(tile, 0, 0);
-    lv_obj_set_style_pad_all(tile, 2, 0);
-
-    lv_obj_t *icon_btn = lv_button_create(tile);
-    lv_obj_set_size(icon_btn, 68, 68);
-    lv_obj_align(icon_btn, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_radius(icon_btn, 18, 0);
-    lv_obj_set_style_bg_color(icon_btn, lv_color_hex(app.button_color), 0);
-    lv_obj_set_style_border_width(icon_btn, 0, 0);
-    lv_obj_set_style_shadow_width(icon_btn, 8, 0);
-    lv_obj_set_style_shadow_color(icon_btn, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_shadow_opa(icon_btn, LV_OPA_20, 0);
-    lv_obj_add_event_cb(icon_btn, app_icon_clicked, LV_EVENT_CLICKED, (void*)(intptr_t)i);
-
-    lv_obj_t *icon_label = lv_label_create(icon_btn);
-    lv_label_set_text(icon_label, app.symbol);
-    lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(icon_label, lv_color_white(), 0);
-    lv_obj_center(icon_label);
-
-    lv_obj_t *name_label = lv_label_create(tile);
-    lv_label_set_text(name_label, app.name);
-    lv_obj_set_style_text_color(name_label, lv_color_white(), 0);
-    lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_t *target_grid = app.availability == AppAvailability::Experimental
+                                ? labs_grid
+                                : stable_grid;
+    if (target_grid) create_app_tile(target_grid, app, i);
   }
 }
 

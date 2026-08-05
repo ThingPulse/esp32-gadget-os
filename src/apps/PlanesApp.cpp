@@ -25,7 +25,7 @@
 #include "third_party/stb_image.h"
 #endif
 
-APP_REGISTER_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
+APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
 
 namespace {
 

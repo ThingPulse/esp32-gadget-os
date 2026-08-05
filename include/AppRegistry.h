@@ -5,16 +5,25 @@ typedef void (*AppLaunchFn)(void);
 static constexpr unsigned int APP_DEFAULT_BUTTON_COLOR = 0x339af0;
 static constexpr int APP_DEFAULT_RANK = 50;
 
+enum class AppAvailability {
+  Stable,
+  Experimental,
+};
+
 struct App {
   App() = default;
-  App(const char *n, const char *s, AppLaunchFn fn, unsigned int color, int r = APP_DEFAULT_RANK)
-      : name(n), symbol(s), on_launch(fn), button_color(color), rank(r) {}
+  App(const char *n, const char *s, AppLaunchFn fn, unsigned int color,
+      int r = APP_DEFAULT_RANK,
+      AppAvailability availability_ = AppAvailability::Stable)
+      : name(n), symbol(s), on_launch(fn), button_color(color), rank(r),
+        availability(availability_) {}
 
   const char *name;
   const char *symbol;  // LVGL symbol string, e.g. LV_SYMBOL_SETTINGS
   AppLaunchFn on_launch;
   unsigned int button_color = APP_DEFAULT_BUTTON_COLOR;
   int rank = APP_DEFAULT_RANK;
+  AppAvailability availability = AppAvailability::Stable;
 };
 
 class AppRegistry {
@@ -43,3 +52,7 @@ private:
 
 #define APP_REGISTER_COLOR_RANK(name_, symbol_, fn_, color_, rank_) \
   static bool _app_reg_##__LINE__ = AppRegistry::instance().registerApp(App{name_, symbol_, fn_, color_, rank_})
+
+#define APP_REGISTER_EXPERIMENTAL_COLOR_RANK(name_, symbol_, fn_, color_, rank_) \
+  static bool _app_reg_##__LINE__ = AppRegistry::instance().registerApp(           \
+      App{name_, symbol_, fn_, color_, rank_, AppAvailability::Experimental})

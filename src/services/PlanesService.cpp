@@ -293,8 +293,17 @@ static bool emulator_http_get_logged(const char *tag,
 
 PlanesService &PlanesService::instance()
 {
+#if defined(ARDUINO)
+    // PlaneState and the route cache make this singleton too large for the
+    // ESP32's statically linked DRAM segment. Allocate it from the runtime
+    // heap instead; the service still has process lifetime through this
+    // function-local pointer.
+    static PlanesService *inst = new PlanesService;
+    return *inst;
+#else
     static PlanesService inst;
     return inst;
+#endif
 }
 
 bool PlanesService::begin()
