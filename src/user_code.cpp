@@ -45,6 +45,7 @@ class LGFX {
 #include "services/ConfigStoreService.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
+#include "services/WeatherLocationStore.h"
 #include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiTrace.h"
@@ -55,6 +56,9 @@ class LGFX {
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <string>
+#include <fstream>
+#include <ArduinoJson.h>
 
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
 #include <esp_heap_caps.h>
@@ -84,8 +88,219 @@ static size_t draw_buf_size = 0;
 static lv_obj_t *home_screen = nullptr;
 static bool restore_route_pending = true;
 
+static void launch_route(const std::string &route);
+
 #if defined(SDL_h_)
 static uint32_t native_capture_started_ms = 0;
+static bool native_touch_enabled = false;
+static bool native_touch_pressed = false;
+static lv_coord_t native_touch_x = 0;
+static lv_coord_t native_touch_y = 0;
+static FILE *native_video_pipe = nullptr;
+static uint32_t native_video_started_ms = 0;
+static uint32_t native_video_next_frame = 0;
+static void native_push_touch(lv_coord_t x, lv_coord_t y, bool pressed);
+
+struct NativeTutorialAction {
+  std::string type, text, route;
+  uint32_t duration = 700;
+  int x = 0, y = 0, x2 = 0, y2 = 0, index = 0;
+};
+static std::vector<NativeTutorialAction> native_tutorial_actions;
+static size_t native_tutorial_index = 0;
+static uint32_t native_tutorial_action_started = 0;
+static bool native_tutorial_action_applied = false;
+static lv_obj_t *native_tutorial_caption = nullptr;
+static lv_obj_t *native_tutorial_touch_dot = nullptr;
+
+static lv_obj_t *native_find_label(lv_obj_t *root, const std::string &needle)
+{
+  if (!root) return nullptr;
+  if (lv_obj_check_type(root, &lv_label_class)) {
+    const char *value = lv_label_get_text(root);
+    if (value && std::string(value).find(needle) != std::string::npos &&
+        !lv_obj_has_flag(root, LV_OBJ_FLAG_HIDDEN)) return root;
+  }
+  const uint32_t count = lv_obj_get_child_count(root);
+  for (uint32_t i = 0; i < count; ++i) {
+    if (lv_obj_t *found = native_find_label(lv_obj_get_child(root, i), needle)) return found;
+  }
+  return nullptr;
+}
+
+static void native_show_caption(const std::string &text)
+{
+  if (!native_tutorial_caption || !lv_obj_is_valid(native_tutorial_caption)) {
+    native_tutorial_caption = lv_label_create(lv_layer_top());
+    lv_obj_set_width(native_tutorial_caption, 300);
+    lv_obj_set_style_bg_color(native_tutorial_caption, lv_color_hex(0x101426), 0);
+    lv_obj_set_style_bg_opa(native_tutorial_caption, LV_OPA_90, 0);
+    lv_obj_set_style_text_color(native_tutorial_caption, lv_color_white(), 0);
+    lv_obj_set_style_pad_all(native_tutorial_caption, 7, 0);
+    lv_obj_set_style_radius(native_tutorial_caption, 8, 0);
+    lv_obj_align(native_tutorial_caption, LV_ALIGN_BOTTOM_MID, 0, -8);
+  }
+  lv_label_set_text(native_tutorial_caption, text.c_str());
+  if (text.empty()) lv_obj_add_flag(native_tutorial_caption, LV_OBJ_FLAG_HIDDEN);
+  else lv_obj_clear_flag(native_tutorial_caption, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void native_show_touch(int x, int y, bool pressed)
+{
+  if (!native_tutorial_touch_dot || !lv_obj_is_valid(native_tutorial_touch_dot)) {
+    native_tutorial_touch_dot = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(native_tutorial_touch_dot, 22, 22);
+    lv_obj_set_style_radius(native_tutorial_touch_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(native_tutorial_touch_dot, lv_color_hex(0xffd43b), 0);
+    lv_obj_set_style_bg_opa(native_tutorial_touch_dot, LV_OPA_70, 0);
+    lv_obj_set_style_border_color(native_tutorial_touch_dot, lv_color_white(), 0);
+    lv_obj_set_style_border_width(native_tutorial_touch_dot, 2, 0);
+    lv_obj_clear_flag(native_tutorial_touch_dot, LV_OBJ_FLAG_SCROLLABLE);
+  }
+  lv_obj_set_pos(native_tutorial_touch_dot, x - 11, y - 11);
+  if (pressed) lv_obj_clear_flag(native_tutorial_touch_dot, LV_OBJ_FLAG_HIDDEN);
+  else lv_obj_add_flag(native_tutorial_touch_dot, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void native_tap_object(lv_obj_t *obj)
+{
+  if (!obj) return;
+  if (lv_obj_check_type(obj, &lv_label_class) && lv_obj_get_parent(obj)) {
+    obj = lv_obj_get_parent(obj);
+    // Launcher captions live beside their icon button inside a tile. Use the
+    // button when present; ordinary settings/result/calculator labels already
+    // have their actionable row/button as the direct parent.
+    for (uint32_t i=0; i<lv_obj_get_child_count(obj); ++i) {
+      lv_obj_t *child=lv_obj_get_child(obj,i);
+      if (lv_obj_check_type(child, &lv_button_class)) { obj=child; break; }
+    }
+  }
+  lv_area_t area{}; lv_obj_get_coords(obj, &area);
+  const int x = (area.x1 + area.x2) / 2, y = (area.y1 + area.y2) / 2;
+  native_push_touch(x, y, true); native_show_touch(x, y, true);
+  lv_obj_send_event(obj, LV_EVENT_CLICKED, nullptr);
+  // The semantic event is delivered synchronously. Release immediately so a
+  // newly loaded screen cannot inherit the press and receive a ghost click;
+  // the yellow indicator remains visible for the action's display duration.
+  native_push_touch(x, y, false);
+}
+
+static lv_obj_t *native_find_type(lv_obj_t *root, const lv_obj_class_t *klass, int &wanted)
+{
+  if (!root) return nullptr;
+  if (lv_obj_check_type(root, klass) && !lv_obj_has_flag(root, LV_OBJ_FLAG_HIDDEN)) {
+    if (wanted-- == 0) return root;
+  }
+  for (uint32_t i = 0; i < lv_obj_get_child_count(root); ++i)
+    if (lv_obj_t *found = native_find_type(lv_obj_get_child(root, i), klass, wanted)) return found;
+  return nullptr;
+}
+
+static void native_load_tutorial()
+{
+  const char *path = std::getenv("GADGET_OS_TUTORIAL_PATH");
+  if (!path || !path[0]) return;
+  std::ifstream input(path);
+  JsonDocument doc;
+  if (!input || deserializeJson(doc, input) != DeserializationError::Ok) {
+    std::fprintf(stderr, "[UI][Tutorial] cannot read %s\n", path); std::exit(4);
+  }
+  for (JsonObject item : doc["actions"].as<JsonArray>()) {
+    NativeTutorialAction action;
+    action.type = item["type"] | "wait"; action.text = item["text"] | "";
+    action.route = item["route"] | ""; action.duration = item["duration_ms"] | 700;
+    action.x = item["x"] | 0; action.y = item["y"] | 0;
+    action.x2 = item["x2"] | action.x; action.y2 = item["y2"] | action.y;
+    action.index = item["index"] | 0; native_tutorial_actions.push_back(action);
+  }
+  native_tutorial_action_started = SDL_GetTicks() + 1200;
+}
+
+static void native_run_tutorial()
+{
+  if (native_tutorial_actions.empty() || native_tutorial_index >= native_tutorial_actions.size()) return;
+  const uint32_t now = SDL_GetTicks();
+  if (now < native_tutorial_action_started) return;
+  NativeTutorialAction &a = native_tutorial_actions[native_tutorial_index];
+  const uint32_t elapsed = now - native_tutorial_action_started;
+  if (!native_tutorial_action_applied) {
+    native_tutorial_action_applied = true;
+    if (a.type == "caption") native_show_caption(a.text);
+    else if (a.type == "route") launch_route(a.route);
+    else if (a.type == "tap_text") native_tap_object(native_find_label(lv_screen_active(), a.text));
+    else if (a.type == "focus_textarea") {
+      int n=a.index; lv_obj_t *ta=native_find_type(lv_screen_active(), &lv_textarea_class, n);
+      if (ta) { lv_obj_add_state(ta, LV_STATE_FOCUSED); lv_obj_send_event(ta, LV_EVENT_FOCUSED, nullptr); }
+    }
+    else if (a.type == "tap") { native_push_touch(a.x,a.y,true); native_show_touch(a.x,a.y,true); }
+    else if (a.type == "type") {
+      int n=0; lv_obj_t *kb=native_find_type(lv_screen_active(), &lv_keyboard_class, n);
+      lv_obj_t *ta=kb ? lv_keyboard_get_textarea(kb) : nullptr;
+      if (ta) lv_textarea_set_text(ta, "");
+    } else if (a.type == "roller") {
+      int n=a.index; lv_obj_t *roller=native_find_type(lv_screen_active(), &lv_roller_class, n);
+      if (roller) { lv_roller_set_selected(roller, (uint16_t)a.x, LV_ANIM_ON); lv_obj_send_event(roller, LV_EVENT_VALUE_CHANGED, nullptr); }
+    } else if (a.type == "toggle") {
+      int n=a.index; lv_obj_t *sw=native_find_type(lv_screen_active(), &lv_switch_class, n);
+      if (sw) { if (a.x) lv_obj_add_state(sw, LV_STATE_CHECKED); else lv_obj_clear_state(sw, LV_STATE_CHECKED); lv_obj_send_event(sw, LV_EVENT_VALUE_CHANGED, nullptr); }
+    } else if (a.type == "weather_fixture") {
+      std::vector<WeatherLocation> locations = {
+        {"Zurich", "Canton of Zurich", "Switzerland", "Europe/Zurich", 47.366673, 8.550000},
+        {"New York", "New York", "United States", "America/New_York", 40.714272, -74.005966}
+      };
+      WeatherLocationStore::save(locations, 0);
+      WeatherService::instance().reload_from_config();
+      launch_route("settings_weather");
+    }
+  }
+  if (a.type == "type") {
+    int n=0; lv_obj_t *kb=native_find_type(lv_screen_active(), &lv_keyboard_class, n);
+    lv_obj_t *ta=kb ? lv_keyboard_get_textarea(kb) : nullptr;
+    size_t chars = a.text.empty() ? 0 : std::min(a.text.size(), (size_t)(elapsed * a.text.size() / std::max(1U, a.duration)));
+    if (ta) { std::string part=a.text.substr(0, chars); lv_textarea_set_text(ta, part.c_str()); }
+  } else if (a.type == "swipe") {
+    const float p=std::min(1.0f, elapsed/(float)std::max(1U,a.duration));
+    int x=a.x+(int)((a.x2-a.x)*p), y=a.y+(int)((a.y2-a.y)*p);
+    native_push_touch(x,y,true); native_show_touch(x,y,true);
+  }
+  if (elapsed >= a.duration) {
+    native_push_touch(a.x2,a.y2,false); native_show_touch(a.x2,a.y2,false);
+    ++native_tutorial_index; native_tutorial_action_started=now; native_tutorial_action_applied=false;
+  }
+}
+
+static void native_record_video_if_requested()
+{
+  const char *path = std::getenv("GADGET_OS_VIDEO_PATH");
+  if (!path || !path[0]) return;
+  if (!native_video_pipe) {
+    char command[1024] = {0};
+    std::snprintf(command, sizeof(command),
+                  "ffmpeg -hide_banner -loglevel error -y -f rawvideo -pixel_format rgb24 "
+                  "-video_size 320x480 -framerate 30 -i - -vf scale=640:960:flags=neighbor "
+                  "-c:v libx264 -pix_fmt yuv420p -movflags +faststart '%s'", path);
+    native_video_pipe = popen(command, "w");
+    if (!native_video_pipe) std::exit(3);
+    native_video_started_ms = SDL_GetTicks();
+    native_video_next_frame = 0;
+  }
+  const uint32_t elapsed = SDL_GetTicks() - native_video_started_ms;
+  std::vector<uint8_t> rgb(320U * 480U * 3U);
+  while (native_video_next_frame * 1000U / 30U <= elapsed) {
+    lv_refr_now(disp);
+    lcd.readRectRGB(0, 0, 320, 480, rgb.data());
+    if (std::fwrite(rgb.data(), 1, rgb.size(), native_video_pipe) != rgb.size()) std::exit(3);
+    ++native_video_next_frame;
+  }
+  unsigned long duration_ms = 0;
+  if (const char *duration = std::getenv("GADGET_OS_VIDEO_DURATION_MS"))
+    duration_ms = std::strtoul(duration, nullptr, 10);
+  if (duration_ms && elapsed >= duration_ms) {
+    pclose(native_video_pipe);
+    native_video_pipe = nullptr;
+    std::exit(0);
+  }
+}
 
 static void native_capture_if_requested()
 {
@@ -123,6 +338,14 @@ static void native_capture_if_requested()
 
   std::fprintf(stdout, "[UI][Docs] screenshot written: %s\n", path);
   std::exit(0);
+}
+
+static void native_push_touch(lv_coord_t x, lv_coord_t y, bool pressed)
+{
+  native_touch_enabled = true;
+  native_touch_x = x;
+  native_touch_y = y;
+  native_touch_pressed = pressed;
 }
 #endif
 
@@ -342,7 +565,17 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data)
   static lv_coord_t last_x = 0;
   static lv_coord_t last_y = 0;
   lgfx::touch_point_t tp{};
-  bool pressed = lcd.getTouch(&tp);
+  bool pressed;
+#if defined(SDL_h_)
+  if (native_touch_enabled) {
+    tp.x = native_touch_x;
+    tp.y = native_touch_y;
+    pressed = native_touch_pressed;
+  } else
+#endif
+  {
+    pressed = lcd.getTouch(&tp);
+  }
 
   if (pressed) {
     last_x = tp.x;
@@ -643,6 +876,9 @@ void setup(void)
 #endif
   show_splash_screen(1000);
   create_home_screen();
+#if defined(SDL_h_)
+  native_load_tutorial();
+#endif
 
   // Defer route restoration until first loop so home screen is fully ready
   restore_route_pending = true;
@@ -677,9 +913,13 @@ void loop(void)
   prev_ms = cur_ms;
 #endif
   ServiceRegistry::instance().loop_all();
+#if defined(SDL_h_)
+  native_run_tutorial();
+#endif
   lv_task_handler();
 #if defined(SDL_h_)
   native_capture_if_requested();
+  native_record_video_if_requested();
 #endif
 }
 

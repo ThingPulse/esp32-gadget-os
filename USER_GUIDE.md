@@ -162,10 +162,27 @@ Requirements for screenshot generation are PlatformIO, SDL2, Node.js, and a grap
 
 ## Updating the instructional movie
 
-On macOS with FFmpeg installed, regenerate the captioned setup tour with:
+The real instructional walkthrough is recorded directly from the running native
+LVGL application. On macOS with FFmpeg installed, regenerate it with:
+
+```bash
+./scripts/update-user-guide-walkthrough.sh
+```
+
+The command builds `native`, starts from a disposable copy of the sanitized
+fixture, executes `documents/user-guide/tutorial.json`, streams the 320×480
+framebuffer to FFmpeg at 30 FPS, and writes
+`documents/user-guide/video/gadget-os-walkthrough.mp4` (640×960 H.264). It also
+prints an `ffprobe` summary and creates a representative-frame contact sheet in
+the ignored `documents/user-guide/video/.build/` directory. Edit the JSON
+timeline to maintain chapters, semantic taps and text entry, waits, and gestures.
+
+The older screenshot-based storyboard remains a separate artifact. Regenerate
+that storyboard only with:
 
 ```bash
 ./scripts/update-user-guide-video.sh
 ```
 
-This first reproducible movie uses framebuffer captures, animated touch markers, captions, and the sanitized documentation fixture. It writes `documents/user-guide/video/gadget-os-tour.mp4` at 640×960 in H.264 format.
+It writes `documents/user-guide/video/gadget-os-tour.mp4`; it is not the native
+animated walkthrough.

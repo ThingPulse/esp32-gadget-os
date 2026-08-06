@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdio>
 #include <new>
+#include <cstdlib>
 
 #if defined(ARDUINO)
 #include <Arduino.h>
@@ -53,6 +54,21 @@ std::string url_encode(const std::string &text)
 
 bool fetch_search(const std::string &query, SearchResult &result)
 {
+#if !defined(ARDUINO)
+    // Documentation recordings must never depend on public-network latency.
+    // Keep this opt-in so the regular native app still exercises the real API.
+    if (std::getenv("GADGET_OS_TUTORIAL_PATH")) {
+        WeatherLocation location;
+        if (query.find("York") != std::string::npos || query.find("york") != std::string::npos) {
+            location = {"New York", "New York", "United States", "America/New_York", 40.714272, -74.005966};
+        } else {
+            location = {"Zurich", "Canton of Zurich", "Switzerland", "Europe/Zurich", 47.366673, 8.550000};
+        }
+        result.locations.push_back(location);
+        result.ok = true;
+        return true;
+    }
+#endif
     // This public, non-sensitive lookup is available directly over HTTP. On
     // the original ESP32, avoiding TLS here saves the large temporary mbedTLS
     // handshake allocation that otherwise competes with the Settings UI.

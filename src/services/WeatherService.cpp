@@ -488,6 +488,15 @@ void WeatherService::process_async_result()
 
 bool WeatherService::fetch_payload(std::string &out_payload) const
 {
+#if !defined(ARDUINO)
+    if (std::getenv("GADGET_OS_TUTORIAL_PATH")) {
+        // A short deterministic delay keeps the real refresh animation visible.
+        std::this_thread::sleep_for(std::chrono::milliseconds(900));
+        FileSystemService &files = FileSystemService::instance();
+        files.begin();
+        return files.fs().read("/weather/51be3854.json", out_payload);
+    }
+#endif
     char url[768] = {0};
     const char *temp_unit = _metric ? "celsius" : "fahrenheit";
     const char *wind_unit = _metric ? "kmh" : "mph";

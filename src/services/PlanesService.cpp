@@ -530,6 +530,13 @@ bool PlanesService::parse_payload(const std::string &payload,
 
 void PlanesService::enrich_routes(PlaneState *planes, int count)
 {
+#if !defined(ARDUINO)
+    if (std::getenv("GADGET_OS_TUTORIAL_PATH")) {
+        static const char *routes[] = {"ZRH->JFK", "DUB->ZRH", "FRA->ZRH"};
+        for (int i = 0; i < count; ++i) planes[i].route = routes[i % 3];
+        return;
+    }
+#endif
     int network_budget = ROUTE_LOOKUPS_PER_CYCLE;
     for (int i = 0; i < count; ++i) {
         std::string origin_name;
@@ -789,6 +796,19 @@ bool PlanesService::fetch_payload(std::string &out_payload,
                                   std::string &out_provider,
                                   std::string &out_error)
 {
+#if !defined(ARDUINO)
+    if (std::getenv("GADGET_OS_TUTORIAL_PATH")) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(900));
+        out_provider = "Tutorial fixture";
+        out_error.clear();
+        out_payload = R"json({"ac":[
+          {"hex":"4b1805","flight":"SWR12A","lat":47.48,"lon":8.62,"alt_baro":12300,"gs":310,"track":245,"baro_rate":-640,"r":"HB-JBA","t":"BCS3"},
+          {"hex":"4ca9d2","flight":"RYR8ZH","lat":47.29,"lon":8.38,"alt_baro":18400,"gs":355,"track":62,"baro_rate":832,"r":"EI-EVH","t":"B738"},
+          {"hex":"3c65a1","flight":"DLH5CP","lat":47.39,"lon":8.75,"alt_baro":9600,"gs":270,"track":278,"baro_rate":0,"r":"D-AINA","t":"A20N"}
+        ]})json";
+        return true;
+    }
+#endif
     const int radius_nm = std::max(1, std::min(250, (int)std::ceil(_range_km / 1.852)));
     const double lat_rad = _center_lat * 3.14159265358979323846 / 180.0;
     const double cos_lat = std::max(0.2, std::fabs(std::cos(lat_rad)));

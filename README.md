@@ -140,6 +140,20 @@ User-guide screenshots can be regenerated from the native app with:
 
 The script uses sanitized fixture data and captures the application framebuffer directly. See [Updating this guide's screenshots](USER_GUIDE.md#updating-this-guides-screenshots) for details.
 
+Generate the real native instructional walkthrough with FFmpeg installed:
+
+```bash
+./scripts/update-user-guide-walkthrough.sh
+```
+
+This records the live LVGL UI according to
+`documents/user-guide/tutorial.json` and writes
+`documents/user-guide/video/gadget-os-walkthrough.mp4`. The separate
+`update-user-guide-video.sh` command continues to generate the older
+screenshot-based `gadget-os-tour.mp4` storyboard. See
+[Updating the instructional movie](USER_GUIDE.md#updating-the-instructional-movie)
+for the recording and verification details.
+
 Applications register themselves with `APP_REGISTER...` macros, while process-lifetime services use `SERVICE_REGISTER`. UI objects must only be manipulated from the LVGL thread; network work is performed asynchronously and publishes its results back to the UI.
 
 ## Creating a GitHub release
