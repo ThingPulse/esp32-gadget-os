@@ -290,6 +290,13 @@ struct WifiCtx {
   lv_obj_t *ssid_input;
   lv_obj_t *pass_input;
   lv_obj_t *settings_scr;
+  lv_obj_t *scan_status;
+  lv_obj_t *scan_results;
+  lv_obj_t *scan_loading_line;
+  lv_timer_t *scan_timer;
+  unsigned long scan_started_ms;
+  bool scan_in_progress;
+  std::vector<std::string> scan_ssids;
 };
 static WifiCtx wifi_ctx;
 
@@ -526,9 +533,11 @@ static void wifi_save_event(lv_event_t *e)
 
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("wifi")) {
-    cfg.set("ssid", std::string(lv_textarea_get_text(wifi_ctx.ssid_input)));
+    const std::string previous_ssid = cfg.get("ssid", "");
+    const std::string selected_ssid = lv_textarea_get_text(wifi_ctx.ssid_input);
+    cfg.set("ssid", selected_ssid);
     const char *password = lv_textarea_get_text(wifi_ctx.pass_input);
-    if (password[0] != '\0')
+    if (password[0] != '\0' || selected_ssid != previous_ssid)
       cfg.set("password", std::string(password));
     cfg.save();
     WifiService::instance().reload_from_config();
@@ -574,6 +583,133 @@ static void wifi_kb_event(lv_event_t *e)
   }
 }
 
+static void wifi_select_scan_result_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  const int index = (int)(intptr_t)lv_event_get_user_data(e);
+  if (index < 0 || index >= (int)wifi_ctx.scan_ssids.size()) return;
+
+  lv_textarea_set_text(wifi_ctx.ssid_input, wifi_ctx.scan_ssids[index].c_str());
+  lv_textarea_set_text(wifi_ctx.pass_input, "");
+  lv_obj_add_state(wifi_ctx.pass_input, LV_STATE_FOCUSED);
+  lv_obj_send_event(wifi_ctx.pass_input, LV_EVENT_FOCUSED, nullptr);
+}
+
+static void wifi_show_scan_results(const std::vector<std::string> &ssids,
+                                   const std::vector<int> &signal_strengths,
+                                   const std::vector<bool> &secured)
+{
+  wifi_ctx.scan_ssids = ssids;
+  lv_obj_clean(wifi_ctx.scan_results);
+
+  for (int i = 0; i < (int)ssids.size(); ++i) {
+    lv_obj_t *button = lv_button_create(wifi_ctx.scan_results);
+    lv_obj_set_size(button, lv_pct(100), 44);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x2a2d42), 0);
+    lv_obj_add_event_cb(button, wifi_select_scan_result_event, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)i);
+
+    lv_obj_t *label = lv_label_create(button);
+    lv_obj_set_width(label, lv_pct(100));
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    char text[96] = {0};
+    std::snprintf(text, sizeof(text), "%s   %d dBm%s",
+                  ssids[i].c_str(), signal_strengths[i], secured[i] ? "   secured" : "   open");
+    lv_label_set_text(label, text);
+    lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
+  }
+
+  if (ssids.empty())
+    lv_label_set_text(wifi_ctx.scan_status, "No Wi-Fi networks found");
+  else
+    lv_label_set_text(wifi_ctx.scan_status, "Tap a network to select it");
+}
+
+static void wifi_finish_scan()
+{
+  wifi_ctx.scan_in_progress = false;
+  if (wifi_ctx.scan_loading_line && lv_obj_is_valid(wifi_ctx.scan_loading_line))
+    lv_obj_add_flag(wifi_ctx.scan_loading_line, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void wifi_scan_timer_event(lv_timer_t *timer)
+{
+  (void)timer;
+  if (!wifi_ctx.scan_in_progress) return;
+
+#if defined(ARDUINO)
+  const int count = WiFi.scanComplete();
+  if (count == WIFI_SCAN_RUNNING) return;
+  if (count == WIFI_SCAN_FAILED) {
+    wifi_finish_scan();
+    lv_label_set_text(wifi_ctx.scan_status, "Network scan failed. Tap Scan to retry.");
+    WiFi.scanDelete();
+    return;
+  }
+
+  std::vector<std::string> ssids;
+  std::vector<int> strengths;
+  std::vector<bool> secured;
+  for (int i = 0; i < count && (int)ssids.size() < 10; ++i) {
+    const std::string ssid = WiFi.SSID(i).c_str();
+    if (ssid.empty()) continue;
+    bool duplicate = false;
+    for (const std::string &saved : ssids)
+      if (saved == ssid) duplicate = true;
+    if (duplicate) continue;
+    ssids.push_back(ssid);
+    strengths.push_back(WiFi.RSSI(i));
+    secured.push_back(WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+  }
+  wifi_finish_scan();
+  wifi_show_scan_results(ssids, strengths, secured);
+  WiFi.scanDelete();
+#else
+  if (lv_tick_get() - wifi_ctx.scan_started_ms < 1000) return;
+  wifi_finish_scan();
+  wifi_show_scan_results({"Demo Wi-Fi", "Guest Network", "Office 5G"},
+                         {-42, -61, -74}, {true, false, true});
+#endif
+}
+
+static void wifi_scan_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED || wifi_ctx.scan_in_progress) return;
+
+  if (wifi_ctx.kb && lv_obj_is_valid(wifi_ctx.kb)) {
+    lv_keyboard_set_textarea(wifi_ctx.kb, nullptr);
+    lv_obj_add_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
+  }
+  lv_obj_clean(wifi_ctx.scan_results);
+  lv_label_set_text(wifi_ctx.scan_status, "Searching for Wi-Fi networks...");
+  lv_obj_clear_flag(wifi_ctx.scan_loading_line, LV_OBJ_FLAG_HIDDEN);
+  wifi_ctx.scan_in_progress = true;
+  wifi_ctx.scan_started_ms = lv_tick_get();
+
+#if defined(ARDUINO)
+  WiFi.scanDelete();
+  if (WiFi.scanNetworks(true) == WIFI_SCAN_FAILED) {
+    wifi_finish_scan();
+    lv_label_set_text(wifi_ctx.scan_status, "Could not start network scan");
+  }
+#endif
+}
+
+static void wifi_settings_delete_event(lv_event_t *e)
+{
+  (void)e;
+  if (wifi_ctx.scan_timer) {
+    lv_timer_delete(wifi_ctx.scan_timer);
+    wifi_ctx.scan_timer = nullptr;
+  }
+#if defined(ARDUINO)
+  if (wifi_ctx.scan_in_progress) WiFi.scanDelete();
+#endif
+  wifi_ctx.scan_in_progress = false;
+  wifi_ctx.scan_ssids.clear();
+}
+
 static void open_wifi_screen(lv_event_t *e)
 {
   lv_obj_t *settings_scr = nullptr;
@@ -592,6 +728,27 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_style_border_width(scr, 0, 0);
 
   make_top_bar(scr, "WiFi", settings_scr, false);
+
+  lv_obj_t *loading_line = lv_obj_create(scr);
+  lv_obj_set_size(loading_line, 76, 3);
+  lv_obj_set_pos(loading_line, -76, WIFI_BAR_HEIGHT - 3);
+  lv_obj_clear_flag(loading_line, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(loading_line, lv_color_hex(0x64c8ff), 0);
+  lv_obj_set_style_bg_opa(loading_line, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(loading_line, 0, 0);
+  lv_obj_set_style_radius(loading_line, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_all(loading_line, 0, 0);
+  lv_obj_add_flag(loading_line, LV_OBJ_FLAG_HIDDEN);
+  lv_anim_t loading_anim;
+  lv_anim_init(&loading_anim);
+  lv_anim_set_var(&loading_anim, loading_line);
+  lv_anim_set_exec_cb(&loading_anim, [](void *obj, int32_t x) {
+    lv_obj_set_x(static_cast<lv_obj_t *>(obj), x);
+  });
+  lv_anim_set_values(&loading_anim, -76, 320);
+  lv_anim_set_duration(&loading_anim, 900);
+  lv_anim_set_repeat_count(&loading_anim, LV_ANIM_REPEAT_INFINITE);
+  lv_anim_start(&loading_anim);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -613,6 +770,29 @@ static void open_wifi_screen(lv_event_t *e)
   lv_textarea_set_placeholder_text(ssid_input, "Enter SSID");
   lv_obj_add_event_cb(ssid_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(ssid_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
+
+  lv_obj_t *scan_btn = lv_button_create(content);
+  lv_obj_set_size(scan_btn, lv_pct(100), 42);
+  lv_obj_add_event_cb(scan_btn, wifi_scan_event, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *scan_btn_label = lv_label_create(scan_btn);
+  lv_label_set_text(scan_btn_label, LV_SYMBOL_REFRESH "  Scan networks");
+  lv_obj_center(scan_btn_label);
+
+  lv_obj_t *scan_status = lv_label_create(content);
+  lv_obj_set_width(scan_status, lv_pct(100));
+  lv_label_set_long_mode(scan_status, LV_LABEL_LONG_WRAP);
+  lv_label_set_text(scan_status, "Scan or enter an SSID manually");
+  lv_obj_set_style_text_color(scan_status, lv_color_hex(0xb7bdd7), 0);
+
+  lv_obj_t *scan_results = lv_obj_create(content);
+  lv_obj_set_size(scan_results, lv_pct(100), LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(scan_results, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(scan_results, 0, 0);
+  lv_obj_set_style_pad_all(scan_results, 0, 0);
+  lv_obj_set_style_pad_row(scan_results, 8, 0);
+  lv_obj_set_layout(scan_results, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(scan_results, LV_FLEX_FLOW_COLUMN);
+  lv_obj_clear_flag(scan_results, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t *pass_label = lv_label_create(content);
   lv_label_set_text(pass_label, "Password");
@@ -656,6 +836,14 @@ static void open_wifi_screen(lv_event_t *e)
   wifi_ctx.ssid_input = ssid_input;
   wifi_ctx.pass_input = pass_input;
   wifi_ctx.settings_scr = settings_scr;
+  wifi_ctx.scan_status = scan_status;
+  wifi_ctx.scan_results = scan_results;
+  wifi_ctx.scan_loading_line = loading_line;
+  wifi_ctx.scan_in_progress = false;
+  wifi_ctx.scan_started_ms = 0;
+  wifi_ctx.scan_ssids.clear();
+  wifi_ctx.scan_timer = lv_timer_create(wifi_scan_timer_event, 100, nullptr);
+  lv_obj_add_event_cb(scr, wifi_settings_delete_event, LV_EVENT_DELETE, nullptr);
 
   ui_load_screen(scr, false);
   

@@ -24,9 +24,12 @@ Open **Settings → Wi-Fi**.
 
 ![Wi-Fi settings](documents/user-guide/screenshots/wifi.png)
 
-1. Tap **SSID** and enter the Wi-Fi network name.
-2. Tap **Password** and enter its password.
-3. Tap **Save & Back**.
+1. Tap **Scan networks**. A moving line under the header indicates that scanning is in progress.
+2. Tap the desired network in the result list. Its SSID is filled in automatically.
+3. Enter the network password.
+4. Tap **Save & Back**.
+
+Each result shows its signal strength in dBm and whether it is secured or open. Duplicate SSIDs are collapsed into one entry, and up to ten networks are displayed. You can still tap **SSID** and enter a network name manually when a hidden network is not listed.
 
 The on-screen keyboard shows a larger popover for the selected key. Holding a key does not repeat it automatically, which makes typing on the touch display more predictable.
 
