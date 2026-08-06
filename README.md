@@ -4,6 +4,8 @@ Gadget OS is an LVGL-based application shell for ThingPulse Color Kit devices. I
 
 The project is under active development. The Weather app is the most complete network application; the Planes app should currently be considered experimental.
 
+For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
+
 ## Supported targets
 
 | PlatformIO environment | Device | MCU |
@@ -130,6 +132,14 @@ src/ui/          Shared navigation, status, and icon components
 platformio.ini   Build environments and board configuration
 ```
 
+User-guide screenshots can be regenerated from the native app with:
+
+```bash
+./scripts/update-user-guide-screenshots.sh
+```
+
+The script uses sanitized fixture data and captures the application framebuffer directly. See [Updating this guide's screenshots](USER_GUIDE.md#updating-this-guides-screenshots) for details.
+
 Applications register themselves with `APP_REGISTER...` macros, while process-lifetime services use `SERVICE_REGISTER`. UI objects must only be manipulated from the LVGL thread; network work is performed asynchronously and publishes its results back to the UI.
 
 ## Creating a GitHub release
@@ -223,4 +233,3 @@ Check the serial monitor for Wi-Fi, DNS, HTTP, TLS, and memory errors. The ESP32
 ### Native window does not open
 
 Confirm SDL2 is installed and that PlatformIO links against the correct SDL2 installation. The native executable is located at `.pio/build/native/program` after a successful build.
-

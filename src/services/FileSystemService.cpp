@@ -56,18 +56,23 @@ bool FileSystemService::begin()
 
 #else
 // Native: POSIX file I/O; files are stored under ./data/ relative to CWD.
+#include <cstdlib>
 #include <cstdio>
 #include <cerrno>
 #include <fstream>
 #include <sstream>
 #include <sys/stat.h>
 
-static constexpr const char *FS_ROOT = "./data";
+static const char *fs_root()
+{
+    const char *override_root = std::getenv("GADGET_OS_DATA_DIR");
+    return override_root && override_root[0] ? override_root : "./data";
+}
 
 class PlatformFS : public IFileSystem {
     static std::string full(const char *path)
     {
-        return std::string(FS_ROOT) + path;
+        return std::string(fs_root()) + path;
     }
 
 public:
@@ -109,7 +114,7 @@ public:
 bool FileSystemService::begin()
 {
     if (_impl) return true;
-    ::mkdir(FS_ROOT, 0755);  // ensure root exists; ignore EEXIST
+    ::mkdir(fs_root(), 0755);  // ensure root exists; ignore EEXIST
     _impl = new PlatformFS();
     return true;
 }

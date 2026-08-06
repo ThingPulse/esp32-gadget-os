@@ -51,8 +51,10 @@ class LGFX {
 #include "ui/DisplayPreferences.h"
 
 #include <cstdlib>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
 #include <esp_heap_caps.h>
@@ -81,6 +83,48 @@ static uint8_t *draw_buf = nullptr;
 static size_t draw_buf_size = 0;
 static lv_obj_t *home_screen = nullptr;
 static bool restore_route_pending = true;
+
+#if defined(SDL_h_)
+static uint32_t native_capture_started_ms = 0;
+
+static void native_capture_if_requested()
+{
+  const char *path = std::getenv("GADGET_OS_SCREENSHOT_PATH");
+  if (!path || !path[0]) return;
+
+  if (native_capture_started_ms == 0) {
+    native_capture_started_ms = SDL_GetTicks();
+    return;
+  }
+
+  unsigned long delay_ms = 800;
+  if (const char *configured_delay = std::getenv("GADGET_OS_SCREENSHOT_DELAY_MS"))
+    delay_ms = std::strtoul(configured_delay, nullptr, 10);
+  if (SDL_GetTicks() - native_capture_started_ms < delay_ms) return;
+
+  lv_refr_now(disp);
+  const int width = lcd.width();
+  const int height = lcd.height();
+  std::vector<uint8_t> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3U);
+  lcd.readRectRGB(0, 0, width, height, rgb.data());
+
+  FILE *output = std::fopen(path, "wb");
+  if (!output) {
+    std::fprintf(stderr, "[UI][Docs] cannot write screenshot: %s\n", path);
+    std::exit(2);
+  }
+  std::fprintf(output, "P6\n%d %d\n255\n", width, height);
+  const size_t written = std::fwrite(rgb.data(), 1, rgb.size(), output);
+  std::fclose(output);
+  if (written != rgb.size()) {
+    std::fprintf(stderr, "[UI][Docs] incomplete screenshot: %s\n", path);
+    std::exit(2);
+  }
+
+  std::fprintf(stdout, "[UI][Docs] screenshot written: %s\n", path);
+  std::exit(0);
+}
+#endif
 
 static uint32_t splash_now_ms()
 {
@@ -257,7 +301,7 @@ static void launch_route(const std::string &route)
     return;
   }
 
-  if (route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes" || route == "settings_display") {
+  if (route == "settings_system" || route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes" || route == "settings_display") {
     UI_TRACE("Route", "launch settings subroute=%s", route.c_str());
     settings_launch_with_route(route.c_str());
     return;
@@ -593,6 +637,10 @@ void setup(void)
 #endif
 
   UiSessionState::begin();
+#if defined(SDL_h_)
+  if (const char *documentation_route = std::getenv("GADGET_OS_DOC_ROUTE"))
+    UiSessionState::set_route(documentation_route);
+#endif
   show_splash_screen(1000);
   create_home_screen();
 
@@ -630,6 +678,9 @@ void loop(void)
 #endif
   ServiceRegistry::instance().loop_all();
   lv_task_handler();
+#if defined(SDL_h_)
+  native_capture_if_requested();
+#endif
 }
 
 #if defined(ESP_PLATFORM) && !defined(ARDUINO)
