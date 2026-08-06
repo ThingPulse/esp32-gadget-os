@@ -296,6 +296,7 @@ struct WifiCtx {
   lv_timer_t *scan_timer;
   unsigned long scan_started_ms;
   bool scan_in_progress;
+  bool radio_scan_started;
   std::vector<std::string> scan_ssids;
 };
 static WifiCtx wifi_ctx;
@@ -628,8 +629,10 @@ static void wifi_show_scan_results(const std::vector<std::string> &ssids,
 static void wifi_finish_scan()
 {
   wifi_ctx.scan_in_progress = false;
+  wifi_ctx.radio_scan_started = false;
   if (wifi_ctx.scan_loading_line && lv_obj_is_valid(wifi_ctx.scan_loading_line))
     lv_obj_add_flag(wifi_ctx.scan_loading_line, LV_OBJ_FLAG_HIDDEN);
+  WifiService::instance().end_network_scan();
 }
 
 static void wifi_scan_timer_event(lv_timer_t *timer)
@@ -638,12 +641,37 @@ static void wifi_scan_timer_event(lv_timer_t *timer)
   if (!wifi_ctx.scan_in_progress) return;
 
 #if defined(ARDUINO)
+  if (!wifi_ctx.radio_scan_started) {
+    // esp_wifi needs a short settling period after aborting an in-progress
+    // connection scan. Retrying here avoids treating that radio-busy state as
+    // a completed settings scan.
+    if (lv_tick_get() - wifi_ctx.scan_started_ms < 300) return;
+    const int start_result = WiFi.scanNetworks(true);
+    UI_TRACE("WiFi", "scan radio start result=%d", start_result);
+    if (start_result == WIFI_SCAN_FAILED) {
+      if (lv_tick_get() - wifi_ctx.scan_started_ms < 2500) return;
+      wifi_finish_scan();
+      lv_label_set_text(wifi_ctx.scan_status, "Could not start network scan. Tap Scan to retry.");
+      return;
+    }
+    wifi_ctx.radio_scan_started = true;
+    if (start_result == WIFI_SCAN_RUNNING) return;
+  }
+
   const int count = WiFi.scanComplete();
   if (count == WIFI_SCAN_RUNNING) return;
   if (count == WIFI_SCAN_FAILED) {
+    // Arduino-ESP32's scanComplete() applies an internal ~6 second timeout
+    // and clears its SCANNING bit, although ESP-IDF can deliver SCAN_DONE a
+    // little later (especially while STA is connected and many APs exist).
+    // Keep polling during a grace period; the late callback sets DONE and
+    // makes the result count available on a following timer tick.
+    if (lv_tick_get() - wifi_ctx.scan_started_ms < 15000) return;
+    UI_TRACE("WiFi", "scan failed after %lu ms",
+             (unsigned long)(lv_tick_get() - wifi_ctx.scan_started_ms));
+    WiFi.scanDelete();
     wifi_finish_scan();
     lv_label_set_text(wifi_ctx.scan_status, "Network scan failed. Tap Scan to retry.");
-    WiFi.scanDelete();
     return;
   }
 
@@ -661,9 +689,10 @@ static void wifi_scan_timer_event(lv_timer_t *timer)
     strengths.push_back(WiFi.RSSI(i));
     secured.push_back(WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
   }
+  WiFi.scanDelete();
+  UI_TRACE("WiFi", "scan complete raw=%d unique=%u", count, (unsigned)ssids.size());
   wifi_finish_scan();
   wifi_show_scan_results(ssids, strengths, secured);
-  WiFi.scanDelete();
 #else
   if (lv_tick_get() - wifi_ctx.scan_started_ms < 1000) return;
   wifi_finish_scan();
@@ -685,15 +714,16 @@ static void wifi_scan_event(lv_event_t *e)
   lv_label_set_text(wifi_ctx.scan_status, "Searching for Wi-Fi networks...");
   lv_obj_clear_flag(wifi_ctx.scan_loading_line, LV_OBJ_FLAG_HIDDEN);
   wifi_ctx.scan_in_progress = true;
+  wifi_ctx.radio_scan_started = false;
   wifi_ctx.scan_started_ms = lv_tick_get();
+  UI_TRACE("WiFi", "scan requested connecting=%d connected=%d",
+           WifiService::instance().is_connecting() ? 1 : 0,
+           WifiService::instance().is_connected() ? 1 : 0);
 
 #if defined(ARDUINO)
   WiFi.scanDelete();
-  if (WiFi.scanNetworks(true) == WIFI_SCAN_FAILED) {
-    wifi_finish_scan();
-    lv_label_set_text(wifi_ctx.scan_status, "Could not start network scan");
-  }
 #endif
+  WifiService::instance().begin_network_scan();
 }
 
 static void wifi_settings_delete_event(lv_event_t *e)
@@ -706,7 +736,9 @@ static void wifi_settings_delete_event(lv_event_t *e)
 #if defined(ARDUINO)
   if (wifi_ctx.scan_in_progress) WiFi.scanDelete();
 #endif
+  WifiService::instance().end_network_scan();
   wifi_ctx.scan_in_progress = false;
+  wifi_ctx.radio_scan_started = false;
   wifi_ctx.scan_ssids.clear();
 }
 
@@ -840,6 +872,7 @@ static void open_wifi_screen(lv_event_t *e)
   wifi_ctx.scan_results = scan_results;
   wifi_ctx.scan_loading_line = loading_line;
   wifi_ctx.scan_in_progress = false;
+  wifi_ctx.radio_scan_started = false;
   wifi_ctx.scan_started_ms = 0;
   wifi_ctx.scan_ssids.clear();
   wifi_ctx.scan_timer = lv_timer_create(wifi_scan_timer_event, 100, nullptr);

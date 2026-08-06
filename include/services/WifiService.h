@@ -14,6 +14,8 @@ public:
     bool reload_from_config();
     bool is_connected() const;
     bool is_connecting() const;
+    void begin_network_scan();
+    void end_network_scan();
 
 private:
     enum class State {
@@ -33,4 +35,6 @@ private:
     unsigned long _connect_started_ms = 0;
     unsigned long _retry_at_ms = 0;
     unsigned long _retry_delay_ms = 5000;
+    bool _scan_suspended = false;
+    bool _resume_connection_after_scan = false;
 };

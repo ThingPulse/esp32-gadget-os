@@ -41,6 +41,9 @@ bool WifiService::begin()
 
 void WifiService::loop()
 {
+    if (_scan_suspended)
+        return;
+
 #if defined(ARDUINO)
     const wl_status_t wifi_status = WiFi.status();
     if (wifi_status == WL_CONNECTED) {
@@ -156,6 +159,35 @@ bool WifiService::is_connected() const
 bool WifiService::is_connecting() const
 {
     return _state == State::Connecting;
+}
+
+void WifiService::begin_network_scan()
+{
+    if (_scan_suspended)
+        return;
+
+    _scan_suspended = true;
+    _resume_connection_after_scan = !_ssid.empty() && _state != State::Connected;
+#if defined(ARDUINO)
+    if (_state == State::Connecting)
+        WiFi.disconnect(false);
+#endif
+    if (_state == State::Connecting) {
+        _retry_at_ms = 0;
+        set_state(State::Disconnected);
+    }
+}
+
+void WifiService::end_network_scan()
+{
+    if (!_scan_suspended)
+        return;
+
+    _scan_suspended = false;
+    const bool reconnect = _resume_connection_after_scan;
+    _resume_connection_after_scan = false;
+    if (reconnect && !_ssid.empty())
+        start_connection();
 }
 
 SERVICE_REGISTER(WifiService);
