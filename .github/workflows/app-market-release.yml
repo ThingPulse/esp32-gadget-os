@@ -28,6 +28,8 @@ jobs:
       - name: Build firmware
         run: |
           pio run -e esp32-color-kit -e esp32-color-kit-pro
+          cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" .pio/build/esp32-color-kit/boot_app0.bin
+          cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" .pio/build/esp32-color-kit-pro/boot_app0.bin
 
       - name: Prepare and validate App Market assets
         env:

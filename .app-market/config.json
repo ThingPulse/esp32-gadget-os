@@ -20,9 +20,27 @@
       },
       "partitions": [
         {
+          "name": "Bootloader",
+          "source": ".pio/build/esp32-color-kit/bootloader.bin",
+          "asset": "esp32-color-kit-bootloader.bin",
+          "offset": "0x1000"
+        },
+        {
+          "name": "Partition table",
+          "source": ".pio/build/esp32-color-kit/partitions.bin",
+          "asset": "esp32-color-kit-partitions.bin",
+          "offset": "0x8000"
+        },
+        {
+          "name": "OTA data",
+          "source": ".pio/build/esp32-color-kit/boot_app0.bin",
+          "asset": "esp32-color-kit-boot-app0.bin",
+          "offset": "0xe000"
+        },
+        {
           "name": "Firmware",
-          "source": "build/firmware.bin",
-          "asset": "firmware.bin",
+          "source": ".pio/build/esp32-color-kit/firmware.bin",
+          "asset": "esp32-color-kit-firmware.bin",
           "offset": "0x10000"
         }
       ]
@@ -46,9 +64,27 @@
       },
       "partitions": [
         {
+          "name": "Bootloader",
+          "source": ".pio/build/esp32-color-kit-pro/bootloader.bin",
+          "asset": "esp32-color-kit-pro-bootloader.bin",
+          "offset": "0x0"
+        },
+        {
+          "name": "Partition table",
+          "source": ".pio/build/esp32-color-kit-pro/partitions.bin",
+          "asset": "esp32-color-kit-pro-partitions.bin",
+          "offset": "0x8000"
+        },
+        {
+          "name": "OTA data",
+          "source": ".pio/build/esp32-color-kit-pro/boot_app0.bin",
+          "asset": "esp32-color-kit-pro-boot-app0.bin",
+          "offset": "0xe000"
+        },
+        {
           "name": "Firmware",
-          "source": "build/firmware.bin",
-          "asset": "firmware.bin",
+          "source": ".pio/build/esp32-color-kit-pro/firmware.bin",
+          "asset": "esp32-color-kit-pro-firmware.bin",
           "offset": "0x10000"
         }
       ]
