@@ -7,6 +7,9 @@ enum class EventType {
     TimeSynchronized,
     WeatherUpdated,
     WeatherCleared,
+    UpdateAvailable,
+    UpdateCheckFinished,
+    UpdateStateChanged,
 };
 
 struct SystemEvent {

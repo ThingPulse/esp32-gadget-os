@@ -35,6 +35,7 @@ class LGFX {
 #endif
 #include <lvgl.h>
 #include "AppRegistry.h"
+#include "EventBus.h"
 #include "ServiceRegistry.h"
 #include "apps/CalculatorApp.h"
 #include "apps/PlanesApp.h"
@@ -46,6 +47,7 @@ class LGFX {
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
 #include "services/WeatherLocationStore.h"
+#include "services/UpdateService.h"
 #include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
 #include "ui/UiTrace.h"
@@ -61,7 +63,9 @@ class LGFX {
 #include <ArduinoJson.h>
 
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
+#include <esp_bt.h>
 #include <esp_heap_caps.h>
+#include <esp_ota_ops.h>
 #endif
 
 #if defined(SDL_h_)
@@ -87,8 +91,93 @@ static uint8_t *draw_buf = nullptr;
 static size_t draw_buf_size = 0;
 static lv_obj_t *home_screen = nullptr;
 static bool restore_route_pending = true;
+static bool update_dialog_pending = false;
+static lv_obj_t *update_dialog = nullptr;
+static lv_obj_t *update_dialog_status = nullptr;
+static lv_obj_t *update_dialog_buttons = nullptr;
+static lv_timer_t *update_dialog_timer = nullptr;
 
 static void launch_route(const std::string &route);
+
+static void update_service_event(const SystemEvent &, void *) { update_dialog_pending = true; }
+
+static void close_update_dialog()
+{
+  if (update_dialog_timer) { lv_timer_delete(update_dialog_timer); update_dialog_timer=nullptr; }
+  if (update_dialog && lv_obj_is_valid(update_dialog)) lv_obj_delete(update_dialog);
+  update_dialog=nullptr; update_dialog_status=nullptr;
+  update_dialog_buttons=nullptr;
+}
+
+static void update_dialog_timer_cb(lv_timer_t *)
+{
+  UpdateService &updates=UpdateService::instance();
+  if (!update_dialog_status || !lv_obj_is_valid(update_dialog_status)) return;
+  char text[96];
+  if (updates.state()==UpdateService::State::Downloading)
+    std::snprintf(text,sizeof(text),"Downloading and verifying... %d%%",updates.progress_percent());
+  else if (updates.state()==UpdateService::State::Error)
+  {
+    std::snprintf(text,sizeof(text),"Update failed: %s",updates.error().c_str());
+    if (update_dialog_buttons && lv_obj_is_valid(update_dialog_buttons)) lv_obj_clear_flag(update_dialog_buttons,LV_OBJ_FLAG_HIDDEN);
+  }
+  else if (updates.state()==UpdateService::State::ReadyToReboot)
+    std::snprintf(text,sizeof(text),"Verified. Restarting...");
+  else return;
+  lv_label_set_text(update_dialog_status,text);
+}
+
+static void update_dialog_action(lv_event_t *event)
+{
+  const intptr_t action=(intptr_t)lv_event_get_user_data(event);
+  UpdateService &updates=UpdateService::instance();
+  if (action==1) {
+    if (updates.install()) {
+      lv_label_set_text(update_dialog_status,"Downloading and verifying... 0%");
+      update_dialog_timer=lv_timer_create(update_dialog_timer_cb,150,nullptr);
+      lv_obj_t *button=(lv_obj_t*)lv_event_get_target(event);
+      lv_obj_t *row=lv_obj_get_parent(button);
+      lv_obj_add_flag(row,LV_OBJ_FLAG_HIDDEN);
+    }
+  } else {
+    if (action==2) updates.ignore_available(); else updates.dismiss();
+    close_update_dialog();
+  }
+}
+
+static lv_obj_t *update_dialog_button(lv_obj_t *parent, const char *text, intptr_t action)
+{
+  lv_obj_t *button=lv_button_create(parent); lv_obj_set_height(button,40);
+  lv_obj_add_event_cb(button,update_dialog_action,LV_EVENT_CLICKED,(void*)action);
+  lv_obj_t *label=lv_label_create(button); lv_label_set_text(label,text); lv_obj_center(label); return button;
+}
+
+static void show_update_dialog()
+{
+  if (update_dialog && lv_obj_is_valid(update_dialog)) return;
+  UpdateService &updates=UpdateService::instance();
+  update_dialog=lv_obj_create(lv_layer_top()); lv_obj_set_size(update_dialog,300,300); lv_obj_center(update_dialog);
+  lv_obj_set_style_bg_color(update_dialog,lv_color_hex(0x20243a),0);
+  lv_obj_set_style_border_color(update_dialog,lv_color_hex(0x64c8ff),0);
+  lv_obj_set_style_border_width(update_dialog,2,0); lv_obj_set_style_pad_all(update_dialog,14,0);
+  lv_obj_set_layout(update_dialog,LV_LAYOUT_FLEX); lv_obj_set_flex_flow(update_dialog,LV_FLEX_FLOW_COLUMN);
+  lv_obj_clear_flag(update_dialog,LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *title=lv_label_create(update_dialog); lv_label_set_text(title,"Gadget OS update available");
+  lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0); lv_obj_set_style_text_color(title,lv_color_white(),0);
+  lv_obj_t *versions=lv_label_create(update_dialog); char version_text[96];
+  std::snprintf(version_text,sizeof(version_text),"Installed: %s\nAvailable: %s",updates.current_version(),updates.available_version().c_str());
+  lv_label_set_text(versions,version_text); lv_obj_set_style_text_color(versions,lv_color_hex(0xb7bdd7),0);
+  lv_obj_t *notes=lv_label_create(update_dialog); lv_obj_set_width(notes,lv_pct(100));
+  lv_label_set_long_mode(notes,LV_LABEL_LONG_WRAP); lv_label_set_text(notes,updates.release_notes().empty()?"A new version is ready to install.":updates.release_notes().c_str());
+  lv_obj_set_flex_grow(notes,1); lv_obj_set_style_text_color(notes,lv_color_white(),0);
+  update_dialog_status=lv_label_create(update_dialog); lv_label_set_text(update_dialog_status,"");
+  lv_obj_t *buttons=lv_obj_create(update_dialog); lv_obj_set_size(buttons,lv_pct(100),50);
+  update_dialog_buttons=buttons;
+  lv_obj_set_style_bg_opa(buttons,LV_OPA_TRANSP,0); lv_obj_set_style_border_width(buttons,0,0); lv_obj_set_style_pad_all(buttons,0,0);
+  lv_obj_set_layout(buttons,LV_LAYOUT_FLEX); lv_obj_set_flex_flow(buttons,LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(buttons,LV_FLEX_ALIGN_SPACE_BETWEEN,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+  update_dialog_button(buttons,"Install",1); update_dialog_button(buttons,"Ignore",2); update_dialog_button(buttons,"Close",3);
+}
 
 #if defined(SDL_h_)
 static uint32_t native_capture_started_ms = 0;
@@ -797,6 +886,13 @@ static uint32_t get_tick_ms(void)
 void setup(void)
 {
   UI_TRACE("Boot", "setup start");
+#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(GADGET_OS_BLE_ENABLED) && !GADGET_OS_BLE_ENABLED
+  // BLE is not currently exposed by the Grande UI. Return the controller's
+  // reserved DRAM to the general heap before Wi-Fi and TLS need it. Enabling
+  // BLE later requires a reboot into a build with this flag set to 1.
+  const esp_err_t bt_release = esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+  UI_TRACE("Boot", "BLE memory release result=%d", (int)bt_release);
+#endif
   ServiceRegistry::instance().begin_all();
 
   lcd.init();
@@ -870,6 +966,7 @@ void setup(void)
 #endif
 
   UiSessionState::begin();
+  EventBus::instance().subscribe(EventType::UpdateAvailable, update_service_event, nullptr);
 #if defined(SDL_h_)
   if (const char *documentation_route = std::getenv("GADGET_OS_DOC_ROUTE"))
     UiSessionState::set_route(documentation_route);
@@ -883,6 +980,15 @@ void setup(void)
   // Defer route restoration until first loop so home screen is fully ready
   restore_route_pending = true;
   UI_TRACE("Boot", "setup done restore_route_pending=1");
+#if defined(GADGET_OS_OTA_ENABLED) && GADGET_OS_OTA_ENABLED
+  // If rollback support is enabled in the bootloader, reaching a complete UI
+  // and service startup is the point at which the new image is accepted.
+  const esp_partition_t *running_partition=esp_ota_get_running_partition();
+  esp_ota_img_states_t ota_state;
+  if (running_partition && esp_ota_get_state_partition(running_partition,&ota_state)==ESP_OK &&
+      ota_state==ESP_OTA_IMG_PENDING_VERIFY)
+    esp_ota_mark_app_valid_cancel_rollback();
+#endif
 }
 
 void loop(void)
@@ -913,6 +1019,7 @@ void loop(void)
   prev_ms = cur_ms;
 #endif
   ServiceRegistry::instance().loop_all();
+  if (update_dialog_pending) { update_dialog_pending=false; show_update_dialog(); }
 #if defined(SDL_h_)
   native_run_tutorial();
 #endif

@@ -24,6 +24,7 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 - Calculator
 - Wi-Fi, time zone, display, weather, and application settings
 - System information page with live heap, PSRAM, LVGL memory, and uptime values
+- User-approved, dual-partition OTA updates with stable and prerelease channels
 - Automatic Wi-Fi reconnection and NTP synchronization retries
 - Optional LVGL performance monitor and serial performance logging
 - Native SDL build for faster UI development

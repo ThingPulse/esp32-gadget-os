@@ -114,6 +114,19 @@ Open **Settings → System** to inspect the software build and current memory us
 
 The memory and uptime values refresh once per second while the page is visible. The device build also reports internal heap health, PSRAM, firmware size, and flash capacity. This information is useful when diagnosing TLS failures or low-memory behavior.
 
+## Software updates
+
+After Wi-Fi connects, Gadget OS checks once in the background for a newer
+version. When one is available, a dialog lets you install it, ignore that exact
+version, or close the dialog. Closing defers the reminder until a later startup;
+ignoring prevents that version from being offered again.
+
+Open **Settings → Software Update** to check manually. Stable updates are used
+by default. Enable **Include prereleases** only if you want to test unfinished
+versions. Installation downloads into the inactive firmware partition, verifies
+the published SHA-256 digest, activates it, and restarts the device. Keep the
+device powered throughout installation.
+
 ## Troubleshooting
 
 ### Wi-Fi never connects

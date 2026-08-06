@@ -3,6 +3,7 @@
   "targets": [
     {
       "environment": "esp32-color-kit",
+      "otaEnabled": true,
       "manifestAsset": "app-market-esp32-color-kit.json",
       "app": {
         "id": "tp-color-kit-grande-ckos",
@@ -47,6 +48,7 @@
     },
     {
       "environment": "esp32-color-kit-pro",
+      "otaEnabled": false,
       "manifestAsset": "app-market-esp32-color-kit-pro.json",
       "app": {
         "id": "tp-color-kit-grande-ckos-pro",

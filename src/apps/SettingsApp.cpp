@@ -8,6 +8,7 @@
 #include "services/WeatherLocationSearchService.h"
 #include "services/WeatherLocationStore.h"
 #include "services/WifiService.h"
+#include "services/UpdateService.h"
 #include "ui/UiNav.h"
 #include "ui/UiSessionState.h"
 #include "ui/StatusIcons.h"
@@ -38,6 +39,72 @@ static lv_obj_t *route_restore_settings_screen = nullptr;
 static void configure_settings_keyboard(lv_obj_t *keyboard);
 static void settings_keyboard_value_event(lv_event_t *e);
 static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target, bool back_to_home);
+
+struct UpdateSettingsCtx { lv_obj_t *status=nullptr; lv_timer_t *timer=nullptr; };
+static UpdateSettingsCtx update_settings_ctx;
+
+static void update_settings_refresh(lv_timer_t *)
+{
+  if (!update_settings_ctx.status || !lv_obj_is_valid(update_settings_ctx.status)) return;
+  UpdateService &updates=UpdateService::instance(); char text[192];
+  switch (updates.state()) {
+    case UpdateService::State::Checking: std::snprintf(text,sizeof(text),"Checking for updates..."); break;
+    case UpdateService::State::Available: std::snprintf(text,sizeof(text),"Version %s is available. Return to the app to install it.",updates.available_version().c_str()); break;
+    case UpdateService::State::Downloading: std::snprintf(text,sizeof(text),"Installing... %d%%",updates.progress_percent()); break;
+    case UpdateService::State::Error: std::snprintf(text,sizeof(text),"%s",updates.error().c_str()); break;
+    default: std::snprintf(text,sizeof(text),"Gadget OS %s is installed.",updates.current_version()); break;
+  }
+  lv_label_set_text(update_settings_ctx.status,text);
+}
+
+static void update_check_clicked(lv_event_t *e)
+{
+  if (lv_event_get_code(e)==LV_EVENT_CLICKED) UpdateService::instance().check(true);
+}
+
+static void update_channel_changed(lv_event_t *e)
+{
+  if (lv_event_get_code(e)!=LV_EVENT_VALUE_CHANGED) return;
+  UpdateService::instance().set_channel(lv_obj_has_state((lv_obj_t*)lv_event_get_target(e),LV_STATE_CHECKED)
+    ? UpdateService::Channel::Prerelease : UpdateService::Channel::Stable);
+}
+
+static void update_settings_deleted(lv_event_t *)
+{
+  if (update_settings_ctx.timer) lv_timer_delete(update_settings_ctx.timer);
+  update_settings_ctx={};
+}
+
+static void open_update_screen(lv_event_t *e)
+{
+  if (!e || lv_event_get_code(e)!=LV_EVENT_CLICKED) return;
+  lv_obj_t *settings_scr=(lv_obj_t*)lv_event_get_user_data(e);
+  lv_obj_t *scr=lv_obj_create(nullptr); lv_obj_set_style_bg_color(scr,lv_color_hex(0x1e2030),0);
+  lv_obj_set_style_bg_opa(scr,LV_OPA_COVER,0); lv_obj_set_style_pad_all(scr,0,0);
+  make_top_bar(scr,"Software Update",settings_scr,false);
+  lv_obj_t *content=lv_obj_create(scr); lv_obj_set_pos(content,0,44); lv_obj_set_size(content,lv_pct(100),436);
+  lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0); lv_obj_set_style_border_width(content,0,0);
+  lv_obj_set_style_pad_all(content,16,0); lv_obj_set_style_pad_row(content,14,0);
+  lv_obj_set_layout(content,LV_LAYOUT_FLEX); lv_obj_set_flex_flow(content,LV_FLEX_FLOW_COLUMN);
+  lv_obj_t *version=lv_label_create(content); char value[80]; std::snprintf(value,sizeof(value),"Installed version\n%s",UpdateService::current_version());
+  lv_label_set_text(version,value); lv_obj_set_style_text_color(version,lv_color_white(),0);
+  lv_obj_t *channel_row=lv_obj_create(content); lv_obj_set_size(channel_row,lv_pct(100),58);
+  lv_obj_set_style_bg_color(channel_row,lv_color_hex(0x2a2d42),0); lv_obj_set_style_border_width(channel_row,0,0);
+  lv_obj_t *channel_label=lv_label_create(channel_row); lv_label_set_text(channel_label,"Include prereleases"); lv_obj_align(channel_label,LV_ALIGN_LEFT_MID,0,0);
+  lv_obj_t *channel_switch=lv_switch_create(channel_row); lv_obj_align(channel_switch,LV_ALIGN_RIGHT_MID,0,0);
+  if (UpdateService::instance().channel()==UpdateService::Channel::Prerelease) lv_obj_add_state(channel_switch,LV_STATE_CHECKED);
+  lv_obj_add_event_cb(channel_switch,update_channel_changed,LV_EVENT_VALUE_CHANGED,nullptr);
+  lv_obj_t *hint=lv_label_create(content); lv_obj_set_width(hint,lv_pct(100)); lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);
+  lv_label_set_text(hint,"Stable updates are recommended. Prereleases may contain unfinished features.");
+  lv_obj_set_style_text_color(hint,lv_color_hex(0xb7bdd7),0);
+  lv_obj_t *check=lv_button_create(content); lv_obj_set_size(check,lv_pct(100),46); lv_obj_add_event_cb(check,update_check_clicked,LV_EVENT_CLICKED,nullptr);
+  if (!UpdateService::supported()) lv_obj_add_state(check,LV_STATE_DISABLED);
+  lv_obj_t *check_label=lv_label_create(check); lv_label_set_text(check_label,"Check for updates"); lv_obj_center(check_label);
+  update_settings_ctx.status=lv_label_create(content); lv_obj_set_width(update_settings_ctx.status,lv_pct(100));
+  lv_label_set_long_mode(update_settings_ctx.status,LV_LABEL_LONG_WRAP); lv_obj_set_style_text_color(update_settings_ctx.status,lv_color_white(),0);
+  update_settings_refresh(nullptr); update_settings_ctx.timer=lv_timer_create(update_settings_refresh,250,nullptr);
+  lv_obj_add_event_cb(scr,update_settings_deleted,LV_EVENT_DELETE,nullptr); ui_load_screen(scr,false);
+}
 
 static void format_memory_size(char *buffer, size_t buffer_size, size_t bytes)
 {
@@ -1956,6 +2023,26 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_label_set_text(planes_chevron, LV_SYMBOL_RIGHT);
   lv_obj_set_style_text_color(planes_chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(planes_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
+
+  /* Software update row */
+  lv_obj_t *update_row = lv_obj_create(list);
+  lv_obj_set_size(update_row, lv_pct(100), 52);
+  lv_obj_clear_flag(update_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(update_row, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(update_row, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(update_row, 0, 0);
+  lv_obj_set_style_radius(update_row, 10, 0);
+  lv_obj_set_style_pad_hor(update_row, 16, 0);
+  lv_obj_add_flag(update_row, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(update_row, open_update_screen, LV_EVENT_CLICKED, scr);
+  lv_obj_t *update_label = lv_label_create(update_row);
+  lv_label_set_text(update_label, LV_SYMBOL_DOWNLOAD "  Software Update");
+  lv_obj_set_style_text_color(update_label, lv_color_white(), 0);
+  lv_obj_align(update_label, LV_ALIGN_LEFT_MID, 0, 0);
+  lv_obj_t *update_chevron = lv_label_create(update_row);
+  lv_label_set_text(update_chevron, LV_SYMBOL_RIGHT);
+  lv_obj_set_style_text_color(update_chevron, lv_color_hex(0x888888), 0);
+  lv_obj_align(update_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
   return scr;
 }

@@ -172,8 +172,29 @@ async function prepare(root, tag) {
       if (await sha256(path) !== reference.sha256) fail(`Final checksum mismatch: ${reference.asset}`);
     }
   }
+  const otaTargets = {};
+  for (const { target } of manifests) {
+    if (!target.otaEnabled) continue;
+    const firmware = target.partitions.find(partition => partition.name === 'Firmware');
+    if (!firmware) continue;
+    const staged = stagedAssets.get(firmware.asset);
+    otaTargets[target.environment] = {
+      url: `https://github.com/ThingPulse/esp32-gadget-os/releases/download/v${version}/${firmware.asset}`,
+      size: staged.size,
+      sha256: staged.sha256
+    };
+  }
+  const otaManifest = {
+    schema_version: 1,
+    version,
+    channel: version.includes('-') ? 'prerelease' : 'stable',
+    release_notes: `See the Gadget OS ${version} release notes on GitHub.`,
+    release_url: `https://github.com/ThingPulse/esp32-gadget-os/releases/tag/v${version}`,
+    targets: otaTargets
+  };
+  await writeFile(join(staging, 'ota-manifest.json'), `${JSON.stringify(otaManifest, null, 2)}\n`);
   console.log(`Prepared ${relative(root, staging)} for ${manifests.map(item => item.target.app.id).join(', ')} ${version}`);
-  for (const filename of [...config.targets.map(item => item.manifestAsset), ...stagedAssets.keys()]) {
+  for (const filename of [...config.targets.map(item => item.manifestAsset), ...stagedAssets.keys(), 'ota-manifest.json']) {
     console.log(`- ${filename}`);
   }
 }
