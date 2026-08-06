@@ -1,5 +1,7 @@
 # Gadget OS
 
+[The ThingPulse Color Kit Grande](https://thingpulse.com/lp/color-kit-offer/en/) is a fun hands-on soldering and programming project for building your own ESP32 touchscreen gadget. Gadget OS is optimized for the Color Kit Grande.
+
 Gadget OS is an LVGL-based application shell for ThingPulse Color Kit devices. It provides a touch-oriented home screen, persistent settings, background network services, and a native SDL simulator for developing the UI without flashing hardware.
 
 The project is under active development. The Weather app is the most complete network application; the Planes app should currently be considered experimental.
