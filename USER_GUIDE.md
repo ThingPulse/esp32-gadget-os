@@ -159,3 +159,13 @@ The script:
 5. Replaces the images under `documents/user-guide/screenshots`.
 
 Requirements for screenshot generation are PlatformIO, SDL2, Node.js, and a graphical session in which the SDL simulator can start. Update the route list in `scripts/update-user-guide-screenshots.sh` when adding another documented screen.
+
+## Updating the instructional movie
+
+On macOS with FFmpeg installed, regenerate the captioned setup tour with:
+
+```bash
+./scripts/update-user-guide-video.sh
+```
+
+This first reproducible movie uses framebuffer captures, animated touch markers, captions, and the sanitized documentation fixture. It writes `documents/user-guide/video/gadget-os-tour.mp4` at 640×960 in H.264 format.

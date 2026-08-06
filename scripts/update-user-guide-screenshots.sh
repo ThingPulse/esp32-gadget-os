@@ -36,5 +36,7 @@ capture settings_weather weather-locations
 capture settings_display display
 capture settings_system system
 capture weather weather
+capture calculator calculator
+capture planes planes
 
 echo "Updated screenshots in $OUTPUT_DIR"
