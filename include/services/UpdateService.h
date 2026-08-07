@@ -15,8 +15,10 @@ public:
 
     bool check(bool manual = false);
     bool install();
+    bool cancel_install();
     void ignore_available();
     void dismiss();
+    void acknowledge_install_notice();
 
     Channel channel() const { return _channel; }
     void set_channel(Channel value);
@@ -25,6 +27,8 @@ public:
     const std::string &available_version() const { return _available_version; }
     const std::string &release_notes() const { return _release_notes; }
     const std::string &error() const { return _error; }
+    const std::string &installed_version_notice() const { return _installed_version_notice; }
+    bool available_version_was_ignored() const { return _available_was_ignored; }
     bool manual_check() const { return _manual_check; }
     static const char *current_version();
     static bool supported();
@@ -42,12 +46,15 @@ private:
 
     volatile State _state = State::Idle;
     volatile int _progress = 0;
+    volatile bool _cancel_requested = false;
     State _published_state = State::Idle;
     Channel _channel = Channel::Stable;
     bool _manual_check = false;
+    bool _available_was_ignored = false;
     bool _checked_this_boot = false;
     int _wifi_sub = 0;
     std::string _ignored_version;
+    std::string _installed_version_notice;
     std::string _available_version;
     std::string _release_notes;
     std::string _firmware_url;

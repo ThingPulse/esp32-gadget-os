@@ -37,6 +37,7 @@ class LGFX {
 #include "AppRegistry.h"
 #include "EventBus.h"
 #include "ServiceRegistry.h"
+#include "SystemVersion.h"
 #include "apps/CalculatorApp.h"
 #include "apps/PlanesApp.h"
 #include "apps/SettingsApp.h"
@@ -95,9 +96,12 @@ static bool update_dialog_pending = false;
 static lv_obj_t *update_dialog = nullptr;
 static lv_obj_t *update_dialog_status = nullptr;
 static lv_obj_t *update_dialog_buttons = nullptr;
+static lv_obj_t *update_dialog_progress = nullptr;
+static lv_obj_t *update_dialog_progress_value = nullptr;
 static lv_timer_t *update_dialog_timer = nullptr;
 
 static void launch_route(const std::string &route);
+static lv_obj_t *update_dialog_button(lv_obj_t *parent, const char *text, intptr_t action);
 
 static void update_service_event(const SystemEvent &, void *) { update_dialog_pending = true; }
 
@@ -106,7 +110,7 @@ static void close_update_dialog()
   if (update_dialog_timer) { lv_timer_delete(update_dialog_timer); update_dialog_timer=nullptr; }
   if (update_dialog && lv_obj_is_valid(update_dialog)) lv_obj_delete(update_dialog);
   update_dialog=nullptr; update_dialog_status=nullptr;
-  update_dialog_buttons=nullptr;
+  update_dialog_buttons=nullptr; update_dialog_progress=nullptr; update_dialog_progress_value=nullptr;
 }
 
 static void update_dialog_timer_cb(lv_timer_t *)
@@ -115,11 +119,24 @@ static void update_dialog_timer_cb(lv_timer_t *)
   if (!update_dialog_status || !lv_obj_is_valid(update_dialog_status)) return;
   char text[96];
   if (updates.state()==UpdateService::State::Downloading)
-    std::snprintf(text,sizeof(text),"Downloading and verifying... %d%%",updates.progress_percent());
+  {
+    const int progress=updates.progress_percent();
+    std::snprintf(text,sizeof(text),"Update in progress\nDownloading and verifying: %d%%",progress);
+    if (update_dialog_progress && lv_obj_is_valid(update_dialog_progress))
+      lv_bar_set_value(update_dialog_progress,progress,LV_ANIM_ON);
+    if (update_dialog_progress_value && lv_obj_is_valid(update_dialog_progress_value)) {
+      char percent[16]; std::snprintf(percent,sizeof(percent),"%d%%",progress);
+      lv_label_set_text(update_dialog_progress_value,percent);
+    }
+  }
   else if (updates.state()==UpdateService::State::Error)
   {
     std::snprintf(text,sizeof(text),"Update failed: %s",updates.error().c_str());
-    if (update_dialog_buttons && lv_obj_is_valid(update_dialog_buttons)) lv_obj_clear_flag(update_dialog_buttons,LV_OBJ_FLAG_HIDDEN);
+    if (update_dialog_buttons && lv_obj_is_valid(update_dialog_buttons)) {
+      lv_obj_clean(update_dialog_buttons);
+      update_dialog_button(update_dialog_buttons,"Close",3);
+    }
+    if (update_dialog_timer) { lv_timer_delete(update_dialog_timer); update_dialog_timer=nullptr; }
   }
   else if (updates.state()==UpdateService::State::ReadyToReboot)
     std::snprintf(text,sizeof(text),"Verified. Restarting...");
@@ -133,11 +150,26 @@ static void update_dialog_action(lv_event_t *event)
   UpdateService &updates=UpdateService::instance();
   if (action==1) {
     if (updates.install()) {
-      lv_label_set_text(update_dialog_status,"Downloading and verifying... 0%");
+      lv_label_set_text(update_dialog_status,"Update in progress\nDownloading and verifying: 0%");
+      if (update_dialog_progress && lv_obj_is_valid(update_dialog_progress)) {
+        lv_bar_set_value(update_dialog_progress,0,LV_ANIM_OFF);
+        lv_obj_clear_flag(update_dialog_progress,LV_OBJ_FLAG_HIDDEN);
+      }
+      if (update_dialog_progress_value && lv_obj_is_valid(update_dialog_progress_value)) {
+        lv_label_set_text(update_dialog_progress_value,"0%");
+        lv_obj_clear_flag(update_dialog_progress_value,LV_OBJ_FLAG_HIDDEN);
+      }
       update_dialog_timer=lv_timer_create(update_dialog_timer_cb,150,nullptr);
       lv_obj_t *button=(lv_obj_t*)lv_event_get_target(event);
       lv_obj_t *row=lv_obj_get_parent(button);
-      lv_obj_add_flag(row,LV_OBJ_FLAG_HIDDEN);
+      lv_obj_clean(row);
+      update_dialog_button(row,"Cancel",4);
+    }
+  } else if (action==4) {
+    if (updates.cancel_install()) {
+      lv_label_set_text(update_dialog_status,"Cancelling update...");
+      lv_obj_t *button=(lv_obj_t*)lv_event_get_target(event);
+      lv_obj_add_state(button,LV_STATE_DISABLED);
     }
   } else {
     if (action==2) updates.ignore_available(); else updates.dismiss();
@@ -156,27 +188,77 @@ static void show_update_dialog()
 {
   if (update_dialog && lv_obj_is_valid(update_dialog)) return;
   UpdateService &updates=UpdateService::instance();
-  update_dialog=lv_obj_create(lv_layer_top()); lv_obj_set_size(update_dialog,300,300); lv_obj_center(update_dialog);
+  update_dialog=lv_obj_create(lv_layer_top()); lv_obj_set_size(update_dialog,300,320); lv_obj_center(update_dialog);
   lv_obj_set_style_bg_color(update_dialog,lv_color_hex(0x20243a),0);
   lv_obj_set_style_border_color(update_dialog,lv_color_hex(0x64c8ff),0);
   lv_obj_set_style_border_width(update_dialog,2,0); lv_obj_set_style_pad_all(update_dialog,14,0);
   lv_obj_set_layout(update_dialog,LV_LAYOUT_FLEX); lv_obj_set_flex_flow(update_dialog,LV_FLEX_FLOW_COLUMN);
   lv_obj_clear_flag(update_dialog,LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_t *title=lv_label_create(update_dialog); lv_label_set_text(title,"Gadget OS update available");
+  lv_obj_t *title=lv_label_create(update_dialog);
+  lv_label_set_text(title,updates.available_version_was_ignored()?"Ignored update available":"Gadget OS update");
+  lv_obj_set_width(title,lv_pct(100)); lv_label_set_long_mode(title,LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0); lv_obj_set_style_text_color(title,lv_color_white(),0);
   lv_obj_t *versions=lv_label_create(update_dialog); char version_text[96];
   std::snprintf(version_text,sizeof(version_text),"Installed: %s\nAvailable: %s",updates.current_version(),updates.available_version().c_str());
   lv_label_set_text(versions,version_text); lv_obj_set_style_text_color(versions,lv_color_hex(0xb7bdd7),0);
   lv_obj_t *notes=lv_label_create(update_dialog); lv_obj_set_width(notes,lv_pct(100));
-  lv_label_set_long_mode(notes,LV_LABEL_LONG_WRAP); lv_label_set_text(notes,updates.release_notes().empty()?"A new version is ready to install.":updates.release_notes().c_str());
+  lv_label_set_long_mode(notes,LV_LABEL_LONG_WRAP);
+  if (updates.available_version_was_ignored())
+    lv_label_set_text(notes,"You previously ignored this version. You can install it now or keep ignoring it.");
+  else
+    lv_label_set_text(notes,updates.release_notes().empty()?"A new version is ready to install.":updates.release_notes().c_str());
   lv_obj_set_flex_grow(notes,1); lv_obj_set_style_text_color(notes,lv_color_white(),0);
   update_dialog_status=lv_label_create(update_dialog); lv_label_set_text(update_dialog_status,"");
+  lv_obj_set_width(update_dialog_status,lv_pct(100)); lv_label_set_long_mode(update_dialog_status,LV_LABEL_LONG_WRAP);
+  update_dialog_progress=lv_bar_create(update_dialog); lv_obj_set_size(update_dialog_progress,lv_pct(100),24);
+  lv_bar_set_range(update_dialog_progress,0,100); lv_bar_set_value(update_dialog_progress,0,LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(update_dialog_progress,lv_color_hex(0x343a55),LV_PART_MAIN);
+  lv_obj_set_style_bg_color(update_dialog_progress,lv_color_hex(0x64c8ff),LV_PART_INDICATOR);
+  update_dialog_progress_value=lv_label_create(update_dialog_progress); lv_label_set_text(update_dialog_progress_value,"0%");
+  lv_obj_center(update_dialog_progress_value); lv_obj_set_style_text_color(update_dialog_progress_value,lv_color_white(),0);
+  lv_obj_set_style_text_font(update_dialog_progress_value,&lv_font_montserrat_14,0);
+  lv_obj_add_flag(update_dialog_progress_value,LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(update_dialog_progress,LV_OBJ_FLAG_HIDDEN);
   lv_obj_t *buttons=lv_obj_create(update_dialog); lv_obj_set_size(buttons,lv_pct(100),50);
   update_dialog_buttons=buttons;
   lv_obj_set_style_bg_opa(buttons,LV_OPA_TRANSP,0); lv_obj_set_style_border_width(buttons,0,0); lv_obj_set_style_pad_all(buttons,0,0);
   lv_obj_set_layout(buttons,LV_LAYOUT_FLEX); lv_obj_set_flex_flow(buttons,LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(buttons,LV_FLEX_ALIGN_SPACE_BETWEEN,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
-  update_dialog_button(buttons,"Install",1); update_dialog_button(buttons,"Ignore",2); update_dialog_button(buttons,"Close",3);
+  lv_obj_t *install=update_dialog_button(buttons,"Install",1);
+  lv_obj_t *ignore=update_dialog_button(buttons,updates.available_version_was_ignored()?"Keep ignoring":"Ignore",2);
+  lv_obj_t *close=update_dialog_button(buttons,"Close",3);
+  if (updates.available_version_was_ignored()) {
+    lv_obj_set_height(buttons,94);
+    lv_obj_set_flex_flow(buttons,LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_row(buttons,6,0); lv_obj_set_style_pad_column(buttons,6,0);
+    lv_obj_set_width(install,lv_pct(100));
+    lv_obj_set_width(ignore,lv_pct(48)); lv_obj_set_width(close,lv_pct(48));
+  }
+}
+
+static void show_update_installed_dialog()
+{
+  UpdateService &updates=UpdateService::instance();
+  if (updates.installed_version_notice().empty() || (update_dialog && lv_obj_is_valid(update_dialog))) return;
+  update_dialog=lv_obj_create(lv_layer_top()); lv_obj_set_size(update_dialog,290,190); lv_obj_center(update_dialog);
+  lv_obj_set_style_bg_color(update_dialog,lv_color_hex(0x20243a),0);
+  lv_obj_set_style_border_color(update_dialog,lv_color_hex(0x64c8ff),0);
+  lv_obj_set_style_border_width(update_dialog,2,0); lv_obj_set_style_pad_all(update_dialog,16,0);
+  lv_obj_set_layout(update_dialog,LV_LAYOUT_FLEX); lv_obj_set_flex_flow(update_dialog,LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(update_dialog,LV_FLEX_ALIGN_SPACE_BETWEEN,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(update_dialog,LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *title=lv_label_create(update_dialog); lv_label_set_text(title,"Update installed");
+  lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0); lv_obj_set_style_text_color(title,lv_color_white(),0);
+  char text[96]; std::snprintf(text,sizeof(text),"Gadget OS %s is now installed.",updates.installed_version_notice().c_str());
+  lv_obj_t *message=lv_label_create(update_dialog); lv_obj_set_width(message,lv_pct(100));
+  lv_label_set_long_mode(message,LV_LABEL_LONG_WRAP); lv_label_set_text(message,text);
+  lv_obj_set_style_text_align(message,LV_TEXT_ALIGN_CENTER,0); lv_obj_set_style_text_color(message,lv_color_hex(0xb7bdd7),0);
+  update_dialog_buttons=lv_obj_create(update_dialog); lv_obj_set_size(update_dialog_buttons,120,46);
+  lv_obj_set_style_bg_opa(update_dialog_buttons,LV_OPA_TRANSP,0); lv_obj_set_style_border_width(update_dialog_buttons,0,0);
+  lv_obj_set_style_pad_all(update_dialog_buttons,0,0); lv_obj_set_layout(update_dialog_buttons,LV_LAYOUT_FLEX);
+  lv_obj_set_flex_align(update_dialog_buttons,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+  update_dialog_button(update_dialog_buttons,"Close",3);
+  updates.acknowledge_install_notice();
 }
 
 #if defined(SDL_h_)
@@ -468,6 +550,12 @@ static void show_splash_screen(uint32_t duration_ms)
   lv_obj_t *logo = lv_image_create(splash);
   lv_image_set_src(logo, &thingpulse_logo);
   lv_obj_align(logo, LV_ALIGN_CENTER, 0, 18);
+
+  lv_obj_t *version = lv_label_create(splash);
+  char version_text[64]; std::snprintf(version_text,sizeof(version_text),"Version %s",GADGET_OS_VERSION);
+  lv_label_set_text(version,version_text);
+  lv_obj_set_style_text_color(version,lv_color_hex(0xb7bdd7),0);
+  lv_obj_align(version,LV_ALIGN_BOTTOM_MID,0,-18);
 
   lv_screen_load(splash);
   lv_refr_now(nullptr);
@@ -973,6 +1061,7 @@ void setup(void)
 #endif
   show_splash_screen(1000);
   create_home_screen();
+  show_update_installed_dialog();
 #if defined(SDL_h_)
   native_load_tutorial();
 #endif

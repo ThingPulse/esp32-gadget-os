@@ -155,7 +155,7 @@ static const char *bearing_short(float degrees)
   return dirs[index];
 }
 
-#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(COLOR_KIT_PRO)
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
 static inline void swap_rgb565_bytes(uint16_t *pixels, size_t pixel_count)
 {
   for (size_t i = 0; i < pixel_count; ++i) {
@@ -252,17 +252,19 @@ static void planes_app_ensure_map_markers()
     lv_obj_t *tail = lv_line_create(app_ctx.map_square);
     lv_obj_set_size(tail, lv_pct(100), lv_pct(100));
     lv_obj_set_pos(tail, 0, 0);
-    lv_obj_set_style_line_width(tail, 2, 0);
+    lv_obj_set_style_line_width(tail, 3, 0);
     lv_obj_set_style_line_rounded(tail, true, 0);
-    lv_obj_set_style_line_color(tail, lv_color_hex(0x4dabf7), 0);
+    lv_obj_set_style_line_color(tail, lv_color_hex(0x00d9ff), 0);
     lv_obj_add_flag(tail, LV_OBJ_FLAG_HIDDEN);
     app_ctx.map_plane_tails[i] = tail;
 
     lv_obj_t *dot = lv_obj_create(app_ctx.map_square);
-    lv_obj_set_size(dot, 6, 6);
-    lv_obj_set_style_bg_color(dot, lv_color_hex(0xfa5252), 0);
+    lv_obj_set_size(dot, 10, 10);
+    lv_obj_set_style_bg_color(dot, lv_color_hex(0x00d9ff), 0);
     lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(dot, 0, 0);
+    lv_obj_set_style_border_width(dot, 2, 0);
+    lv_obj_set_style_border_color(dot, lv_color_hex(0x10131f), 0);
+    lv_obj_set_style_border_opa(dot, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
@@ -292,13 +294,34 @@ static std::string map_signature(const PlanesService &svc, lv_coord_t square_siz
   char sig[128] = {0};
   std::snprintf(sig,
                 sizeof(sig),
-                "lat=%.5f;lon=%.5f;range=%.2f;size=%d;zoom=%u",
+                "hw-osm-v5;lat=%.5f;lon=%.5f;range=%.2f;size=%d;zoom=%u",
                 svc.center_latitude(),
                 svc.center_longitude(),
                 svc.range_km(),
                 (int)square_size,
                 (unsigned)zoom);
   return std::string(sig);
+}
+
+static bool map_contains_blank_block(const uint16_t *pixels, lv_coord_t size)
+{
+  if (!pixels || size < 48) return true;
+  constexpr int block = 24;
+  constexpr uint16_t background = OSM_BGCOLOR;
+  constexpr uint16_t swapped_background = (uint16_t)((background << 8) | (background >> 8));
+  for (int y = 0; y + block <= size; y += block) {
+    for (int x = 0; x + block <= size; x += block) {
+      int matching = 0;
+      for (int by = 0; by < block; ++by) {
+        for (int bx = 0; bx < block; ++bx) {
+          const uint16_t pixel = pixels[(size_t)(y + by) * size + x + bx];
+          if (pixel == 0 || pixel == background || pixel == swapped_background) ++matching;
+        }
+      }
+      if (matching >= block * block * 98 / 100) return true;
+    }
+  }
+  return false;
 }
 
 static bool load_cached_map_rgb565(const std::string &sig, lv_coord_t square_size, std::vector<uint16_t> &pixels_out)
@@ -312,6 +335,11 @@ static bool load_cached_map_rgb565(const std::string &sig, lv_coord_t square_siz
   if (raw.size() != expected_bytes) return false;
   pixels_out.resize(expected_bytes / sizeof(uint16_t));
   std::memcpy(pixels_out.data(), raw.data(), expected_bytes);
+  if (map_contains_blank_block(pixels_out.data(), square_size)) {
+    UI_TRACE("Planes", "discarding incomplete cached map");
+    pixels_out.clear();
+    return false;
+  }
   return true;
 }
 
@@ -327,33 +355,36 @@ static void save_cached_map_rgb565(const std::string &sig, const uint16_t *pixel
 
 static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_size, std::vector<uint16_t> &pixels_out, std::string &sig_out)
 {
-  static OpenStreetMap osm;
-  static bool osm_cache_ready = false;
-
   const uint8_t zoom = choose_osm_zoom(svc.center_latitude(), svc.range_km(), square_size);
   sig_out = map_signature(svc, square_size, zoom);
 
   if (load_cached_map_rgb565(sig_out, square_size, pixels_out)) return true;
 
-  if (!osm_cache_ready) {
-    const uint16_t tiles = osm.tilesNeeded((uint16_t)square_size, (uint16_t)square_size);
-    if (!osm.resizeTilesCache(tiles)) return false;
-    osm_cache_ready = true;
-  }
-
+  // Keep the worker and its reusable TLS client scoped to this operation.
+  // Its destructor releases the TLS buffers after the composed map is cached.
+  OpenStreetMap osm;
+  const uint16_t tiles = osm.tilesNeeded((uint16_t)square_size, (uint16_t)square_size);
+  if (!osm.resizeTilesCache(tiles)) return false;
   osm.setSize((uint16_t)square_size, (uint16_t)square_size);
   LGFX_Sprite map_sprite;
-  if (!osm.fetchMap(map_sprite,
-                    svc.center_longitude(),
-                    svc.center_latitude(),
-                    zoom,
-                    2500)) {
+  uint16_t *buf = nullptr;
+  const size_t px_count = (size_t)square_size * (size_t)square_size;
+  constexpr int max_attempts = 3;
+  for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+    const bool fetched = osm.fetchMap(map_sprite,
+                                      svc.center_longitude(),
+                                      svc.center_latitude(),
+                                      zoom,
+                                      8000);
+    buf = (uint16_t *)map_sprite.getBuffer();
+    if (fetched && buf && !map_contains_blank_block(buf, square_size)) break;
+    UI_TRACE("Planes", "map incomplete after attempt %d/%d", attempt, max_attempts);
+    buf = nullptr;
+  }
+  if (!buf) {
+    map_sprite.deleteSprite();
     return false;
   }
-
-  uint16_t *buf = (uint16_t *)map_sprite.getBuffer();
-  const size_t px_count = (size_t)square_size * (size_t)square_size;
-  if (!buf) return false;
 
   pixels_out.assign(buf, buf + px_count);
   save_cached_map_rgb565(sig_out, pixels_out.data(), square_size);
@@ -364,7 +395,7 @@ static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_s
 static void set_map_bg_image(lv_obj_t *img_obj, lv_image_dsc_t &dsc, std::vector<uint16_t> &pixels, lv_coord_t square_size)
 {
   if (!img_obj || !lv_obj_is_valid(img_obj) || pixels.empty()) return;
-#if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(COLOR_KIT_PRO)
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
   swap_rgb565_bytes(pixels.data(), pixels.size());
 #endif
   std::memset(&dsc, 0, sizeof(dsc));
@@ -672,21 +703,21 @@ static void planes_app_update_map_ui()
     }
 
     lv_obj_clear_flag(app_ctx.map_plane_dots[i], LV_OBJ_FLAG_HIDDEN);
-    lv_color_t dot_color = lv_color_hex(0x4dabf7);
+    lv_color_t dot_color = lv_color_hex(0x00d9ff);
     if (planes[i].military)
-      dot_color = lv_color_hex(0xffd166);
+      dot_color = lv_color_hex(0xffe066);
     else if (planes[i].vertical_rate_ms > 1.5f)
-      dot_color = lv_color_hex(0x51cf66);
+      dot_color = lv_color_hex(0x39ff88);
     else if (planes[i].vertical_rate_ms < -1.5f)
-      dot_color = lv_color_hex(0xff922b);
+      dot_color = lv_color_hex(0xff8a00);
     lv_obj_set_style_bg_color(app_ctx.map_plane_dots[i], dot_color, 0);
     const lv_coord_t px = (lv_coord_t)(center_x + nx * radius_px);
     const lv_coord_t py = (lv_coord_t)(center_y - ny * radius_px);
-    lv_obj_set_pos(app_ctx.map_plane_dots[i], px - 3, py - 3);
+    lv_obj_set_pos(app_ctx.map_plane_dots[i], px - 5, py - 5);
     lv_obj_move_foreground(app_ctx.map_plane_dots[i]);
     if (planes[i].heading_valid && app_ctx.map_plane_tails[i] &&
         lv_obj_is_valid(app_ctx.map_plane_tails[i])) {
-      constexpr float tail_length = 14.0f;
+      constexpr float tail_length = 18.0f;
       const float heading_rad = planes[i].heading_deg * 3.14159265358979323846f / 180.0f;
       lv_point_precise_t *tail_points = app_ctx.map_plane_tail_points.data() + i * 2;
       tail_points[0] = {px, py};

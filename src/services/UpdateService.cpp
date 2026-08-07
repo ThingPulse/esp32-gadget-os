@@ -91,6 +91,12 @@ void UpdateService::load_preferences()
     if (!cfg.begin() || !cfg.load("update")) return;
     _channel=cfg.get("channel","stable")=="prerelease" ? Channel::Prerelease : Channel::Stable;
     _ignored_version=cfg.get("ignored_version","");
+    const std::string pending=cfg.get("installed_version_pending","");
+    if (!pending.empty() && pending==current_version()) _installed_version_notice=pending;
+    else if (!pending.empty()) {
+        cfg.set("installed_version_pending",std::string());
+        cfg.save();
+    }
 }
 
 void UpdateService::set_channel(Channel value)
@@ -112,6 +118,7 @@ bool UpdateService::check(bool manual)
     if (!supported()) { _error="OTA is not enabled for this build"; _state=State::Error; return false; }
     if (_state==State::Checking || _state==State::Downloading) return false;
     _manual_check=manual; _checked_this_boot=true; _error.clear(); _available_version.clear();
+    _available_was_ignored=false;
     _progress=0; _state=State::Checking;
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
     if (xTaskCreate(check_task,"update_check",10240,this,1,nullptr)!=pdPASS) {
@@ -175,8 +182,12 @@ bool UpdateService::fetch_manifest()
     std::string version=doc["version"]|"";
     JsonObject target=doc["targets"]["esp32-color-kit"].as<JsonObject>();
     if (version.empty() || target.isNull()) { _error="Update does not support this device"; return false; }
-    if (compare_version(version,current_version())<=0 || version==_ignored_version) {
+    if (compare_version(version,current_version())<=0) {
         _available_version.clear(); return true;
+    }
+    if (version==_ignored_version) {
+        if (!_manual_check) { _available_version.clear(); return true; }
+        _available_was_ignored=true;
     }
     _firmware_url=target["url"]|""; _sha256=target["sha256"]|"";
     _firmware_size=target["size"]|0; _release_notes=doc["release_notes"]|"";
@@ -188,7 +199,7 @@ bool UpdateService::fetch_manifest()
 bool UpdateService::install()
 {
     if (_state!=State::Available) return false;
-    _state=State::Downloading; _progress=0; _error.clear();
+    _cancel_requested=false; _state=State::Downloading; _progress=0; _error.clear();
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
     if (xTaskCreate(install_task,"update_install",12288,this,1,nullptr)!=pdPASS) {
         _error="Could not start installation"; _state=State::Error; return false;
@@ -197,6 +208,13 @@ bool UpdateService::install()
 #else
     _error="Installation is available on the device build"; _state=State::Error; return false;
 #endif
+}
+
+bool UpdateService::cancel_install()
+{
+    if (_state!=State::Downloading) return false;
+    _cancel_requested=true;
+    return true;
 }
 
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
@@ -212,6 +230,7 @@ void UpdateService::install_task(void *user_data)
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
 bool UpdateService::download_and_install()
 {
+    if (_cancel_requested) { _error="Update cancelled"; return false; }
     const esp_partition_t *next=esp_ota_get_next_update_partition(nullptr);
     if (!next || _firmware_size>next->size) { _error="Firmware does not fit OTA partition"; return false; }
     WiFiClientSecure client; client.setInsecure(); HTTPClient http;
@@ -221,6 +240,7 @@ bool UpdateService::download_and_install()
     mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts_ret(&sha,0);
     WiFiClient *stream=http.getStreamPtr(); uint8_t buffer[2048]; size_t written=0;
     while (written<_firmware_size) {
+        if (_cancel_requested) break;
         int available=stream->available();
         if (available<=0) { if (!http.connected()) break; delay(10); continue; }
         size_t want=std::min((size_t)available,std::min(sizeof(buffer),_firmware_size-written));
@@ -229,13 +249,30 @@ bool UpdateService::download_and_install()
         mbedtls_sha256_update_ret(&sha,buffer,got); written+=got;
         _progress=(int)(written*100/_firmware_size);
     }
+    if (_cancel_requested) {
+        mbedtls_sha256_free(&sha); http.end(); Update.abort();
+        _error="Update cancelled"; return false;
+    }
     unsigned char digest[32]; mbedtls_sha256_finish_ret(&sha,digest); mbedtls_sha256_free(&sha); http.end();
     char hex[65]; for (int i=0;i<32;++i) std::sprintf(hex+i*2,"%02x",digest[i]); hex[64]=0;
     if (written!=_firmware_size || _sha256!=hex) { Update.abort(); _error="Firmware verification failed"; return false; }
+    if (_cancel_requested) { Update.abort(); _error="Update cancelled"; return false; }
+    auto &cfg=ConfigStoreService::instance();
+    cfg.load("update");
+    cfg.set("installed_version_pending",_available_version);
+    if (!cfg.save()) { _error="Could not save update confirmation"; return false; }
     if (!Update.end(true)) { _error="Could not activate firmware"; return false; }
     _progress=100; return true;
 }
 #endif
+
+void UpdateService::acknowledge_install_notice()
+{
+    if (_installed_version_notice.empty()) return;
+    _installed_version_notice.clear();
+    auto &cfg=ConfigStoreService::instance();
+    cfg.load("update"); cfg.set("installed_version_pending",std::string()); cfg.save();
+}
 
 void UpdateService::ignore_available()
 {
