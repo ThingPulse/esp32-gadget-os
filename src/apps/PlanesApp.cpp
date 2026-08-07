@@ -59,6 +59,7 @@ struct PlanesAppCtx {
   lv_obj_t *loading_line = nullptr;
   std::vector<lv_obj_t *> map_plane_tails{};
   lv_obj_t *map_plane_dots[PlanesService::MAX_PLANES]{};
+  lv_obj_t *map_plane_labels[PlanesService::MAX_PLANES]{};
   std::vector<lv_point_precise_t> map_plane_tail_points{};
   lv_point_precise_t map_direction_points[2]{};
   lv_obj_t *rows[PlanesService::MAX_PLANES]{};
@@ -269,6 +270,18 @@ static void planes_app_ensure_map_markers()
     lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
     app_ctx.map_plane_dots[i] = dot;
+
+    lv_obj_t *label = lv_label_create(app_ctx.map_square);
+    lv_label_set_text(label, "");
+    lv_obj_set_style_text_color(label, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_bg_color(label, lv_color_hex(0x10131f), 0);
+    lv_obj_set_style_bg_opa(label, LV_OPA_80, 0);
+    lv_obj_set_style_pad_hor(label, 3, 0);
+    lv_obj_set_style_pad_ver(label, 1, 0);
+    lv_obj_set_style_radius(label, 3, 0);
+    lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(label, LV_OBJ_FLAG_SCROLLABLE);
+    app_ctx.map_plane_labels[i] = label;
   }
   UI_TRACE("Planes", "map markers created count=%d", PlanesService::MAX_PLANES);
 }
@@ -660,6 +673,8 @@ static void planes_app_update_map_ui()
     for (int i = 0; i < PlanesService::MAX_PLANES; ++i)
       if (app_ctx.map_plane_dots[i] && lv_obj_is_valid(app_ctx.map_plane_dots[i])) {
         lv_obj_add_flag(app_ctx.map_plane_dots[i], LV_OBJ_FLAG_HIDDEN);
+        if (app_ctx.map_plane_labels[i] && lv_obj_is_valid(app_ctx.map_plane_labels[i]))
+          lv_obj_add_flag(app_ctx.map_plane_labels[i], LV_OBJ_FLAG_HIDDEN);
         if (i < (int)app_ctx.map_plane_tails.size() && app_ctx.map_plane_tails[i] &&
             lv_obj_is_valid(app_ctx.map_plane_tails[i]))
           lv_obj_add_flag(app_ctx.map_plane_tails[i], LV_OBJ_FLAG_HIDDEN);
@@ -686,6 +701,8 @@ static void planes_app_update_map_ui()
     if (!app_ctx.map_plane_dots[i] || !lv_obj_is_valid(app_ctx.map_plane_dots[i])) continue;
     if (i >= count || !planes[i].valid || (planes[i].on_ground && svc.hide_ground())) {
       lv_obj_add_flag(app_ctx.map_plane_dots[i], LV_OBJ_FLAG_HIDDEN);
+      if (app_ctx.map_plane_labels[i] && lv_obj_is_valid(app_ctx.map_plane_labels[i]))
+        lv_obj_add_flag(app_ctx.map_plane_labels[i], LV_OBJ_FLAG_HIDDEN);
       if (app_ctx.map_plane_tails[i] && lv_obj_is_valid(app_ctx.map_plane_tails[i]))
         lv_obj_add_flag(app_ctx.map_plane_tails[i], LV_OBJ_FLAG_HIDDEN);
       continue;
@@ -697,6 +714,8 @@ static void planes_app_update_map_ui()
     const float ny = north_km / range_km;
     if ((nx * nx + ny * ny) > 1.0f) {
       lv_obj_add_flag(app_ctx.map_plane_dots[i], LV_OBJ_FLAG_HIDDEN);
+      if (app_ctx.map_plane_labels[i] && lv_obj_is_valid(app_ctx.map_plane_labels[i]))
+        lv_obj_add_flag(app_ctx.map_plane_labels[i], LV_OBJ_FLAG_HIDDEN);
       if (app_ctx.map_plane_tails[i] && lv_obj_is_valid(app_ctx.map_plane_tails[i]))
         lv_obj_add_flag(app_ctx.map_plane_tails[i], LV_OBJ_FLAG_HIDDEN);
       continue;
@@ -715,6 +734,25 @@ static void planes_app_update_map_ui()
     const lv_coord_t py = (lv_coord_t)(center_y - ny * radius_px);
     lv_obj_set_pos(app_ctx.map_plane_dots[i], px - 5, py - 5);
     lv_obj_move_foreground(app_ctx.map_plane_dots[i]);
+
+    lv_obj_t *callsign_label = app_ctx.map_plane_labels[i];
+    if (callsign_label && lv_obj_is_valid(callsign_label) && !planes[i].callsign.empty()) {
+      char callsign[10] = {};
+      std::snprintf(callsign, sizeof(callsign), "%.8s", planes[i].callsign.c_str());
+      lv_label_set_text(callsign_label, callsign);
+      lv_obj_clear_flag(callsign_label, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_update_layout(callsign_label);
+      const lv_coord_t label_w = lv_obj_get_width(callsign_label);
+      const lv_coord_t label_h = lv_obj_get_height(callsign_label);
+      lv_coord_t label_x = px + 7;
+      if (label_x + label_w > square_size) label_x = px - label_w - 7;
+      label_x = LV_CLAMP(0, label_x, square_size - label_w);
+      const lv_coord_t label_y = LV_CLAMP(0, py - label_h / 2, square_size - label_h);
+      lv_obj_set_pos(callsign_label, label_x, label_y);
+      lv_obj_move_foreground(callsign_label);
+    } else if (callsign_label && lv_obj_is_valid(callsign_label)) {
+      lv_obj_add_flag(callsign_label, LV_OBJ_FLAG_HIDDEN);
+    }
     if (planes[i].heading_valid && app_ctx.map_plane_tails[i] &&
         lv_obj_is_valid(app_ctx.map_plane_tails[i])) {
       constexpr float tail_length = 18.0f;
