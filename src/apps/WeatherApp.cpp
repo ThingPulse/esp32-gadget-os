@@ -48,6 +48,9 @@ struct WeatherAppCtx {
   lv_obj_t *wind_card_speed_label = nullptr;
   lv_obj_t *wind_card_dir_label = nullptr;
   lv_obj_t *wind_rose_marker = nullptr;
+  lv_obj_t *sun_times_label = nullptr;
+  lv_obj_t *moon_phase_label = nullptr;
+  lv_obj_t *moon_shadow = nullptr;
   lv_obj_t *pull_indicator = nullptr;
   lv_obj_t *loading_line = nullptr;
   lv_timer_t *refresh_timer = nullptr;
@@ -138,6 +141,17 @@ static std::string hour_label_from_iso(const std::string &iso)
   return "--:--";
 }
 
+static void update_moon_visual(lv_obj_t *shadow, float phase)
+{
+  if (!shadow || !lv_obj_is_valid(shadow)) return;
+  phase = std::fmod(phase, 1.0f);
+  if (phase < 0.0f) phase += 1.0f;
+  const int x = phase < 0.5f
+                    ? -(int)std::lround(84.0f * phase)
+                    : (int)std::lround(84.0f * (1.0f - phase));
+  lv_obj_set_pos(shadow, x, 0);
+}
+
 static void nav_back_event(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
@@ -183,6 +197,10 @@ static void weather_app_update_ui()
       lv_label_set_text(app_ctx.wind_card_speed_label, "--");
     if (app_ctx.wind_card_dir_label && lv_obj_is_valid(app_ctx.wind_card_dir_label))
       lv_label_set_text(app_ctx.wind_card_dir_label, "--");
+    if (app_ctx.sun_times_label && lv_obj_is_valid(app_ctx.sun_times_label))
+      lv_label_set_text(app_ctx.sun_times_label, "Rise --:--\nSet  --:--");
+    if (app_ctx.moon_phase_label && lv_obj_is_valid(app_ctx.moon_phase_label))
+      lv_label_set_text(app_ctx.moon_phase_label, "Moon data\nunavailable");
     update_wind_rose_marker(app_ctx.wind_rose_marker, 0.0f);
 
     for (int i = 0; i < WeatherService::FORECAST_DAYS; ++i) {
@@ -247,6 +265,22 @@ static void weather_app_update_ui()
   }
 
   update_wind_rose_marker(app_ctx.wind_rose_marker, weather.wind_direction_degrees());
+
+  if (app_ctx.sun_times_label && lv_obj_is_valid(app_ctx.sun_times_label)) {
+    const std::string sunrise = hour_label_from_iso(weather.sunrise_time());
+    const std::string sunset = hour_label_from_iso(weather.sunset_time());
+    char sun_text[48] = {};
+    std::snprintf(sun_text, sizeof(sun_text), "Rise %s\nSet  %s",
+                  sunrise.c_str(), sunset.c_str());
+    lv_label_set_text(app_ctx.sun_times_label, sun_text);
+  }
+  if (app_ctx.moon_phase_label && lv_obj_is_valid(app_ctx.moon_phase_label)) {
+    char moon_text[64] = {};
+    std::snprintf(moon_text, sizeof(moon_text), "%s\n%.0f%% lit",
+                  weather.moon_phase_name(), weather.moon_illumination_percent());
+    lv_label_set_text(app_ctx.moon_phase_label, moon_text);
+  }
+  update_moon_visual(app_ctx.moon_shadow, weather.moon_phase_fraction());
 
   const WeatherForecastDay *forecast = weather.forecast_days();
   int count = weather.forecast_count();
@@ -828,6 +862,81 @@ void weather_app_launch(void)
   lv_obj_set_style_radius(wind_rose_marker, LV_RADIUS_CIRCLE, 0);
   update_wind_rose_marker(wind_rose_marker, 0.0f);
 
+  // Astronomy card. Sunrise/sunset come from the existing Open-Meteo
+  // response; moon phase and illumination are calculated locally.
+  lv_obj_t *astronomy_card = lv_obj_create(content);
+  lv_obj_set_size(astronomy_card, lv_pct(100), 118);
+  lv_obj_clear_flag(astronomy_card, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(astronomy_card, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_bg_opa(astronomy_card, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(astronomy_card, 0, 0);
+  lv_obj_set_style_radius(astronomy_card, 10, 0);
+  lv_obj_set_style_pad_all(astronomy_card, 10, 0);
+
+  lv_obj_t *astronomy_title = lv_label_create(astronomy_card);
+  lv_label_set_text(astronomy_title, "Sun & Moon");
+  lv_obj_set_style_text_color(astronomy_title, lv_color_white(), 0);
+  lv_obj_align(astronomy_title, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  lv_obj_t *divider = lv_obj_create(astronomy_card);
+  lv_obj_set_size(divider, 1, 76);
+  lv_obj_align(divider, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_set_style_bg_color(divider, lv_color_hex(0x49506a), 0);
+  lv_obj_set_style_bg_opa(divider, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(divider, 0, 0);
+  lv_obj_set_style_pad_all(divider, 0, 0);
+
+  lv_obj_t *sun_disc = lv_obj_create(astronomy_card);
+  lv_obj_set_size(sun_disc, 38, 38);
+  lv_obj_set_pos(sun_disc, 8, 48);
+  lv_obj_clear_flag(sun_disc, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(sun_disc, lv_color_hex(0xffd43b), 0);
+  lv_obj_set_style_bg_opa(sun_disc, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(sun_disc, lv_color_hex(0xffec99), 0);
+  lv_obj_set_style_border_width(sun_disc, 3, 0);
+  lv_obj_set_style_radius(sun_disc, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_all(sun_disc, 0, 0);
+
+  lv_obj_t *sun_heading = lv_label_create(astronomy_card);
+  lv_label_set_text(sun_heading, "Sun");
+  lv_obj_set_style_text_color(sun_heading, lv_color_hex(0xffec99), 0);
+  lv_obj_set_pos(sun_heading, 57, 28);
+  lv_obj_t *sun_times = lv_label_create(astronomy_card);
+  lv_label_set_text(sun_times, "Rise --:--\nSet  --:--");
+  lv_obj_set_style_text_color(sun_times, lv_color_hex(0xd5e2ff), 0);
+  lv_obj_set_pos(sun_times, 57, 50);
+
+  lv_obj_t *moon_disc = lv_obj_create(astronomy_card);
+  lv_obj_set_size(moon_disc, 42, 42);
+  lv_obj_set_pos(moon_disc, 151, 46);
+  lv_obj_clear_flag(moon_disc, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(moon_disc, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_set_style_bg_color(moon_disc, lv_color_hex(0xe7eaf4), 0);
+  lv_obj_set_style_bg_opa(moon_disc, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(moon_disc, lv_color_hex(0xaab2cb), 0);
+  lv_obj_set_style_border_width(moon_disc, 1, 0);
+  lv_obj_set_style_radius(moon_disc, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_all(moon_disc, 0, 0);
+  lv_obj_t *moon_shadow = lv_obj_create(moon_disc);
+  lv_obj_set_size(moon_shadow, 42, 42);
+  lv_obj_clear_flag(moon_shadow, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(moon_shadow, lv_color_hex(0x20243a), 0);
+  lv_obj_set_style_bg_opa(moon_shadow, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(moon_shadow, 0, 0);
+  lv_obj_set_style_radius(moon_shadow, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_all(moon_shadow, 0, 0);
+
+  lv_obj_t *moon_heading = lv_label_create(astronomy_card);
+  lv_label_set_text(moon_heading, "Moon");
+  lv_obj_set_style_text_color(moon_heading, lv_color_hex(0xdbe4ff), 0);
+  lv_obj_set_pos(moon_heading, 204, 28);
+  lv_obj_t *moon_phase = lv_label_create(astronomy_card);
+  lv_obj_set_width(moon_phase, 82);
+  lv_label_set_long_mode(moon_phase, LV_LABEL_LONG_WRAP);
+  lv_label_set_text(moon_phase, "Moon data\nunavailable");
+  lv_obj_set_style_text_color(moon_phase, lv_color_hex(0xd5e2ff), 0);
+  lv_obj_set_pos(moon_phase, 204, 50);
+
   lv_obj_t *pull_indicator = lv_label_create(scr);
   lv_label_set_text(pull_indicator, "Pull to refresh");
   lv_obj_set_style_text_color(pull_indicator, lv_color_hex(0xd7dde6), 0);
@@ -851,6 +960,9 @@ void weather_app_launch(void)
   app_ctx.wind_card_speed_label = wind_card_speed_label;
   app_ctx.wind_card_dir_label = wind_card_dir_label;
   app_ctx.wind_rose_marker = wind_rose_marker;
+  app_ctx.sun_times_label = sun_times;
+  app_ctx.moon_phase_label = moon_phase;
+  app_ctx.moon_shadow = moon_shadow;
   app_ctx.pull_indicator = pull_indicator;
   app_ctx.loading_line = loading_line;
   app_ctx.refresh_timer = lv_timer_create(weather_app_timer_cb, 100, nullptr);

@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <new>
 
 #include "ui/UiTrace.h"
@@ -34,6 +35,24 @@
 namespace {
 
 constexpr unsigned long WEATHER_REFRESH_MS = 10UL * 60UL * 1000UL;
+constexpr double SYNODIC_MONTH_DAYS = 29.53058867;
+constexpr double KNOWN_NEW_MOON_JD = 2451550.1;
+
+float moon_phase_for_iso_date(const std::string &iso)
+{
+    int year = 0, month = 0, day = 0;
+    if (std::sscanf(iso.c_str(), "%d-%d-%d", &year, &month, &day) != 3)
+        return 0.0f;
+    if (month <= 2) {
+        --year;
+        month += 12;
+    }
+    const double jd = std::floor(365.25 * (year + 4716)) +
+                      std::floor(30.6001 * (month + 1)) + day - 1524.5;
+    double phase = std::fmod((jd - KNOWN_NEW_MOON_JD) / SYNODIC_MONTH_DAYS, 1.0);
+    if (phase < 0.0) phase += 1.0;
+    return (float)phase;
+}
 
 struct WeatherFetchResult {
     bool ok = false;
@@ -220,6 +239,20 @@ float WeatherService::wind_direction_degrees() const
     return _wind_direction;
 }
 
+float WeatherService::moon_illumination_percent() const
+{
+    return (float)((1.0 - std::cos(2.0 * 3.14159265358979323846 * _moon_phase)) * 50.0);
+}
+
+const char *WeatherService::moon_phase_name() const
+{
+    static const char *names[] = {
+        "New moon", "Waxing crescent", "First quarter", "Waxing gibbous",
+        "Full moon", "Waning gibbous", "Last quarter", "Waning crescent"};
+    const int index = ((int)std::floor(_moon_phase * 8.0f + 0.5f)) & 7;
+    return names[index];
+}
+
 int WeatherService::forecast_count() const
 {
     return _forecast_count;
@@ -319,6 +352,9 @@ bool WeatherService::apply_payload(std::string &payload)
 
     _forecast_count = 0;
     _hourly_forecast_count = 0;
+    _sunrise.clear();
+    _sunset.clear();
+    _moon_phase = 0.0f;
     for (int i = 0; i < FORECAST_DAYS; ++i)
         _forecast[i] = WeatherForecastDay{};
     for (int i = 0; i < FORECAST_HOURS; ++i)
@@ -330,6 +366,8 @@ bool WeatherService::apply_payload(std::string &payload)
         JsonArray code_arr = daily["weather_code"].as<JsonArray>();
         JsonArray max_arr = daily["temperature_2m_max"].as<JsonArray>();
         JsonArray min_arr = daily["temperature_2m_min"].as<JsonArray>();
+        JsonArray sunrise_arr = daily["sunrise"].as<JsonArray>();
+        JsonArray sunset_arr = daily["sunset"].as<JsonArray>();
 
         int available = (int)std::min({time_arr.size(), code_arr.size(), max_arr.size(), min_arr.size(), (size_t)FORECAST_DAYS});
         for (int i = 0; i < available; ++i) {
@@ -340,6 +378,13 @@ bool WeatherService::apply_payload(std::string &payload)
             _forecast[i].temp_min = min_arr[i].as<float>();
         }
         _forecast_count = available;
+        if (available > 0) {
+            if (!sunrise_arr.isNull() && sunrise_arr.size() > 0)
+                _sunrise = sunrise_arr[0].as<std::string>();
+            if (!sunset_arr.isNull() && sunset_arr.size() > 0)
+                _sunset = sunset_arr[0].as<std::string>();
+            _moon_phase = moon_phase_for_iso_date(_forecast[0].date);
+        }
     }
 
     JsonVariant hourly = doc["hourly"];
@@ -505,7 +550,7 @@ bool WeatherService::fetch_payload(std::string &out_payload) const
     const std::string tz_query = "auto";
     std::snprintf(url,
                   sizeof(url),
-                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=%d&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s&timezone=%s",
+                  "http://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,weather_code&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&forecast_days=%d&forecast_hours=%d&temperature_unit=%s&wind_speed_unit=%s&precipitation_unit=%s&timezone=%s",
                   _latitude,
                   _longitude,
                   FORECAST_DAYS,
@@ -556,6 +601,9 @@ void WeatherService::clear_weather()
     _has_weather = false;
     _forecast_count = 0;
     _hourly_forecast_count = 0;
+    _sunrise.clear();
+    _sunset.clear();
+    _moon_phase = 0.0f;
     for (int i = 0; i < FORECAST_DAYS; ++i)
         _forecast[i] = WeatherForecastDay{};
     for (int i = 0; i < FORECAST_HOURS; ++i)

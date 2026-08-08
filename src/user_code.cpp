@@ -35,6 +35,7 @@ class LGFX {
 #endif
 #include <lvgl.h>
 #include "AppRegistry.h"
+#include "apps/DiceGameApp.h"
 #include "EventBus.h"
 #include "ServiceRegistry.h"
 #include "SystemVersion.h"
@@ -121,7 +122,7 @@ static void update_dialog_timer_cb(lv_timer_t *)
   if (updates.state()==UpdateService::State::Downloading)
   {
     const int progress=updates.progress_percent();
-    std::snprintf(text,sizeof(text),"Update in progress\nDownloading and verifying: %d%%",progress);
+    std::snprintf(text,sizeof(text),"Update in progress\nDownloading and verifying firmware...");
     if (update_dialog_progress && lv_obj_is_valid(update_dialog_progress))
       lv_bar_set_value(update_dialog_progress,progress,LV_ANIM_ON);
     if (update_dialog_progress_value && lv_obj_is_valid(update_dialog_progress_value)) {
@@ -150,7 +151,7 @@ static void update_dialog_action(lv_event_t *event)
   UpdateService &updates=UpdateService::instance();
   if (action==1) {
     if (updates.install()) {
-      lv_label_set_text(update_dialog_status,"Update in progress\nDownloading and verifying: 0%");
+      lv_label_set_text(update_dialog_status,"Update in progress\nDownloading and verifying firmware...");
       if (update_dialog_progress && lv_obj_is_valid(update_dialog_progress)) {
         lv_bar_set_value(update_dialog_progress,0,LV_ANIM_OFF);
         lv_obj_clear_flag(update_dialog_progress,LV_OBJ_FLAG_HIDDEN);
@@ -181,7 +182,8 @@ static lv_obj_t *update_dialog_button(lv_obj_t *parent, const char *text, intptr
 {
   lv_obj_t *button=lv_button_create(parent); lv_obj_set_height(button,40);
   lv_obj_add_event_cb(button,update_dialog_action,LV_EVENT_CLICKED,(void*)action);
-  lv_obj_t *label=lv_label_create(button); lv_label_set_text(label,text); lv_obj_center(label); return button;
+  lv_obj_t *label=lv_label_create(button); lv_label_set_text(label,text);
+  lv_obj_set_style_text_color(label,lv_color_white(),0); lv_obj_center(label); return button;
 }
 
 static void show_update_dialog()
@@ -210,6 +212,7 @@ static void show_update_dialog()
   lv_obj_set_flex_grow(notes,1); lv_obj_set_style_text_color(notes,lv_color_white(),0);
   update_dialog_status=lv_label_create(update_dialog); lv_label_set_text(update_dialog_status,"");
   lv_obj_set_width(update_dialog_status,lv_pct(100)); lv_label_set_long_mode(update_dialog_status,LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_color(update_dialog_status,lv_color_white(),0);
   update_dialog_progress=lv_bar_create(update_dialog); lv_obj_set_size(update_dialog_progress,lv_pct(100),24);
   lv_bar_set_range(update_dialog_progress,0,100); lv_bar_set_value(update_dialog_progress,0,LV_ANIM_OFF);
   lv_obj_set_style_bg_color(update_dialog_progress,lv_color_hex(0x343a55),LV_PART_MAIN);
@@ -728,6 +731,12 @@ static void launch_route(const std::string &route)
   if (route == "calculator") {
     UI_TRACE("Route", "launch calculator");
     calculator_app_launch();
+    return;
+  }
+
+  if (route == "dice_game") {
+    UI_TRACE("Route", "launch dice game");
+    dice_game_app_launch();
     return;
   }
 

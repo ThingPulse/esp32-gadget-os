@@ -84,13 +84,16 @@ static void open_update_screen(lv_event_t *e)
   make_top_bar(scr,"Software Update",settings_scr,false);
   lv_obj_t *content=lv_obj_create(scr); lv_obj_set_pos(content,0,44); lv_obj_set_size(content,lv_pct(100),436);
   lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0); lv_obj_set_style_border_width(content,0,0);
+  lv_obj_set_scrollbar_mode(content,LV_SCROLLBAR_MODE_OFF);
   lv_obj_set_style_pad_all(content,16,0); lv_obj_set_style_pad_row(content,14,0);
   lv_obj_set_layout(content,LV_LAYOUT_FLEX); lv_obj_set_flex_flow(content,LV_FLEX_FLOW_COLUMN);
   lv_obj_t *version=lv_label_create(content); char value[80]; std::snprintf(value,sizeof(value),"Installed version\n%s",UpdateService::current_version());
   lv_label_set_text(version,value); lv_obj_set_style_text_color(version,lv_color_white(),0);
   lv_obj_t *channel_row=lv_obj_create(content); lv_obj_set_size(channel_row,lv_pct(100),58);
   lv_obj_set_style_bg_color(channel_row,lv_color_hex(0x2a2d42),0); lv_obj_set_style_border_width(channel_row,0,0);
+  lv_obj_clear_flag(channel_row,LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_t *channel_label=lv_label_create(channel_row); lv_label_set_text(channel_label,"Include prereleases"); lv_obj_align(channel_label,LV_ALIGN_LEFT_MID,0,0);
+  lv_obj_set_style_text_color(channel_label,lv_color_white(),0);
   lv_obj_t *channel_switch=lv_switch_create(channel_row); lv_obj_align(channel_switch,LV_ALIGN_RIGHT_MID,0,0);
   if (UpdateService::instance().channel()==UpdateService::Channel::Prerelease) lv_obj_add_state(channel_switch,LV_STATE_CHECKED);
   lv_obj_add_event_cb(channel_switch,update_channel_changed,LV_EVENT_VALUE_CHANGED,nullptr);
@@ -99,7 +102,8 @@ static void open_update_screen(lv_event_t *e)
   lv_obj_set_style_text_color(hint,lv_color_hex(0xb7bdd7),0);
   lv_obj_t *check=lv_button_create(content); lv_obj_set_size(check,lv_pct(100),46); lv_obj_add_event_cb(check,update_check_clicked,LV_EVENT_CLICKED,nullptr);
   if (!UpdateService::supported()) lv_obj_add_state(check,LV_STATE_DISABLED);
-  lv_obj_t *check_label=lv_label_create(check); lv_label_set_text(check_label,"Check for updates"); lv_obj_center(check_label);
+  lv_obj_t *check_label=lv_label_create(check); lv_label_set_text(check_label,"Check for updates");
+  lv_obj_set_style_text_color(check_label,lv_color_white(),0); lv_obj_center(check_label);
   update_settings_ctx.status=lv_label_create(content); lv_obj_set_width(update_settings_ctx.status,lv_pct(100));
   lv_label_set_long_mode(update_settings_ctx.status,LV_LABEL_LONG_WRAP); lv_obj_set_style_text_color(update_settings_ctx.status,lv_color_white(),0);
   update_settings_refresh(nullptr); update_settings_ctx.timer=lv_timer_create(update_settings_refresh,250,nullptr);

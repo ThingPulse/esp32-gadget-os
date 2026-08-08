@@ -45,6 +45,11 @@ public:
     float precipitation_value() const;
     float wind_speed_value() const;
     float wind_direction_degrees() const;
+    const std::string &sunrise_time() const { return _sunrise; }
+    const std::string &sunset_time() const { return _sunset; }
+    float moon_phase_fraction() const { return _moon_phase; }
+    float moon_illumination_percent() const;
+    const char *moon_phase_name() const;
     int forecast_count() const;
     const WeatherForecastDay *forecast_days() const;
     int hourly_forecast_count() const;
@@ -80,6 +85,9 @@ private:
     float _precipitation = 0.0f;
     float _wind_speed = 0.0f;
     float _wind_direction = 0.0f;
+    std::string _sunrise;
+    std::string _sunset;
+    float _moon_phase = 0.0f;
     WeatherForecastDay _forecast[FORECAST_DAYS]{};
     WeatherForecastHour _hourly_forecast[FORECAST_HOURS]{};
     int _forecast_count = 0;
