@@ -1,0 +1,63 @@
+{
+  "title": "Gadget OS blog feature tour",
+  "actions": [
+    {"type":"route","route":"home","duration_ms":900},
+    {"type":"caption","text":"Gadget OS turns the Color Kit Grande into a touchscreen gadget","duration_ms":2200},
+    {"type":"caption","text":"A swipeable launcher keeps everyday and experimental apps organized","duration_ms":1800},
+    {"type":"swipe","x":280,"y":250,"x2":40,"y2":250,"duration_ms":1100},
+    {"type":"wait","duration_ms":1400},
+    {"type":"home_page","index":0,"duration_ms":900},
+
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"weather","duration_ms":1400},
+    {"type":"caption","text":"Weather: current conditions, hourly outlook and four-day forecast","duration_ms":2000},
+    {"type":"swipe","x":270,"y":265,"x2":70,"y2":265,"duration_ms":1000},
+    {"type":"wait","duration_ms":1300},
+    {"type":"swipe","x":160,"y":405,"x2":160,"y2":125,"duration_ms":1300},
+    {"type":"wait","duration_ms":1600},
+
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"calculator","duration_ms":900},
+    {"type":"caption","text":"Calculator handles everyday arithmetic directly on the device","duration_ms":1700},
+    {"type":"tap_exact","text":"1","duration_ms":550},
+    {"type":"tap_exact","text":"2","duration_ms":550},
+    {"type":"tap_exact","text":"*","duration_ms":550},
+    {"type":"tap_exact","text":"7","duration_ms":550},
+    {"type":"tap_exact","text":"=","duration_ms":2400},
+    {"type":"wait","duration_ms":1000},
+
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"settings","duration_ms":1500},
+    {"type":"caption","text":"Settings are stored persistently on the device","duration_ms":1600},
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"settings_wifi","duration_ms":1600},
+    {"type":"caption","text":"Wi-Fi setup, network scanning and reconnection","duration_ms":1600},
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"settings_time","duration_ms":1600},
+    {"type":"caption","text":"Time zones, daylight-saving rules and 12/24-hour time","duration_ms":1700},
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"settings_display","duration_ms":1600},
+    {"type":"caption","text":"Brightness, rotation and an optional LVGL performance monitor","duration_ms":1700},
+
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"settings_system","duration_ms":2200},
+    {"type":"caption","text":"Live diagnostics expose memory, storage, graphics and uptime","duration_ms":1900},
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"settings","duration_ms":900},
+    {"type":"tap_text","text":"Software Update","duration_ms":1000},
+    {"type":"caption","text":"User-approved software updates include stable and prerelease channels","duration_ms":1900},
+
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"planes","duration_ms":3500},
+    {"type":"caption","text":"Experimental apps explore what this small platform can become","duration_ms":1800},
+    {"type":"tap_text","text":"Map","duration_ms":1100},
+    {"type":"wait","duration_ms":2200},
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"dice_game","duration_ms":1800},
+
+    {"type":"caption","text":"","duration_ms":200},
+    {"type":"route","route":"home","duration_ms":1500},
+    {"type":"caption","text":"The SDL2 simulator runs the same LVGL interface on the desktop","duration_ms":2200},
+    {"type":"caption","text":"Gadget OS for the ThingPulse Color Kit Grande","duration_ms":2500}
+  ]
+}

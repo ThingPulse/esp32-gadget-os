@@ -92,6 +92,7 @@ static lv_display_t *disp;
 static uint8_t *draw_buf = nullptr;
 static size_t draw_buf_size = 0;
 static lv_obj_t *home_screen = nullptr;
+static lv_obj_t *home_pager = nullptr;
 static bool restore_route_pending = true;
 static bool update_dialog_pending = false;
 static lv_obj_t *update_dialog = nullptr;
@@ -302,6 +303,21 @@ static lv_obj_t *native_find_label(lv_obj_t *root, const std::string &needle)
   return nullptr;
 }
 
+static lv_obj_t *native_find_label_exact(lv_obj_t *root, const std::string &needle)
+{
+  if (!root) return nullptr;
+  if (lv_obj_check_type(root, &lv_label_class)) {
+    const char *value = lv_label_get_text(root);
+    if (value && std::string(value) == needle &&
+        !lv_obj_has_flag(root, LV_OBJ_FLAG_HIDDEN)) return root;
+  }
+  const uint32_t count = lv_obj_get_child_count(root);
+  for (uint32_t i = 0; i < count; ++i) {
+    if (lv_obj_t *found = native_find_label_exact(lv_obj_get_child(root, i), needle)) return found;
+  }
+  return nullptr;
+}
+
 static void native_show_caption(const std::string &text)
 {
   if (!native_tutorial_caption || !lv_obj_is_valid(native_tutorial_caption)) {
@@ -402,6 +418,10 @@ static void native_run_tutorial()
     if (a.type == "caption") native_show_caption(a.text);
     else if (a.type == "route") launch_route(a.route);
     else if (a.type == "tap_text") native_tap_object(native_find_label(lv_screen_active(), a.text));
+    else if (a.type == "tap_exact") native_tap_object(native_find_label_exact(lv_screen_active(), a.text));
+    else if (a.type == "home_page" && home_pager && lv_obj_is_valid(home_pager)) {
+      lv_obj_scroll_to_x(home_pager, a.index * lv_obj_get_width(home_pager), LV_ANIM_ON);
+    }
     else if (a.type == "focus_textarea") {
       int n=a.index; lv_obj_t *ta=native_find_type(lv_screen_active(), &lv_textarea_class, n);
       if (ta) { lv_obj_add_state(ta, LV_STATE_FOCUSED); lv_obj_send_event(ta, LV_EVENT_FOCUSED, nullptr); }
@@ -897,6 +917,7 @@ static void create_home_screen(void)
 
   /* Horizontally snapping launcher pages. */
   lv_obj_t *pager = lv_obj_create(scr);
+  home_pager = pager;
   lv_obj_set_pos(pager, 0, 30);
   lv_obj_set_size(pager, lv_pct(100), 430);
   lv_obj_set_style_bg_opa(pager, LV_OPA_TRANSP, 0);

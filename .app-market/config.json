@@ -7,7 +7,7 @@
       "manifestAsset": "app-market-esp32-color-kit.json",
       "app": {
         "id": "tp-color-kit-grande-ckos",
-        "name": "ESP32 ePulse OS",
+        "name": "ESP32 Gadget OS",
         "description": "Operating System for Color Kit Devices",
         "repository": "https://github.com/ThingPulse/esp32-gadget-os",
         "supportedDevices": [
@@ -52,7 +52,7 @@
       "manifestAsset": "app-market-esp32-color-kit-pro.json",
       "app": {
         "id": "tp-color-kit-grande-ckos-pro",
-        "name": "ESP32 ePulse OS",
+        "name": "ESP32 Gadget OS",
         "description": "Operating System for Color Kit Devices",
         "repository": "https://github.com/ThingPulse/esp32-gadget-os",
         "supportedDevices": [
