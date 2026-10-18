@@ -1006,10 +1006,6 @@ static uint32_t get_tick_ms(void)
 void setup(void)
 {
   UI_TRACE("Boot", "setup start");
-#if defined(ARDUINO) && defined(ESP_PLATFORM)
-  UI_TRACE("Boot", "Arduino-ESP32 %s / ESP-IDF %s", ESP_ARDUINO_VERSION_STR, ESP.getSdkVersion());
-#endif
-  configure_tls_memory();
 #if defined(ARDUINO) && defined(ESP_PLATFORM) && defined(GADGET_OS_BLE_ENABLED) && !GADGET_OS_BLE_ENABLED
   // BLE is not currently exposed by the Grande UI. Return the controller's
   // reserved DRAM to the general heap before Wi-Fi and TLS need it. Enabling
