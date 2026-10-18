@@ -4,7 +4,7 @@
 
 Gadget OS is an LVGL-based application shell for ThingPulse Color Kit devices. It provides a touch-oriented home screen, persistent settings, background network services, and a native SDL simulator for developing the UI without flashing hardware.
 
-The project is under active development. The Weather app is the most complete network application; the Planes app should currently be considered experimental.
+The project is under active development. The main launcher shows Weather, Planes and Calculator on the first row, with Settings on the second row. Experimental apps remain on the Labs page.
 
 For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 
@@ -20,7 +20,7 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 
 - Swipeable app launcher with active and experimental apps
 - Weather for multiple saved locations, hourly and daily forecasts, cached results, and pull-to-refresh
-- Experimental nearby-aircraft list, details, route enrichment, airline branding, and map
+- Nearby-aircraft radar, plain-language spotting cards, flight-details dialog, and route enrichment
 - Calculator
 - Wi-Fi, time zone, display, weather, and application settings
 - System information page with live heap, PSRAM, LVGL memory, and uptime values
@@ -29,7 +29,7 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 - Optional LVGL performance monitor and serial performance logging
 - Native SDL build for faster UI development
 
-Network data currently comes from services including Open-Meteo, adsb.lol, adsbdb, CARTO, and OpenStreetMap contributors. These integrations do not currently require users to enter subscription API keys, but they remain subject to the respective providers' availability and usage policies.
+Network data currently comes from services including Open-Meteo, adsb.lol, and adsbdb. These integrations do not currently require users to enter subscription API keys, but they remain subject to the respective providers' availability and usage policies.
 
 ## Prerequisites
 
@@ -274,3 +274,9 @@ Check the serial monitor for Wi-Fi, DNS, HTTP, TLS, and memory errors. The ESP32
 ### Native window does not open
 
 Confirm SDL2 is installed and that PlatformIO links against the correct SDL2 installation. The native executable is located at `.pio/build/native/program` after a successful build.
+
+### Nearby aircraft
+
+Planes opens on a north-up radar centred on the location configured in **Settings → Planes**, with a session-only 10 km radius. Choose 5, 10, 25 or 50 km from the range control (shown in nautical miles with imperial units). Nearby mode filters ground traffic before retaining the nearest 20 aircraft. Tap a radar aircraft or a nearby row to select it; the selection stays on that aircraft across refreshes until it leaves the results. The app records the last 20 distinct observed positions for each of up to 20 tracked aircraft, using fixed-size circular buffers (about 3.4 KiB total). Only the selected aircraft’s fading trail is drawn; switching aircraft reveals its existing history. Changing the radius rescales and clips the existing trail. Departed aircraft histories are reclaimed as slots are needed, and changing the configured location clears all histories. History lives only in memory for the current app session. The highlighted card gives a compass direction, distance, and movement relative to your configured location; tap it for full details. Altitude is above sea level, not height above the observer. Missing headings are drawn as dots and do not produce movement claims.
+
+The radar is the only main view. The footer’s Previous/Next arrows cycle through every nearby aircraft (with a selection index), including overlapping radar markers. Available origin/destination airport codes appear on the selected card; missing or partial routes are omitted. Tap the card for a scrollable dialog with full airport names when available, registration, speed, altitude and distance, then **Close** to return. Route information is fetched by callsign from ADSBdb on subsequent refreshes (normally every 15 seconds), with up to three uncached lookups per cycle. The selected aircraft gets first priority; selections changed during an active request take priority on the next refresh. Successful routes are cached for six hours, misses for 30 minutes. Routes are not available for every flight. Back returns home. Session range/filter changes never overwrite settings. The footer shows data age or an update error, and empty results offer a larger radius. The radar needs no map tiles, compass sensor, or extra network calls beyond the aircraft feed. The configured location is labelled “You”; it does not track device movement.

@@ -146,9 +146,9 @@ static std::string normalize_callsign_key(const std::string &callsign)
 
 static std::string airport_code_from_obj(const JsonVariantConst &airport)
 {
-    std::string iata = airport["iata_code"].as<std::string>();
+    std::string iata = json_string_or_empty(airport["iata_code"]);
     if (!iata.empty()) return iata;
-    std::string icao = airport["icao_code"].as<std::string>();
+    std::string icao = json_string_or_empty(airport["icao_code"]);
     return icao;
 }
 
@@ -210,9 +210,9 @@ static std::string airport_name_ascii(const std::string &text)
 
 static std::string airport_display_name_from_obj(const JsonVariantConst &airport)
 {
-    std::string municipality = json_string_or_empty(airport["municipality"]);
-    if (!municipality.empty()) return airport_name_ascii(municipality);
-    return airport_name_ascii(json_string_or_empty(airport["name"]));
+    std::string name = json_string_or_empty(airport["name"]);
+    if (name.empty()) name = json_string_or_empty(airport["municipality"]);
+    return airport_name_ascii(name);
 }
 
 #if !defined(ARDUINO)
@@ -391,18 +391,19 @@ bool PlanesService::reload_from_config()
     return true;
 }
 
-bool PlanesService::set_search_area(double latitude, double longitude, double range_km)
+bool PlanesService::set_search_area(double latitude, double longitude, double range_km, bool airborne_only)
 {
     if (!std::isfinite(latitude) || !std::isfinite(longitude) ||
         !std::isfinite(range_km) || std::fabs(latitude) > 90 ||
         std::fabs(longitude) > 180 || range_km <= 0)
         return false;
     if (!_search_area_pending && latitude == _center_lat &&
-        longitude == _center_lon && range_km == _range_km)
+        longitude == _center_lon && range_km == _range_km && airborne_only == _airborne_only)
         return true;
     _pending_lat = latitude;
     _pending_lon = longitude;
     _pending_range_km = range_km;
+    _pending_airborne_only = airborne_only;
     _search_area_pending = true;
     apply_search_area();
     return true;
@@ -419,6 +420,7 @@ void PlanesService::apply_search_area()
     _center_lat = _pending_lat;
     _center_lon = _pending_lon;
     _range_km = _pending_range_km;
+    _airborne_only = _pending_airborne_only;
     _search_area_pending = false;
     clear_planes();
     _last_error.clear();
@@ -478,7 +480,7 @@ bool PlanesService::parse_payload(const std::string &payload,
     auto retain_nearest = [&](PlaneState &candidate) {
         if (!candidate.valid || candidate.distance_km > _range_km)
             return;
-        if (_hide_ground && candidate.on_ground)
+        if ((_hide_ground || _airborne_only) && candidate.on_ground)
             return;
 
         if (out_count < MAX_PLANES) {
@@ -589,12 +591,16 @@ void PlanesService::enrich_routes(PlaneState *planes, int count)
     }
 #endif
     int network_budget = ROUTE_LOOKUPS_PER_CYCLE;
-    for (int i = 0; i < count; ++i) {
-        std::string origin_name;
-        std::string destination_name;
+    auto enrich = [&](int i) {
         planes[i].route = route_for_callsign(planes[i].callsign, network_budget,
-                                             origin_name, destination_name);
-    }
+                                           planes[i].origin_airport_name, planes[i].destination_airport_name);
+    };
+    int priority = -1;
+    for (int i = 0; i < count; ++i)
+        if (planes[i].icao24 == _fetch_priority_icao) { priority = i; break; }
+    if (priority >= 0) enrich(priority);
+    for (int i = 0; i < count; ++i)
+        if (i != priority) enrich(i);
 }
 
 bool PlanesService::route_airport_names(const std::string &callsign, std::string &origin,
@@ -619,6 +625,7 @@ void PlanesService::publish_result(PlaneState *planes, int count, const std::str
         _planes[i] = i < _plane_count ? planes[i] : PlaneState{};
     _has_data = true;
     _provider_name = provider;
+    _last_update_ms = now_ms();
     _last_error.clear();
     ++_data_revision;
     UI_TRACE("Planes", "update complete provider=%s planes=%d", provider.c_str(), _plane_count);
@@ -747,6 +754,7 @@ bool PlanesService::start_async_fetch()
     if (_fetch_in_progress)
         return true;
     _fetch_routes = _has_data && _plane_count > 0;
+    _fetch_priority_icao = _priority_icao;
 #if defined(ARDUINO)
     if (!planes_result_queue) {
         _last_error = "Result queue unavailable";

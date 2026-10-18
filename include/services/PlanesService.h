@@ -11,6 +11,7 @@ struct PlaneState {
     std::string icao24;
     std::string callsign;
     std::string route;
+    std::string origin_airport_name, destination_airport_name;
     std::string registration;
     std::string aircraft_type;
     std::string aircraft_description;
@@ -42,9 +43,11 @@ public:
 
     bool reload_from_config();
     bool refresh_now();
+    // UI-thread selection; copied before launching the network worker.
+    void prioritize_aircraft(const std::string &icao) { _priority_icao = icao; }
     // Session-only search area. Never writes Settings; an active request is
     // allowed to finish before its coordinates are changed.
-    bool set_search_area(double latitude, double longitude, double range_km);
+    bool set_search_area(double latitude, double longitude, double range_km, bool airborne_only = false);
     void reset_search_area();
     double home_latitude() const { return _home_lat; }
     double home_longitude() const { return _home_lon; }
@@ -56,6 +59,7 @@ public:
     bool has_data() const { return _has_data; }
     bool is_fetching() const { return _fetch_in_progress; }
     unsigned long data_revision() const { return _data_revision; }
+    unsigned long data_age_ms() const { return now_ms() - _last_update_ms; }
     int plane_count() const { return _plane_count; }
     const PlaneState *planes() const { return _planes; }
     const std::string &provider_name() const { return _provider_name; }
@@ -106,6 +110,7 @@ private:
 
     bool _configured = false;
     bool _has_data = false;
+    std::string _priority_icao, _fetch_priority_icao;
     bool _fetch_routes = false; // Captured before starting the worker.
     bool _enabled = false;
     bool _metric = true;
@@ -117,6 +122,8 @@ private:
     double _home_lat = 0.0, _home_lon = 0.0, _home_range_km = 30.0;
     double _pending_lat = 0.0, _pending_lon = 0.0, _pending_range_km = 30.0;
     bool _search_area_pending = false;
+    bool _airborne_only = false, _pending_airborne_only = false;
+    unsigned long _last_update_ms = 0;
     PlaneState _planes[MAX_PLANES]{};
     int _plane_count = 0;
     unsigned long _last_fetch_ms = 0;

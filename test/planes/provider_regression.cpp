@@ -9,7 +9,6 @@
 #include <fstream>
 #include <iterator>
 #include <iostream>
-#include "ui/PlaneSearchArea.h"
 #include <limits>
 #include <chrono>
 #include <thread>
@@ -23,22 +22,6 @@ int main(int argc, char **argv)
     PlaneState planes[PlanesService::MAX_PLANES];
     int count = 0;
     std::string error, provider;
-    PlaneSearchArea area{47.4247, 8.5470, 40};
-    area.pan(1, 1);
-    assert(area.latitude > 47.4247 && area.longitude > 8.5470);
-    area.zoom(true);
-    assert(std::fabs(area.range_km - 32) < 0.001);
-    area.zoom(false);
-    assert(std::fabs(area.range_km - 40) < 0.001);
-    area = {85, 179.99, 463};
-    area.pan(1, 1);
-    assert(area.latitude == 85 && area.longitude >= -180 && area.longitude < 0);
-    area.zoom(false);
-    assert(area.range_km == 463);
-    area.range_km = 1;
-    area.zoom(true);
-    assert(area.range_km == 1);
-
     svc._home_lat = 47.4247;
     svc._home_lon = 8.5470;
     svc._home_range_km = 30;
@@ -57,7 +40,10 @@ int main(int argc, char **argv)
     assert(!svc.set_search_area(std::numeric_limits<double>::quiet_NaN(), 0, 30));
     // An old worker response must never repopulate the newly selected area.
     setenv("GADGET_OS_TUTORIAL_PATH", "test-fixture", 1);
+    svc.prioritize_aircraft("first");
     assert(svc.start_async_fetch());
+    svc.prioritize_aircraft("next");
+    assert(svc._fetch_priority_icao=="first" && svc._priority_icao=="next");
     assert(svc.set_search_area(48, 9, 40));
     for (int attempt = 0; attempt < 300 && svc.is_fetching(); ++attempt) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -93,6 +79,19 @@ int main(int argc, char **argv)
     setenv("PLANES_TEST_FAIL", "1", 1);
     assert(!svc.fetch_aircraft(planes, count, provider, error));
     assert(!error.empty());
+
+    // The active aircraft gets the first lookup, even outside the nearest three.
+    PlaneState routes[5];
+    for (int i=0;i<5;++i) { routes[i].icao24="hex"+std::to_string(i); routes[i].callsign="TEST"+std::to_string(i); }
+    svc._fetch_priority_icao="hex4";
+    svc.enrich_routes(routes,5);
+    assert(routes[4].route=="ZRH->EGLL" && routes[4].destination_airport_name=="Heathrow Airport");
+    assert(routes[0].route=="ZRH->EGLL" && routes[1].route=="ZRH->EGLL");
+    assert(routes[2].route.empty() && routes[3].route.empty());
+    std::ifstream route_log(std::getenv("PLANES_ROUTE_LOG"));
+    std::string first;std::getline(route_log,first);assert(first=="TEST4");
+    // Cached active routes don't consume the remaining network budget.
+    svc.enrich_routes(routes,5);assert(routes[2].route=="ZRH->EGLL" && routes[3].route=="ZRH->EGLL");
 
     if (argc > 1) {
         std::ifstream input(argv[1]);

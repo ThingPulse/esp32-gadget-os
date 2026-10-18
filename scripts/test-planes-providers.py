@@ -24,7 +24,14 @@ with tempfile.TemporaryDirectory(prefix="planes-test-") as temporary:
     curl.write_text(f"#!{sys.executable}\n" + '''import json, os, sys
 url = sys.argv[-1]
 code = 200
-if os.getenv("PLANES_TEST_FAIL"):
+if "api.adsbdb.com" in url:
+    callsign = url.rsplit("/", 1)[-1]
+    with open(os.environ["PLANES_ROUTE_LOG"], "a") as log:
+        log.write(callsign + "\\n")
+    body = {"response": {"flightroute": {
+        "origin": {"iata_code": "ZRH", "name": "Zurich Airport"},
+        "destination": {"iata_code": None, "icao_code": "EGLL", "name": "Heathrow Airport"}}}}
+elif os.getenv("PLANES_TEST_FAIL"):
     body = {"error": "unavailable"}
 elif os.getenv("PLANES_TEST_EMPTY"):
     body = {"ac": []}
@@ -52,5 +59,5 @@ print("__COPILOT_HTTP_CODE:" + str(code))
                     "test/planes/provider_regression.cpp", *objects,
                     "-o", str(binary)], check=True)
     environment = dict(os.environ, PATH=str(directory) + os.pathsep + os.environ["PATH"],
-                       ASAN_OPTIONS="detect_leaks=0")
+                       ASAN_OPTIONS="detect_leaks=0", PLANES_ROUTE_LOG=str(directory / "routes.log"))
     subprocess.run([str(binary), *sys.argv[1:]], env=environment, check=True)

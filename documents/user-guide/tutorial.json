@@ -52,13 +52,11 @@
     {"type":"tap_text","text":"7","duration_ms":500},
     {"type":"tap_text","text":"=","duration_ms":1700},
 
-    {"type":"caption","text":"Labs: live aircraft and map data","duration_ms":1500},
+    {"type":"caption","text":"Nearby aircraft and flight details","duration_ms":1500},
     {"type":"route","route":"home","duration_ms":900},
-    {"type":"swipe","x":280,"y":250,"x2":40,"y2":250,"duration_ms":1200},
     {"type":"wait","duration_ms":900},
     {"type":"tap_text","text":"Planes","duration_ms":1100},
     {"type":"wait","duration_ms":3500},
-    {"type":"tap_text","text":"Map","duration_ms":1200},
     {"type":"wait","duration_ms":2500},
     {"type":"caption","text":"Walkthrough complete","duration_ms":1800}
   ]
