@@ -8,9 +8,14 @@
 #include "ui/UiSessionState.h"
 #include "ui/UiTrace.h"
 #include "ui/WeatherIconSet.h"
+#include "ui/ClassicWeatherView.h"
+#include "services/TimeService.h"
+#include "services/ConfigStoreService.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <string>
 #include <vector>
@@ -28,8 +33,23 @@ APP_REGISTER_CUSTOM_ICON_COLOR_RANK("Weather", weather_launcher_icon_create,
 namespace {
 
 struct WeatherAppCtx {
+  bool classic = false;
+  ClassicWeatherView classic_view;
   lv_obj_t *screen = nullptr;
+  lv_obj_t *pager = nullptr;
+  lv_obj_t *content = nullptr;
+  lv_obj_t *location_name = nullptr;
+  lv_obj_t *page_indicator = nullptr;
+  lv_obj_t *previous_location = nullptr;
+  lv_obj_t *next_location = nullptr;
+  std::vector<WeatherLocation> locations;
+  std::vector<lv_obj_t *> pages;
+  std::vector<lv_obj_t *> previews;
+  int active_location = 0;
+  int pending_location = -1;
+
   lv_obj_t *date_label = nullptr;
+  lv_obj_t *local_clock = nullptr;
   lv_obj_t *current_icon = nullptr;
   lv_obj_t *condition_label = nullptr;
   lv_obj_t *temp_label = nullptr;
@@ -171,10 +191,29 @@ static void nav_back_event(lv_event_t *e)
   }
 }
 
+static void weather_update_local_clock()
+{
+  if (app_ctx.classic) return;
+  tm local{};
+  const bool valid = TimeService::instance().is_synchronized() &&
+                     WeatherService::instance().local_time(time(nullptr), local);
+  char text[64] = "--:--";
+  if (valid) strftime(text, sizeof(text), TimeService::instance().use_24h() ? "%H:%M" : "%I:%M %p", &local);
+  if (app_ctx.local_clock && std::strcmp(lv_label_get_text(app_ctx.local_clock), text) != 0)
+    lv_label_set_text(app_ctx.local_clock, text);
+  if (app_ctx.date_label) {
+    if (valid) strftime(text, sizeof(text), "%A, %d.%m.%Y", &local);
+    else std::snprintf(text, sizeof(text), "--, --.--.----");
+    if (std::strcmp(lv_label_get_text(app_ctx.date_label), text) != 0)
+      lv_label_set_text(app_ctx.date_label, text);
+  }
+}
+
 static void weather_app_update_ui()
 {
   if (app_ctx.closing) return;
   if (!app_ctx.screen || !lv_obj_is_valid(app_ctx.screen)) return;
+  if (app_ctx.classic) { classic_weather_update(app_ctx.classic_view); return; }
   if (!app_ctx.date_label || !lv_obj_is_valid(app_ctx.date_label)) return;
   if (!app_ctx.current_icon || !lv_obj_is_valid(app_ctx.current_icon)) return;
   if (!app_ctx.condition_label || !lv_obj_is_valid(app_ctx.condition_label)) return;
@@ -214,15 +253,7 @@ static void weather_app_update_ui()
     return;
   }
 
-  char date_buf[64] = {0};
-  time_t now = time(nullptr);
-  struct tm tm_info {};
-  if (localtime_r(&now, &tm_info)) {
-    strftime(date_buf, sizeof(date_buf), "%A, %d.%m.%Y", &tm_info);
-  } else {
-    std::snprintf(date_buf, sizeof(date_buf), "--, --.--.----");
-  }
-  lv_label_set_text(app_ctx.date_label, date_buf);
+  weather_update_local_clock();
 
   weather_icon_update(app_ctx.current_icon, weather_icon_kind_from_code(weather.weather_code()), 56);
   lv_label_set_text(app_ctx.condition_label, weather_text_for_code(weather.weather_code()));
@@ -341,10 +372,15 @@ static void weather_app_update_ui()
   }
 }
 
+static void weather_apply_selected_location();
+
 static void weather_app_timer_cb(lv_timer_t *timer)
 {
   (void)timer;
   if (app_ctx.closing) return;
+  if (app_ctx.classic) classic_weather_tick(app_ctx.classic_view);
+  else weather_update_local_clock();
+  weather_apply_selected_location();
   const bool fetching = WeatherService::instance().is_fetching();
   const unsigned long revision = WeatherService::instance().data_revision();
   if (fetching != app_ctx.was_fetching) {
@@ -429,33 +465,134 @@ static void weather_pull_to_refresh_event(lv_event_t *e)
   }
 }
 
-static void weather_location_step_event(lv_event_t *e)
+static void weather_apply_selected_location()
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED || app_ctx.closing) return;
   WeatherService &weather = WeatherService::instance();
-  if (weather.is_fetching()) return;
+  const int index = app_ctx.pending_location;
+  if (app_ctx.closing || index < 0 || weather.is_fetching() || lv_obj_is_scrolling(app_ctx.pager)) return;
+  app_ctx.pending_location = -1;
+  if (index == app_ctx.active_location) return;
+  if (!WeatherLocationStore::save(app_ctx.locations, index)) {
+    lv_obj_scroll_to_x(app_ctx.pager, app_ctx.active_location * lv_obj_get_width(app_ctx.pager), LV_ANIM_ON);
+    return;
+  }
 
-  std::vector<WeatherLocation> locations;
-  int active_index = 0;
-  if (!WeatherLocationStore::load(locations, active_index) || locations.size() < 2) return;
-  const int delta = (int)(intptr_t)lv_event_get_user_data(e);
-  active_index = (active_index + delta + (int)locations.size()) % (int)locations.size();
-  if (!WeatherLocationStore::save(locations, active_index)) return;
-
-  lv_obj_t *button = (lv_obj_t *)lv_event_get_target(e);
-  lv_obj_t *selector = lv_obj_get_parent(button);
-  lv_obj_t *name_label = selector ? lv_obj_get_child(selector, 1) : nullptr;
-  if (name_label && lv_obj_is_valid(name_label))
-    lv_label_set_text(name_label, locations[active_index].name.c_str());
-
+  // Keep only one full forecast widget tree on memory-constrained boards.
+  // Adjacent pages remain lightweight previews while the pager is dragged.
+  const int previous = app_ctx.active_location;
+  lv_label_set_text_fmt(app_ctx.previews[previous], "%s\n%s\n%s",
+                        app_ctx.locations[previous].name.c_str(),
+                        lv_label_get_text(app_ctx.temp_label),
+                        lv_label_get_text(app_ctx.condition_label));
+  lv_obj_clear_flag(app_ctx.previews[previous], LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_parent(app_ctx.content, app_ctx.pages[index]);
+  lv_obj_add_flag(app_ctx.previews[index], LV_OBJ_FLAG_HIDDEN);
+  lv_obj_scroll_to_y(app_ctx.content, 0, LV_ANIM_OFF);
+  app_ctx.pull_armed = false;
+  lv_obj_add_flag(app_ctx.pull_indicator, LV_OBJ_FLAG_HIDDEN);
+  app_ctx.active_location = index;
+  lv_label_set_text(app_ctx.location_name, app_ctx.locations[index].name.c_str());
   weather.reload_from_config();
   app_ctx.was_fetching = weather.is_fetching();
-  if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
-    if (app_ctx.was_fetching) lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-  }
+  if (app_ctx.was_fetching) lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+  else lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
   weather_app_update_ui();
   app_ctx.weather_revision = weather.data_revision();
+  UI_TRACE("Weather", "carousel location=%d name=%s", index, app_ctx.locations[index].name.c_str());
+}
+
+static void weather_update_navigation(int index)
+{
+  if (app_ctx.locations.empty()) return;
+  lv_label_set_text(app_ctx.location_name, app_ctx.locations[index].name.c_str());
+  if (app_ctx.page_indicator)
+    lv_label_set_text_fmt(app_ctx.page_indicator, "%d / %d", index + 1, (int)app_ctx.locations.size());
+  if (app_ctx.previous_location) {
+    if (index == 0) lv_obj_add_state(app_ctx.previous_location, LV_STATE_DISABLED);
+    else lv_obj_remove_state(app_ctx.previous_location, LV_STATE_DISABLED);
+  }
+  if (app_ctx.next_location) {
+    if (index + 1 == (int)app_ctx.locations.size()) lv_obj_add_state(app_ctx.next_location, LV_STATE_DISABLED);
+    else lv_obj_remove_state(app_ctx.next_location, LV_STATE_DISABLED);
+  }
+}
+
+static void weather_pager_event(lv_event_t *e)
+{
+  if (app_ctx.closing || lv_event_get_target(e) != app_ctx.pager) return;
+  const int width = lv_obj_get_width(app_ctx.pager);
+  if (width <= 0 || app_ctx.locations.empty()) return;
+  const int index = LV_CLAMP(0, (lv_obj_get_scroll_x(app_ctx.pager) + width / 2) / width,
+                            (int)app_ctx.locations.size() - 1);
+  weather_update_navigation(index);
+  if (lv_event_get_code(e) == LV_EVENT_SCROLL_END) {
+    app_ctx.pending_location = index;
+    // The timer applies the selection after snapping and any active request.
+    // A newer swipe replaces this selection instead of changing worker inputs.
+  }
+}
+
+static void weather_location_step_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED || app_ctx.closing || app_ctx.locations.size() < 2) return;
+  const int delta = (int)(intptr_t)lv_event_get_user_data(e);
+  const int width = lv_obj_get_width(app_ctx.pager);
+  if (width <= 0) return;
+  const int current = (lv_obj_get_scroll_x(app_ctx.pager) + width / 2) / width;
+  const int index = LV_CLAMP(0, current + delta, (int)app_ctx.locations.size() - 1);
+  lv_obj_scroll_to_x(app_ctx.pager, index * lv_obj_get_width(app_ctx.pager), LV_ANIM_ON);
+}
+
+static void weather_show_classic_intro()
+{
+  if (!app_ctx.classic) return;
+  auto &config = ConfigStoreService::instance();
+  if (config.load("weather") && config.get_bool("classic_intro_seen", false)) return;
+
+  // Keep the modal owned by this screen so it cannot outlive the Weather app.
+  lv_obj_t *overlay = lv_obj_create(app_ctx.screen);
+  lv_obj_set_size(overlay, lv_pct(100), lv_pct(100));
+  lv_obj_set_style_pad_all(overlay, 0, 0);
+  lv_obj_set_style_border_width(overlay, 0, 0);
+  lv_obj_set_style_radius(overlay, 0, 0);
+  lv_obj_set_style_bg_color(overlay, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(overlay, LV_OPA_60, 0);
+  lv_obj_clear_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *dialog = lv_obj_create(overlay);
+  lv_obj_set_size(dialog, 280, 230);
+  lv_obj_center(dialog);
+  lv_obj_set_style_bg_color(dialog, lv_color_hex(0x2a2d42), 0);
+  lv_obj_set_style_border_width(dialog, 0, 0);
+  lv_obj_set_style_pad_all(dialog, 16, 0);
+  lv_obj_clear_flag(dialog, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *title = lv_label_create(dialog);
+  lv_label_set_text(title, "Classic weather view");
+  lv_obj_set_style_text_color(title, lv_color_hex(0x63e6be), 0);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_t *body = lv_label_create(dialog);
+  lv_obj_set_width(body, lv_pct(100));
+  lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
+  lv_label_set_text(body, "We have a new layout for you.\n\nPrefer the old one? Change it in Settings > Weather");
+  lv_obj_set_style_text_color(body, lv_color_white(), 0);
+  lv_obj_set_pos(body, 0, 30);
+
+  lv_obj_t *button = lv_button_create(dialog);
+  lv_obj_set_size(button, 120, 40);
+  lv_obj_align(button, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_t *label = lv_label_create(button);
+  lv_label_set_text(label, "Got it");
+  lv_obj_center(label);
+  lv_obj_add_event_cb(button, [](lv_event_t *event) {
+    auto &config = ConfigStoreService::instance();
+    // Persist on acknowledgment, so an interrupted first launch shows it again.
+    if (config.load("weather")) {
+      config.set("classic_intro_seen", true);
+      config.save();
+    }
+    lv_obj_delete_async((lv_obj_t *)lv_event_get_user_data(event));
+  }, LV_EVENT_CLICKED, overlay);
 }
 
 static void weather_app_screen_delete_event(lv_event_t *e)
@@ -476,6 +613,8 @@ void weather_app_launch(void)
 {
   UI_TRACE("Weather", "launch begin");
   app_ctx.closing = false;
+  auto &config = ConfigStoreService::instance();
+  app_ctx.classic = !config.load("weather") || config.get("layout", "classic") == "classic";
 #if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
   // The original ESP32 has substantially less internal RAM available to LVGL.
   // Use labels in the forecast lists instead of constructing ~100 additional
@@ -520,11 +659,24 @@ void weather_app_launch(void)
   lv_obj_center(back_label);
 
   lv_obj_t *title = lv_label_create(bar);
+  app_ctx.location_name = title;
   lv_label_set_text(title, "Weather");
-  lv_obj_set_style_text_color(title, lv_color_white(), 0);
-  lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_width(title, lv_display_get_horizontal_resolution(nullptr) - 144);
+  lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+  lv_obj_set_height(title, lv_font_get_line_height(lv_obj_get_style_text_font(title, LV_PART_MAIN)));
+  lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(title, lv_color_hex(0x63e6be), 0);
+  lv_obj_align(title, LV_ALIGN_LEFT_MID, 110, 0);
 
-  create_time_status_label(bar, 56);
+  if (app_ctx.classic) {
+    lv_obj_set_width(title, lv_display_get_horizontal_resolution(nullptr) - 112);
+    lv_obj_align(title, LV_ALIGN_LEFT_MID, 56, 0);
+  } else {
+    app_ctx.local_clock = lv_label_create(bar);
+    lv_obj_align(app_ctx.local_clock, LV_ALIGN_LEFT_MID, 56, 0);
+    lv_obj_set_style_text_color(app_ctx.local_clock, lv_color_white(), 0);
+    weather_update_local_clock();
+  }
   create_wifi_status_icon(bar, -6);
 
   lv_obj_t *loading_line = lv_obj_create(bar);
@@ -549,9 +701,92 @@ void weather_app_launch(void)
   lv_anim_set_repeat_count(&loading_anim, LV_ANIM_REPEAT_INFINITE);
   lv_anim_start(&loading_anim);
 
-  lv_obj_t *content = lv_obj_create(scr);
-  lv_obj_set_pos(content, 0, 44);
-  lv_obj_set_size(content, lv_pct(100), 480 - 44);
+  std::vector<WeatherLocation> locations;
+  int active_location = 0;
+  WeatherLocationStore::load(locations, active_location);
+  app_ctx.locations = locations;
+  app_ctx.active_location = active_location;
+
+  // Match Home's horizontally snapping, one-page-at-a-time carousel.
+  lv_obj_t *pager = lv_obj_create(scr);
+  app_ctx.pager = pager;
+  lv_obj_set_pos(pager, 0, 44);
+  lv_obj_set_size(pager, lv_pct(100), lv_display_get_vertical_resolution(nullptr) - 44 -
+                  (locations.size() > 1 ? 40 : 0));
+  lv_obj_set_style_bg_opa(pager, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(pager, 0, 0);
+  lv_obj_set_style_radius(pager, 0, 0);
+  lv_obj_set_style_pad_all(pager, 0, 0);
+  lv_obj_set_style_pad_column(pager, 0, 0);
+  lv_obj_set_scroll_dir(pager, locations.size() > 1 ? LV_DIR_HOR : LV_DIR_NONE);
+  lv_obj_set_scroll_snap_x(pager, LV_SCROLL_SNAP_CENTER);
+  lv_obj_add_flag(pager, LV_OBJ_FLAG_SCROLL_ONE);
+  lv_obj_set_scrollbar_mode(pager, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_layout(pager, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(pager, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(pager, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  for (size_t i = 0; i < std::max(size_t(1), locations.size()); ++i) {
+    lv_obj_t *page = lv_obj_create(pager);
+    lv_obj_set_size(page, lv_pct(100), lv_pct(100));
+    lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(page, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(page, 0, 0);
+    lv_obj_set_style_pad_all(page, 0, 0);
+    lv_obj_set_style_radius(page, 0, 0);
+    app_ctx.pages.push_back(page);
+    lv_obj_t *preview = lv_label_create(page);
+    lv_obj_set_width(preview, lv_pct(90));
+    lv_obj_set_style_text_align(preview, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(preview, lv_color_hex(0x63e6be), 0);
+    lv_label_set_text_fmt(preview, "%s\nForecast", locations.empty() ? "No saved location" : locations[i].name.c_str());
+    lv_obj_align(preview, LV_ALIGN_TOP_MID, 0, 24);
+    app_ctx.previews.push_back(preview);
+  }
+  lv_obj_add_flag(app_ctx.previews[active_location], LV_OBJ_FLAG_HIDDEN);
+  if (locations.size() > 1) {
+    lv_obj_t *footer = lv_obj_create(scr);
+    lv_obj_set_size(footer, lv_pct(100), 40);
+    lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_clear_flag(footer, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(footer, lv_color_hex(0x1e2030), 0);
+    lv_obj_set_style_bg_opa(footer, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(footer, 0, 0);
+    lv_obj_set_style_radius(footer, 0, 0);
+    lv_obj_set_style_pad_all(footer, 0, 0);
+    app_ctx.page_indicator = lv_label_create(footer);
+    lv_label_set_text_fmt(app_ctx.page_indicator, "%d / %d", active_location + 1, (int)locations.size());
+    lv_obj_set_width(app_ctx.page_indicator, 64);
+    lv_obj_set_style_text_align(app_ctx.page_indicator, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_bg_color(app_ctx.page_indicator, lv_color_hex(0x1e2030), 0);
+    lv_obj_set_style_bg_opa(app_ctx.page_indicator, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_color(app_ctx.page_indicator, lv_color_hex(0x868e96), 0);
+    lv_obj_center(app_ctx.page_indicator);
+    auto navigation_button = [&](int direction) {
+      lv_obj_t *button = lv_button_create(footer);
+      lv_obj_set_size(button, 56, 40);
+      lv_obj_align(button, LV_ALIGN_CENTER, direction * 64, 0);
+      lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_STATE_DEFAULT);
+      lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_STATE_DISABLED);
+      lv_obj_set_style_shadow_width(button, 0, 0);
+      lv_obj_set_style_border_width(button, 0, 0);
+      lv_obj_set_style_text_color(button, lv_color_hex(0xd7dde6), LV_STATE_DEFAULT);
+      lv_obj_set_style_text_color(button, lv_color_hex(0x50586a), LV_STATE_DISABLED);
+      lv_obj_add_event_cb(button, weather_location_step_event, LV_EVENT_CLICKED,
+                          (void *)(intptr_t)direction);
+      lv_obj_t *arrow = lv_label_create(button);
+      lv_label_set_text(arrow, direction < 0 ? LV_SYMBOL_LEFT : LV_SYMBOL_RIGHT);
+      lv_obj_center(arrow);
+      return button;
+    };
+    app_ctx.previous_location = navigation_button(-1);
+    app_ctx.next_location = navigation_button(1);
+  }
+
+  lv_obj_t *content = lv_obj_create(app_ctx.pages[active_location]);
+  app_ctx.content = content;
+  lv_obj_set_pos(content, 0, 0);
+  lv_obj_set_size(content, lv_pct(100), lv_pct(100));
+  lv_obj_set_scroll_dir(content, LV_DIR_VER);
   lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(content, 0, 0);
   lv_obj_set_style_pad_all(content, 12, 0);
@@ -560,51 +795,13 @@ void weather_app_launch(void)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
   lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
-  std::vector<WeatherLocation> locations;
-  int active_location = 0;
-  WeatherLocationStore::load(locations, active_location);
-  lv_obj_t *location_selector = lv_obj_create(content);
-  lv_obj_set_size(location_selector, lv_pct(100), 48);
-  lv_obj_clear_flag(location_selector, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_opa(location_selector, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(location_selector, 0, 0);
-  lv_obj_set_style_pad_all(location_selector, 0, 0);
-
-  lv_obj_t *previous_location = lv_button_create(location_selector);
-  lv_obj_set_size(previous_location, 56, 44);
-  lv_obj_align(previous_location, LV_ALIGN_LEFT_MID, 2, 0);
-  lv_obj_add_flag(previous_location, LV_OBJ_FLAG_PRESS_LOCK);
-  lv_obj_add_event_cb(previous_location, weather_location_step_event, LV_EVENT_CLICKED,
-                      (void *)(intptr_t)-1);
-  lv_obj_t *previous_label = lv_label_create(previous_location);
-  lv_label_set_text(previous_label, LV_SYMBOL_LEFT);
-  lv_obj_center(previous_label);
-
-  lv_obj_t *location_name = lv_label_create(location_selector);
-  lv_obj_set_width(location_name, 160);
-  lv_obj_set_style_text_align(location_name, LV_TEXT_ALIGN_CENTER, 0);
-  lv_label_set_long_mode(location_name, LV_LABEL_LONG_DOT);
-  lv_obj_align(location_name, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_set_style_text_color(location_name, lv_color_hex(0x63e6be), 0);
-  lv_obj_set_style_text_font(location_name, &lv_font_montserrat_14, 0);
-  lv_label_set_text(location_name,
-                    locations.empty() ? "No saved location" : locations[active_location].name.c_str());
-
-  lv_obj_t *next_location = lv_button_create(location_selector);
-  lv_obj_set_size(next_location, 56, 44);
-  // Keep the touch target away from the vertical scrollbar at the screen edge.
-  lv_obj_align(next_location, LV_ALIGN_RIGHT_MID, -6, 0);
-  lv_obj_add_flag(next_location, LV_OBJ_FLAG_PRESS_LOCK);
-  lv_obj_add_event_cb(next_location, weather_location_step_event, LV_EVENT_CLICKED,
-                      (void *)(intptr_t)1);
-  lv_obj_t *next_label = lv_label_create(next_location);
-  lv_label_set_text(next_label, LV_SYMBOL_RIGHT);
-  lv_obj_center(next_label);
-  if (locations.size() < 2) {
-    lv_obj_add_flag(previous_location, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(next_location, LV_OBJ_FLAG_HIDDEN);
-  }
-
+  if (app_ctx.classic) {
+    lv_obj_set_layout(content, LV_LAYOUT_NONE);
+    lv_obj_set_style_pad_all(content, 0, 0);
+    classic_weather_create(app_ctx.classic_view, content);
+    app_ctx.temp_label = app_ctx.classic_view.temperature;
+    app_ctx.condition_label = app_ctx.classic_view.condition;
+  } else {
   // Date and time header
   lv_obj_t *date_label = lv_label_create(content);
   lv_obj_set_style_text_color(date_label, lv_color_hex(0xb7bdd7), 0);
@@ -682,7 +879,9 @@ void weather_app_launch(void)
   lv_obj_set_flex_align(hourly_strip, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_scroll_dir(hourly_strip, LV_DIR_HOR);
   lv_obj_set_scrollbar_mode(hourly_strip, LV_SCROLLBAR_MODE_OFF);
+  // Horizontal drags here belong to the hourly forecast, even at its edges.
   lv_obj_clear_flag(hourly_strip, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+  lv_obj_clear_flag(hourly_strip, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
 
   for (int i = 0; i < WeatherService::FORECAST_HOURS; ++i) {
     lv_obj_t *col = lv_obj_create(hourly_strip);
@@ -937,18 +1136,6 @@ void weather_app_launch(void)
   lv_obj_set_style_text_color(moon_phase, lv_color_hex(0xd5e2ff), 0);
   lv_obj_set_pos(moon_phase, 204, 50);
 
-  lv_obj_t *pull_indicator = lv_label_create(scr);
-  lv_label_set_text(pull_indicator, "Pull to refresh");
-  lv_obj_set_style_text_color(pull_indicator, lv_color_hex(0xd7dde6), 0);
-  lv_obj_set_style_bg_color(pull_indicator, lv_color_hex(0x14162a), 0);
-  lv_obj_set_style_bg_opa(pull_indicator, LV_OPA_80, 0);
-  lv_obj_set_style_pad_hor(pull_indicator, 10, 0);
-  lv_obj_set_style_pad_ver(pull_indicator, 4, 0);
-  lv_obj_set_style_radius(pull_indicator, LV_RADIUS_CIRCLE, 0);
-  lv_obj_align(pull_indicator, LV_ALIGN_TOP_MID, 0, 50);
-  lv_obj_add_flag(pull_indicator, LV_OBJ_FLAG_HIDDEN);
-
-  app_ctx.screen = scr;
   app_ctx.date_label = date_label;
   app_ctx.current_icon = current_icon;
   app_ctx.condition_label = condition_label;
@@ -963,17 +1150,39 @@ void weather_app_launch(void)
   app_ctx.sun_times_label = sun_times;
   app_ctx.moon_phase_label = moon_phase;
   app_ctx.moon_shadow = moon_shadow;
+  }
+
+  lv_obj_t *pull_indicator = lv_label_create(scr);
+  lv_label_set_text(pull_indicator, "Pull to refresh");
+  lv_obj_set_style_text_color(pull_indicator, lv_color_hex(0xd7dde6), 0);
+  lv_obj_set_style_bg_color(pull_indicator, lv_color_hex(0x14162a), 0);
+  lv_obj_set_style_bg_opa(pull_indicator, LV_OPA_80, 0);
+  lv_obj_set_style_pad_hor(pull_indicator, 10, 0);
+  lv_obj_set_style_pad_ver(pull_indicator, 4, 0);
+  lv_obj_set_style_radius(pull_indicator, LV_RADIUS_CIRCLE, 0);
+  lv_obj_align(pull_indicator, LV_ALIGN_TOP_MID, 0, 50);
+  lv_obj_add_flag(pull_indicator, LV_OBJ_FLAG_HIDDEN);
+
+  app_ctx.screen = scr;
   app_ctx.pull_indicator = pull_indicator;
   app_ctx.loading_line = loading_line;
   app_ctx.refresh_timer = lv_timer_create(weather_app_timer_cb, 100, nullptr);
   lv_obj_add_event_cb(content, weather_pull_to_refresh_event, LV_EVENT_SCROLL, nullptr);
   lv_obj_add_event_cb(content, weather_pull_to_refresh_event, LV_EVENT_SCROLL_END, nullptr);
 
+  weather_update_navigation(active_location);
+  if (app_ctx.page_indicator) lv_obj_move_foreground(lv_obj_get_parent(app_ctx.page_indicator));
+  lv_obj_update_layout(pager);
+  lv_obj_scroll_to_x(pager, active_location * lv_obj_get_width(pager), LV_ANIM_OFF);
+  lv_obj_add_event_cb(pager, weather_pager_event, LV_EVENT_SCROLL, nullptr);
+  lv_obj_add_event_cb(pager, weather_pager_event, LV_EVENT_SCROLL_END, nullptr);
+
   WeatherService::instance().resume();
   app_ctx.was_fetching = WeatherService::instance().is_fetching();
   app_ctx.weather_revision = WeatherService::instance().data_revision();
   weather_app_update_ui();
   ui_load_screen(scr, false);
+  weather_show_classic_intro();
   UI_TRACE("Weather", "launch loaded screen");
   
   // Set route after screen is loaded

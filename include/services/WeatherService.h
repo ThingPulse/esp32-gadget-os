@@ -3,6 +3,7 @@
 #include "EventBus.h"
 #include "ServiceRegistry.h"
 #include <string>
+#include <ctime>
 
 struct WeatherForecastDay {
     bool valid = false;
@@ -32,6 +33,7 @@ public:
 
     bool reload_from_config();
     bool has_weather() const;
+    bool local_time(time_t utc, tm &result) const;
     bool is_fetching() const { return _fetch_in_progress; }
     unsigned long data_revision() const { return _data_revision; }
     void pause() { _enabled = false; }
@@ -48,6 +50,8 @@ public:
     const std::string &sunrise_time() const { return _sunrise; }
     const std::string &sunset_time() const { return _sunset; }
     float moon_phase_fraction() const { return _moon_phase; }
+    double latitude() const { return _latitude; }
+    double longitude() const { return _longitude; }
     float moon_illumination_percent() const;
     const char *moon_phase_name() const;
     int forecast_count() const;
@@ -78,6 +82,8 @@ private:
     double _latitude = 0.0;
     double _longitude = 0.0;
     bool _has_weather = false;
+    bool _has_utc_offset = false;
+    int _utc_offset_seconds = 0;
     float _temperature = 0.0f;
     int _weather_code = 0;
     float _humidity = 0.0f;

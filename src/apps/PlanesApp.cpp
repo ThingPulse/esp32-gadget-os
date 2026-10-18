@@ -7,7 +7,9 @@
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
 #include "ui/UiTrace.h"
+#include "ui/PlaneSearchArea.h"
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
@@ -20,7 +22,12 @@
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
 #include <LovyanGFX.hpp>
 #include <OpenStreetMap-esp32.hpp>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #else
+#include <chrono>
+#include <thread>
+#include <system_error>
 #define STB_IMAGE_IMPLEMENTATION
 #include "third_party/stb_image.h"
 #endif
@@ -28,6 +35,8 @@
 APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
 
 namespace {
+
+constexpr lv_coord_t MAP_PANEL_HEIGHT = 112;
 
 // The original Color Kit has substantially less free internal RAM than the
 // Pro. Keep the nearest ten aircraft in its list; the service and map still
@@ -44,6 +53,7 @@ struct PlanesAppCtx {
   lv_obj_t *list_view = nullptr;
   lv_obj_t *detail_view = nullptr;
   lv_obj_t *map_view = nullptr;
+  lv_obj_t *map_panel = nullptr;
   lv_obj_t *map_toggle_btn = nullptr;
   lv_obj_t *map_toggle_label = nullptr;
   lv_obj_t *status_label = nullptr;
@@ -72,15 +82,32 @@ struct PlanesAppCtx {
   bool was_fetching = false;
   bool closing = false;
   bool map_mode = false;
+  bool map_change_pending = false;
+  uint32_t map_change_ms = 0;
+  PlaneSearchArea pending_area;
   bool detail_mode = false;
   char selected_icao[8]{};
   lv_image_dsc_t map_bg_dsc{};
   std::vector<uint16_t> map_bg_pixels{};
   std::string map_cache_sig{};
   bool map_tiles_ready = false;
+  bool map_tiles_loading = false;
 };
 
 static PlanesAppCtx app_ctx;
+
+static void planes_app_update_loading()
+{
+  if (!app_ctx.loading_line || !lv_obj_is_valid(app_ctx.loading_line)) return;
+  const bool busy = PlanesService::instance().is_fetching() ||
+                    app_ctx.map_change_pending || app_ctx.map_tiles_loading;
+  if (busy) lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+  else lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+}
+
+static bool load_map_with_progress(const PlanesService &svc, lv_coord_t size,
+                                   std::vector<uint16_t> &pixels, std::string &signature);
+
 
 enum CardWidgetIndex {
   CARD_BADGE,
@@ -171,6 +198,7 @@ static void nav_back_event(lv_event_t *e)
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
     UI_TRACE("Planes", "back clicked");
     PlanesService::instance().pause();
+    PlanesService::instance().reset_search_area();
     app_ctx.closing = true;
     if (app_ctx.refresh_timer) {
       lv_timer_delete(app_ctx.refresh_timer);
@@ -222,18 +250,16 @@ static void planes_app_update_map_layout()
   lv_coord_t h = lv_obj_get_content_height(app_ctx.map_view);
   if (w <= 0 || h <= 0) return;
 
-  const lv_coord_t map_size = LV_MIN(w, h);
-  lv_obj_set_size(app_ctx.map_square, map_size, map_size);
+  const bool landscape = w > h;
+  const lv_coord_t panel_width = landscape ? 220 : w;
+  const lv_coord_t map_size = landscape ? LV_MIN(h, w - panel_width - 4)
+                                        : LV_MIN(w, h - MAP_PANEL_HEIGHT - 4);
+  lv_obj_set_size(app_ctx.map_square, LV_MAX(64, map_size), LV_MAX(64, map_size));
+  lv_obj_set_flex_flow(app_ctx.map_view, landscape ? LV_FLEX_FLOW_ROW : LV_FLEX_FLOW_COLUMN);
+  if (app_ctx.map_panel) lv_obj_set_size(app_ctx.map_panel, panel_width, MAP_PANEL_HEIGHT);
+  lv_obj_set_width(app_ctx.map_hint_label, panel_width);
+  lv_obj_set_width(app_ctx.map_summary_label, panel_width);
 
-  if (w > h) {
-    lv_obj_set_flex_flow(app_ctx.map_view, LV_FLEX_FLOW_ROW);
-    lv_obj_set_width(app_ctx.map_hint_label, w - map_size - 8);
-    lv_obj_set_width(app_ctx.map_summary_label, w - map_size - 8);
-  } else {
-    lv_obj_set_flex_flow(app_ctx.map_view, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_width(app_ctx.map_hint_label, map_size);
-    lv_obj_set_width(app_ctx.map_summary_label, map_size);
-  }
 }
 
 static float km_per_lon_degree(double latitude_deg)
@@ -302,15 +328,15 @@ static uint8_t choose_osm_zoom(double latitude_deg, double range_km, lv_coord_t 
   return (uint8_t)LV_CLAMP(1, z, 18);
 }
 
-static std::string map_signature(const PlanesService &svc, lv_coord_t square_size, uint8_t zoom)
+static std::string map_signature(const PlaneSearchArea &area, lv_coord_t square_size, uint8_t zoom)
 {
   char sig[128] = {0};
   std::snprintf(sig,
                 sizeof(sig),
                 "hw-osm-v5;lat=%.5f;lon=%.5f;range=%.2f;size=%d;zoom=%u",
-                svc.center_latitude(),
-                svc.center_longitude(),
-                svc.range_km(),
+                area.latitude,
+                area.longitude,
+                area.range_km,
                 (int)square_size,
                 (unsigned)zoom);
   return std::string(sig);
@@ -366,10 +392,10 @@ static void save_cached_map_rgb565(const std::string &sig, const uint16_t *pixel
   (void)fs.write(PLANES_MAP_CACHE_META, sig);
 }
 
-static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_size, std::vector<uint16_t> &pixels_out, std::string &sig_out)
+static bool fetch_map_tiles_rgb565(const PlaneSearchArea &area, lv_coord_t square_size, std::vector<uint16_t> &pixels_out, std::string &sig_out)
 {
-  const uint8_t zoom = choose_osm_zoom(svc.center_latitude(), svc.range_km(), square_size);
-  sig_out = map_signature(svc, square_size, zoom);
+  const uint8_t zoom = choose_osm_zoom(area.latitude, area.range_km, square_size);
+  sig_out = map_signature(area, square_size, zoom);
 
   if (load_cached_map_rgb565(sig_out, square_size, pixels_out)) return true;
 
@@ -385,8 +411,8 @@ static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_s
   constexpr int max_attempts = 3;
   for (int attempt = 1; attempt <= max_attempts; ++attempt) {
     const bool fetched = osm.fetchMap(map_sprite,
-                                      svc.center_longitude(),
-                                      svc.center_latitude(),
+                                      area.longitude,
+                                      area.latitude,
                                       zoom,
                                       8000);
     buf = (uint16_t *)map_sprite.getBuffer();
@@ -422,20 +448,24 @@ static void set_map_bg_image(lv_obj_t *img_obj, lv_image_dsc_t &dsc, std::vector
 
 static void planes_app_ensure_map_tiles(const PlanesService &svc, lv_coord_t square_size)
 {
-  if (!app_ctx.map_bg || !lv_obj_is_valid(app_ctx.map_bg)) return;
-  const uint8_t zoom = choose_osm_zoom(svc.center_latitude(), svc.range_km(), square_size);
-  const std::string sig = map_signature(svc, square_size, zoom);
+  if (!app_ctx.map_bg || !lv_obj_is_valid(app_ctx.map_bg) || app_ctx.map_tiles_loading) return;
+  const PlaneSearchArea area{svc.center_latitude(), svc.center_longitude(), svc.range_km()};
+  const uint8_t zoom = choose_osm_zoom(area.latitude, area.range_km, square_size);
+  const std::string sig = map_signature(area, square_size, zoom);
   if (app_ctx.map_tiles_ready && sig == app_ctx.map_cache_sig) return;
 
   std::vector<uint16_t> pixels;
   std::string loaded_sig;
-  if (fetch_map_tiles_rgb565(svc, square_size, pixels, loaded_sig)) {
+  if (load_map_with_progress(svc, square_size, pixels, loaded_sig)) {
     app_ctx.map_bg_pixels = std::move(pixels);
     app_ctx.map_cache_sig = loaded_sig;
     app_ctx.map_tiles_ready = true;
     set_map_bg_image(app_ctx.map_bg, app_ctx.map_bg_dsc, app_ctx.map_bg_pixels, square_size);
+    lv_obj_clear_flag(app_ctx.map_bg, LV_OBJ_FLAG_HIDDEN);
   } else {
     app_ctx.map_tiles_ready = false;
+    lv_obj_add_flag(app_ctx.map_bg, LV_OBJ_FLAG_HIDDEN);
+    lv_image_set_src(app_ctx.map_bg, nullptr);
     app_ctx.map_bg_pixels.clear();
   }
 }
@@ -455,15 +485,15 @@ static uint8_t choose_osm_zoom(double latitude_deg, double range_km, lv_coord_t 
   return (uint8_t)LV_CLAMP(1, z, 18);
 }
 
-static std::string map_signature(const PlanesService &svc, lv_coord_t square_size, uint8_t zoom)
+static std::string map_signature(const PlaneSearchArea &area, lv_coord_t square_size, uint8_t zoom)
 {
   char sig[128] = {0};
   std::snprintf(sig,
                 sizeof(sig),
                 "native-carto-v1;lat=%.5f;lon=%.5f;range=%.2f;size=%d;zoom=%u",
-                svc.center_latitude(),
-                svc.center_longitude(),
-                svc.range_km(),
+                area.latitude,
+                area.longitude,
+                area.range_km,
                 (int)square_size,
                 (unsigned)zoom);
   return std::string(sig);
@@ -537,10 +567,10 @@ static uint16_t rgb888_to_565(uint8_t r, uint8_t g, uint8_t b)
   return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
 }
 
-static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_size, std::vector<uint16_t> &pixels_out, std::string &sig_out)
+static bool fetch_map_tiles_rgb565(const PlaneSearchArea &area, lv_coord_t square_size, std::vector<uint16_t> &pixels_out, std::string &sig_out)
 {
-  const uint8_t zoom = choose_osm_zoom(svc.center_latitude(), svc.range_km(), square_size);
-  sig_out = map_signature(svc, square_size, zoom);
+  const uint8_t zoom = choose_osm_zoom(area.latitude, area.range_km, square_size);
+  sig_out = map_signature(area, square_size, zoom);
   if (load_cached_map_rgb565(sig_out, square_size, pixels_out)) return true;
 
   const int tile_px = 256;
@@ -549,7 +579,7 @@ static bool fetch_map_tiles_rgb565(const PlanesService &svc, lv_coord_t square_s
 
   double center_x = 0.0;
   double center_y = 0.0;
-  lon_lat_to_world_px(svc.center_longitude(), svc.center_latitude(), zoom, center_x, center_y);
+  lon_lat_to_world_px(area.longitude, area.latitude, zoom, center_x, center_y);
   const double start_x = center_x - (double)square_size / 2.0;
   const double start_y = center_y - (double)square_size / 2.0;
   const int tx0 = (int)std::floor(start_x / tile_px);
@@ -615,24 +645,93 @@ static void set_map_bg_image(lv_obj_t *img_obj, lv_image_dsc_t &dsc, std::vector
 
 static void planes_app_ensure_map_tiles(const PlanesService &svc, lv_coord_t square_size)
 {
-  if (!app_ctx.map_bg || !lv_obj_is_valid(app_ctx.map_bg)) return;
-  const uint8_t zoom = choose_osm_zoom(svc.center_latitude(), svc.range_km(), square_size);
-  const std::string sig = map_signature(svc, square_size, zoom);
+  if (!app_ctx.map_bg || !lv_obj_is_valid(app_ctx.map_bg) || app_ctx.map_tiles_loading) return;
+  const PlaneSearchArea area{svc.center_latitude(), svc.center_longitude(), svc.range_km()};
+  const uint8_t zoom = choose_osm_zoom(area.latitude, area.range_km, square_size);
+  const std::string sig = map_signature(area, square_size, zoom);
   if (app_ctx.map_tiles_ready && sig == app_ctx.map_cache_sig) return;
 
   std::vector<uint16_t> pixels;
   std::string loaded_sig;
-  if (fetch_map_tiles_rgb565(svc, square_size, pixels, loaded_sig)) {
+  if (load_map_with_progress(svc, square_size, pixels, loaded_sig)) {
     app_ctx.map_bg_pixels = std::move(pixels);
     app_ctx.map_cache_sig = loaded_sig;
     app_ctx.map_tiles_ready = true;
     set_map_bg_image(app_ctx.map_bg, app_ctx.map_bg_dsc, app_ctx.map_bg_pixels, square_size);
+    lv_obj_clear_flag(app_ctx.map_bg, LV_OBJ_FLAG_HIDDEN);
   } else {
     app_ctx.map_tiles_ready = false;
+    lv_obj_add_flag(app_ctx.map_bg, LV_OBJ_FLAG_HIDDEN);
+    lv_image_set_src(app_ctx.map_bg, nullptr);
     app_ctx.map_bg_pixels.clear();
   }
 }
 #endif
+
+// Only the worker touches these results until it publishes completion. LVGL
+// stays on the calling UI thread. Waiting here preserves the existing ordering
+// of map and aircraft TLS requests without processing reentrant input/timers.
+struct MapTileLoad {
+  PlaneSearchArea area;
+  lv_coord_t size;
+  std::vector<uint16_t> pixels;
+  std::string signature;
+  bool success = false;
+  std::atomic<bool> done{false};
+
+  void run() {
+    success = fetch_map_tiles_rgb565(area, size, pixels, signature);
+    done.store(true, std::memory_order_release);
+  }
+};
+
+static bool load_map_with_progress(const PlanesService &svc, lv_coord_t size,
+                                   std::vector<uint16_t> &pixels, std::string &signature)
+{
+  MapTileLoad job;
+  job.area = {svc.center_latitude(), svc.center_longitude(), svc.range_km()};
+  job.size = size;
+  app_ctx.map_tiles_loading = true;
+  planes_app_update_loading();
+  // Paint before starting I/O, including when switching from List to Map.
+  lv_refr_now(nullptr);
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+  const bool started = xTaskCreate([](void *arg) {
+    static_cast<MapTileLoad *>(arg)->run();
+    vTaskDelete(nullptr);
+  }, "planes_tiles", 12288, &job, 1, nullptr) == pdPASS;
+#else
+  std::thread worker;
+  bool started = false;
+  try {
+    worker = std::thread([&job]() { job.run(); });
+    started = true;
+  } catch (const std::system_error &) {
+    UI_TRACE("Planes", "could not start map tile worker");
+  }
+#endif
+  if (started) {
+    while (!job.done.load(std::memory_order_acquire)) {
+      // lv_refr_now also advances animations using the monotonic tick callback.
+      lv_refr_now(nullptr);
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+      vTaskDelay(pdMS_TO_TICKS(20));
+#else
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#endif
+    }
+#if !defined(ARDUINO) || !defined(ESP_PLATFORM)
+    worker.join();
+#endif
+  } else {
+    UI_TRACE("Planes", "map tile worker unavailable");
+  }
+  app_ctx.map_tiles_loading = false;
+  planes_app_update_loading();
+  pixels = std::move(job.pixels);
+  signature = std::move(job.signature);
+  return started && job.success;
+}
 
 static void planes_app_update_map_ui()
 {
@@ -645,6 +744,7 @@ static void planes_app_update_map_ui()
   if (!app_ctx.map_summary_label || !lv_obj_is_valid(app_ctx.map_summary_label)) return;
 
   planes_app_update_map_layout();
+  if (app_ctx.map_change_pending) return;
   lv_obj_update_layout(app_ctx.map_square);
   const lv_coord_t square_size = lv_obj_get_width(app_ctx.map_square);
   if (square_size <= 20) return;
@@ -773,20 +873,16 @@ static void planes_app_update_map_ui()
   }
 
   char summary[128] = {0};
-  std::snprintf(summary,
-                sizeof(summary),
-                "%s\nRange %.0f km  Visible %d/%d",
-                svc.provider_name().empty() ? "Waiting for aircraft" : svc.provider_name().c_str(),
-                svc.range_km(),
-                visible,
-                count);
+  std::snprintf(summary, sizeof(summary), "Radius %.1f %s | Aircraft %d",
+                svc.is_metric() ? svc.range_km() : svc.range_km() / 1.852,
+                svc.is_metric() ? "km" : "nm", visible);
   lv_label_set_text(app_ctx.map_summary_label, summary);
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
-  lv_label_set_text(app_ctx.map_hint_label, "OSM tiles cached in flash and reused until center/range/size changes.");
+  lv_label_set_text(app_ctx.map_hint_label, "OpenStreetMap contributors");
 #else
-  lv_label_set_text(app_ctx.map_hint_label,
-                    "Map: CARTO | Data: OpenStreetMap contributors. Cached locally.");
+  lv_label_set_text(app_ctx.map_hint_label, "CARTO / OpenStreetMap");
 #endif
+
 }
 
 static void planes_app_update_detail()
@@ -1018,21 +1114,55 @@ static void planes_app_update_ui()
   planes_app_update_map_ui();
 }
 
+static void planes_app_map_control_event(lv_event_t *event)
+{
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || app_ctx.closing) return;
+  auto &svc = PlanesService::instance();
+  if (!svc.is_configured()) return;
+  if (!app_ctx.map_change_pending)
+    app_ctx.pending_area = {svc.center_latitude(), svc.center_longitude(), svc.range_km()};
+  const intptr_t action = (intptr_t)lv_event_get_user_data(event);
+  switch (action) {
+    case 1: app_ctx.pending_area.pan(1, 0); break;
+    case 2: app_ctx.pending_area.pan(-1, 0); break;
+    case 3: app_ctx.pending_area.pan(0, -1); break;
+    case 4: app_ctx.pending_area.pan(0, 1); break;
+    case 5: app_ctx.pending_area.zoom(true); break;
+    case 6: app_ctx.pending_area.zoom(false); break;
+    case 7: app_ctx.pending_area = {svc.home_latitude(), svc.home_longitude(), svc.home_range_km()}; break;
+  }
+  svc.pause(); // Do not begin another periodic fetch while taps accumulate.
+  app_ctx.map_change_pending = true;
+  app_ctx.map_change_ms = lv_tick_get();
+  planes_app_update_loading();
+  char summary[128];
+  std::snprintf(summary, sizeof(summary), "Radius %.1f %s | Updating...",
+                svc.is_metric() ? app_ctx.pending_area.range_km : app_ctx.pending_area.range_km / 1.852,
+                svc.is_metric() ? "km" : "nm");
+  lv_label_set_text(app_ctx.map_summary_label, summary);
+  UI_TRACE("Planes", "map control=%d center=%.5f,%.5f range=%.1f",
+           (int)action, app_ctx.pending_area.latitude, app_ctx.pending_area.longitude, app_ctx.pending_area.range_km);
+}
+
 static void planes_app_timer_cb(lv_timer_t *timer)
 {
   (void)timer;
   if (app_ctx.closing) return;
   PlanesService &planes = PlanesService::instance();
+  if (app_ctx.map_change_pending && lv_tick_elaps(app_ctx.map_change_ms) >= 600 && !planes.is_fetching()) {
+    const auto area = app_ctx.pending_area;
+    app_ctx.map_change_pending = false;
+    planes.set_search_area(area.latitude, area.longitude, area.range_km);
+    planes.resume();
+    // Load tiles before starting another TLS aircraft request.
+    planes_app_update_ui();
+    planes.refresh_now();
+  }
   const bool fetching = planes.is_fetching();
   const unsigned long revision = planes.data_revision();
 
   if (fetching != app_ctx.was_fetching) {
-    if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
-      if (fetching)
-        lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-      else
-        lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-    }
+    planes_app_update_loading();
     if (!fetching)
       planes_app_update_ui();
   }
@@ -1041,6 +1171,7 @@ static void planes_app_timer_cb(lv_timer_t *timer)
 
   app_ctx.was_fetching = fetching;
   app_ctx.planes_revision = revision;
+  planes_app_update_loading();
 }
 
 static void planes_app_refresh_event(lv_event_t *e)
@@ -1048,6 +1179,7 @@ static void planes_app_refresh_event(lv_event_t *e)
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   if (app_ctx.closing) return;
 
+  if (app_ctx.map_change_pending) return;
   UI_TRACE("Planes", "refresh clicked");
 
   if (app_ctx.status_label && lv_obj_is_valid(app_ctx.status_label))
@@ -1056,12 +1188,7 @@ static void planes_app_refresh_event(lv_event_t *e)
   PlanesService &planes = PlanesService::instance();
   planes.refresh_now();
   app_ctx.was_fetching = planes.is_fetching();
-  if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
-    if (app_ctx.was_fetching)
-      lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-    else
-      lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-  }
+  planes_app_update_loading();
   if (!app_ctx.was_fetching) {
     planes_app_update_ui();
     app_ctx.planes_revision = planes.data_revision();
@@ -1094,6 +1221,7 @@ static void planes_app_screen_delete_event(lv_event_t *e)
   (void)e;
   UI_TRACE("Planes", "screen delete event");
   PlanesService::instance().pause();
+  PlanesService::instance().reset_search_area();
   if (app_ctx.refresh_timer) {
     lv_timer_delete(app_ctx.refresh_timer);
     app_ctx.refresh_timer = nullptr;
@@ -1195,7 +1323,7 @@ void planes_app_launch(void)
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, 44);
-  lv_obj_set_size(content, lv_pct(100), 480 - 44);
+  lv_obj_set_size(content, lv_pct(100), lv_display_get_vertical_resolution(nullptr) - 44);
   lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(content, 0, 0);
   lv_obj_set_style_pad_all(content, 0, 0);
@@ -1459,10 +1587,12 @@ void planes_app_launch(void)
   lv_obj_set_style_bg_opa(map_view, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(map_view, 0, 0);
   lv_obj_set_style_pad_all(map_view, 0, 0);
-  lv_obj_set_style_pad_row(map_view, 8, 0);
-  lv_obj_set_style_pad_column(map_view, 8, 0);
+  lv_obj_set_style_pad_row(map_view, 4, 0);
+  lv_obj_set_style_pad_column(map_view, 4, 0);
   lv_obj_set_layout(map_view, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(map_view, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(map_view, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(map_view, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(map_view, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(map_view, planes_app_map_resize_event, LV_EVENT_SIZE_CHANGED, nullptr);
 
@@ -1508,13 +1638,52 @@ void planes_app_launch(void)
   lv_label_set_text(map_north_label, "N");
   lv_obj_set_style_text_color(map_north_label, lv_color_hex(0xffd166), 0);
 
-  lv_obj_t *map_summary = lv_label_create(map_view);
+  lv_obj_t *map_panel = lv_obj_create(map_view);
+  lv_obj_set_size(map_panel, 320, MAP_PANEL_HEIGHT);
+  lv_obj_set_style_bg_opa(map_panel, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(map_panel, 0, 0);
+  lv_obj_set_style_pad_all(map_panel, 0, 0);
+  lv_obj_clear_flag(map_panel, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *controls = lv_obj_create(map_panel);
+  lv_obj_set_size(controls, 220, 80);
+  lv_obj_align(controls, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_set_style_bg_opa(controls, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(controls, 0, 0);
+  lv_obj_set_style_pad_all(controls, 0, 0);
+  lv_obj_clear_flag(controls, LV_OBJ_FLAG_SCROLLABLE);
+  auto control = [&](const char *text, intptr_t action, int x, int y) {
+    lv_obj_t *button = lv_button_create(controls);
+    lv_obj_set_size(button, 40, 38);
+    lv_obj_set_pos(button, x, y);
+    lv_obj_set_style_radius(button, 8, 0);
+    lv_obj_set_style_bg_color(button, lv_color_hex(action == 7 ? 0x285b74 : 0x343a55), 0);
+    lv_obj_set_style_shadow_width(button, 0, 0);
+    lv_obj_add_event_cb(button, planes_app_map_control_event, LV_EVENT_CLICKED, (void *)action);
+    if (!PlanesService::instance().is_configured()) lv_obj_add_state(button, LV_STATE_DISABLED);
+    lv_obj_t *label = lv_label_create(button);
+    lv_label_set_text(label, text);
+    lv_obj_center(label);
+  };
+  control(LV_SYMBOL_LEFT, 3, 23, 0);
+  control(LV_SYMBOL_UP, 1, 68, 0);
+  control(LV_SYMBOL_DOWN, 2, 113, 0);
+  control(LV_SYMBOL_RIGHT, 4, 158, 0);
+  control("-", 6, 45, 42);
+  control(LV_SYMBOL_HOME, 7, 90, 42);
+  control("+", 5, 135, 42);
+
+  lv_obj_t *map_summary = lv_label_create(map_panel);
+  lv_obj_align(map_summary, LV_ALIGN_TOP_MID, 0, 80);
   lv_obj_set_style_text_color(map_summary, lv_color_white(), 0);
+  lv_obj_set_style_text_align(map_summary, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_font(map_summary, &lv_font_montserrat_14, 0);
 
-  lv_obj_t *map_hint = lv_label_create(map_view);
+  lv_obj_t *map_hint = lv_label_create(map_panel);
+  lv_obj_align(map_hint, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_obj_set_style_text_color(map_hint, lv_color_hex(0xb7bdd7), 0);
-  lv_label_set_long_mode(map_hint, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_font(map_hint, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_align(map_hint, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_long_mode(map_hint, LV_LABEL_LONG_DOT);
   UI_TRACE("Planes", "launch map shell created");
 
   app_ctx.screen = scr;
@@ -1522,6 +1691,7 @@ void planes_app_launch(void)
   app_ctx.list_view = list_view;
   app_ctx.detail_view = detail_view;
   app_ctx.map_view = map_view;
+  app_ctx.map_panel = map_panel;
   app_ctx.map_toggle_btn = map_btn;
   app_ctx.map_toggle_label = map_lbl;
   app_ctx.status_label = status_label;

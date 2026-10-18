@@ -266,11 +266,11 @@ void BlueScanService::update_from_advertised_device(BLEAdvertisedDevice advertis
 
     RawAdv raw{};
 
-    const std::string addr_str = advertised.getAddress().toString();
+    const auto addr_str = advertised.getAddress().toString();
     strncpy(raw.addr, addr_str.c_str(), sizeof(raw.addr) - 1);
 
     if (advertised.haveName()) {
-        const std::string name_str = advertised.getName();
+        const auto name_str = advertised.getName();
         strncpy(raw.name, name_str.c_str(), sizeof(raw.name) - 1);
     } else {
         strncpy(raw.name, "Unnamed", sizeof(raw.name) - 1);
@@ -279,19 +279,19 @@ void BlueScanService::update_from_advertised_device(BLEAdvertisedDevice advertis
     raw.rssi = advertised.getRSSI();
 
     if (advertised.haveManufacturerData()) {
-        const std::string mfr_str = advertised.getManufacturerData();
-        raw.mfr_len = (uint8_t)std::min(mfr_str.size(), sizeof(raw.mfr));
-        memcpy(raw.mfr, mfr_str.data(), raw.mfr_len);
+        const auto mfr_str = advertised.getManufacturerData();
+        raw.mfr_len = (uint8_t)std::min((size_t)mfr_str.length(), sizeof(raw.mfr));
+        memcpy(raw.mfr, mfr_str.c_str(), raw.mfr_len);
     }
 
     const int svc_n = advertised.getServiceDataCount();
     raw.svc_count = (uint8_t)std::min(svc_n, (int)(sizeof(raw.svc) / sizeof(raw.svc[0])));
     for (int i = 0; i < (int)raw.svc_count; ++i) {
-        const std::string uuid_str = advertised.getServiceDataUUID(i).toString();
+        const auto uuid_str = advertised.getServiceDataUUID(i).toString();
         strncpy(raw.svc[i].uuid, uuid_str.c_str(), sizeof(raw.svc[i].uuid) - 1);
-        const std::string data_str = advertised.getServiceData(i);
-        raw.svc[i].data_len = (uint8_t)std::min(data_str.size(), sizeof(raw.svc[i].data));
-        memcpy(raw.svc[i].data, data_str.data(), raw.svc[i].data_len);
+        const auto data_str = advertised.getServiceData(i);
+        raw.svc[i].data_len = (uint8_t)std::min((size_t)data_str.length(), sizeof(raw.svc[i].data));
+        memcpy(raw.svc[i].data, data_str.c_str(), raw.svc[i].data_len);
     }
 
     // Non-blocking: drop the advertisement if the queue is full rather than

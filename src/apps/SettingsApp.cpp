@@ -1319,6 +1319,16 @@ static void weather_unit_changed_event(lv_event_t *e)
 
 }
 
+static void weather_layout_changed_event(lv_event_t *e)
+{
+  if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+  auto &cfg = ConfigStoreService::instance();
+  if (!cfg.load("weather")) return;
+  const bool classic = lv_dropdown_get_selected((lv_obj_t *)lv_event_get_target(e)) == 1;
+  cfg.set("layout", std::string(classic ? "classic" : "detailed"));
+  cfg.save();
+}
+
 static void open_weather_screen(lv_event_t *e)
 {
   lv_obj_t *settings_scr = nullptr;
@@ -1347,6 +1357,17 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_style_pad_row(content, 12, 0);
   lv_obj_set_layout(content, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+
+  lv_obj_t *layout_label = lv_label_create(content);
+  lv_label_set_text(layout_label, "Weather layout");
+  lv_obj_set_style_text_color(layout_label, lv_color_white(), 0);
+  lv_obj_t *layout = lv_dropdown_create(content);
+  lv_obj_set_width(layout, lv_pct(100));
+  lv_dropdown_set_options(layout, "Detailed\nClassic");
+  auto &layout_config = ConfigStoreService::instance();
+  const bool classic = !layout_config.load("weather") || layout_config.get("layout", "classic") == "classic";
+  lv_dropdown_set_selected(layout, classic ? 1 : 0);
+  lv_obj_add_event_cb(layout, weather_layout_changed_event, LV_EVENT_VALUE_CHANGED, nullptr);
 
   lv_obj_t *saved_title = lv_label_create(content);
   lv_label_set_text(saved_title, "Saved locations (tap to select)");

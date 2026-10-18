@@ -42,6 +42,13 @@ public:
 
     bool reload_from_config();
     bool refresh_now();
+    // Session-only search area. Never writes Settings; an active request is
+    // allowed to finish before its coordinates are changed.
+    bool set_search_area(double latitude, double longitude, double range_km);
+    void reset_search_area();
+    double home_latitude() const { return _home_lat; }
+    double home_longitude() const { return _home_lon; }
+    double home_range_km() const { return _home_range_km; }
     void pause() { _enabled = false; }
     void resume() { _enabled = true; }
 
@@ -69,7 +76,7 @@ private:
 
     bool is_wifi_connected() const;
     bool fetch_and_update();
-    bool fetch_payload(std::string &out_payload, std::string &out_provider, std::string &out_error);
+    bool fetch_aircraft(PlaneState *out_planes, int &out_count, std::string &out_provider, std::string &out_error);
     bool parse_payload(const std::string &payload, PlaneState *out_planes, int &out_count, std::string &out_error);
     void enrich_routes(PlaneState *planes, int count);
     void publish_result(PlaneState *planes, int count, const std::string &provider);
@@ -83,6 +90,7 @@ private:
     static void fetch_task_entry(void *user_data);
 #endif
     void clear_planes();
+    void apply_search_area();
     unsigned long now_ms() const;
 
     struct RouteCacheEntry {
@@ -98,6 +106,7 @@ private:
 
     bool _configured = false;
     bool _has_data = false;
+    bool _fetch_routes = false; // Captured before starting the worker.
     bool _enabled = false;
     bool _metric = true;
     bool _hide_ground = false;
@@ -105,6 +114,9 @@ private:
     double _center_lat = 0.0;
     double _center_lon = 0.0;
     double _range_km = 30.0;
+    double _home_lat = 0.0, _home_lon = 0.0, _home_range_km = 30.0;
+    double _pending_lat = 0.0, _pending_lon = 0.0, _pending_range_km = 30.0;
+    bool _search_area_pending = false;
     PlaneState _planes[MAX_PLANES]{};
     int _plane_count = 0;
     unsigned long _last_fetch_ms = 0;

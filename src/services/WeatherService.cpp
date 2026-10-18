@@ -167,6 +167,7 @@ bool WeatherService::reload_from_config()
     WeatherLocation location;
     if (!WeatherLocationStore::active(location)) {
         _configured = false;
+        _has_utc_offset = false;
         clear_weather();
         return false;
     }
@@ -178,6 +179,7 @@ bool WeatherService::reload_from_config()
     _configured = true;
 
     if (location_changed) {
+        _has_utc_offset = false;
         _last_fetch_ms = 0;
         std::string cached_payload;
         FileSystemService &files = FileSystemService::instance();
@@ -192,6 +194,14 @@ bool WeatherService::reload_from_config()
         fetch_and_update();
 
     return true;
+}
+
+bool WeatherService::local_time(time_t utc, tm &result) const
+{
+    if (!_has_utc_offset) return false;
+    // Convert independently of the process-wide TZ used by the device clock.
+    const time_t shifted = utc + _utc_offset_seconds;
+    return gmtime_r(&shifted, &result) != nullptr;
 }
 
 bool WeatherService::has_weather() const
@@ -329,6 +339,13 @@ bool WeatherService::apply_payload(std::string &payload)
         return false;
     }
     UI_TRACE("Weather", "parse complete");
+    // Open-Meteo resolves this offset for timezone=auto, including current DST.
+    // The original payload is cached per location, so it also works offline.
+    const JsonVariantConst offset = doc["utc_offset_seconds"];
+    _has_utc_offset = offset.is<int>() && offset.as<int>() >= -12 * 3600 &&
+                      offset.as<int>() <= 14 * 3600;
+    _utc_offset_seconds = _has_utc_offset ? offset.as<int>() : 0;
+
 
     JsonVariant current = doc["current"];
     if (!current.isNull()) {

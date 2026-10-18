@@ -19,6 +19,13 @@
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/sha256.h>
+#include <mbedtls/version.h>
+#if MBEDTLS_VERSION_MAJOR < 3
+// mbedTLS 3 removed the _ret suffix; keep compatibility with older firmware builds.
+#define mbedtls_sha256_starts mbedtls_sha256_starts_ret
+#define mbedtls_sha256_update mbedtls_sha256_update_ret
+#define mbedtls_sha256_finish mbedtls_sha256_finish_ret
+#endif
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #endif
@@ -237,8 +244,8 @@ bool UpdateService::download_and_install()
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); http.setTimeout(15000);
     if (!http.begin(client,_firmware_url.c_str()) || http.GET()!=HTTP_CODE_OK) { _error="Firmware download failed"; http.end(); return false; }
     if (!Update.begin(_firmware_size,U_FLASH)) { _error="Could not open OTA partition"; http.end(); return false; }
-    mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts_ret(&sha,0);
-    WiFiClient *stream=http.getStreamPtr(); uint8_t buffer[2048]; size_t written=0;
+    mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha,0);
+    auto *stream=http.getStreamPtr(); uint8_t buffer[2048]; size_t written=0;
     while (written<_firmware_size) {
         if (_cancel_requested) break;
         int available=stream->available();
@@ -246,14 +253,14 @@ bool UpdateService::download_and_install()
         size_t want=std::min((size_t)available,std::min(sizeof(buffer),_firmware_size-written));
         int got=stream->readBytes(buffer,want); if (got<=0) break;
         if (Update.write(buffer,got)!=(size_t)got) break;
-        mbedtls_sha256_update_ret(&sha,buffer,got); written+=got;
+        mbedtls_sha256_update(&sha,buffer,got); written+=got;
         _progress=(int)(written*100/_firmware_size);
     }
     if (_cancel_requested) {
         mbedtls_sha256_free(&sha); http.end(); Update.abort();
         _error="Update cancelled"; return false;
     }
-    unsigned char digest[32]; mbedtls_sha256_finish_ret(&sha,digest); mbedtls_sha256_free(&sha); http.end();
+    unsigned char digest[32]; mbedtls_sha256_finish(&sha,digest); mbedtls_sha256_free(&sha); http.end();
     char hex[65]; for (int i=0;i<32;++i) std::sprintf(hex+i*2,"%02x",digest[i]); hex[64]=0;
     if (written!=_firmware_size || _sha256!=hex) { Update.abort(); _error="Firmware verification failed"; return false; }
     if (_cancel_requested) { Update.abort(); _error="Update cancelled"; return false; }

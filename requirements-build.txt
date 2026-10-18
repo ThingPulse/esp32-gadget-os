@@ -1,0 +1,2 @@
+# pioarduino Core 6.2.0, required by the pinned Arduino-ESP32 3.3.12 platform.
+pioarduino @ https://github.com/pioarduino/platformio-core/archive/110fcd347c147d25e1ef6ddcd0c8a9daeaf48f02.zip
