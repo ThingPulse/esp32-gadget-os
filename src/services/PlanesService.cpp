@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <new>
 
 
@@ -18,6 +19,7 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -59,6 +61,17 @@ constexpr unsigned long ROUTE_CACHE_OK_MS = 6UL * 60UL * 60UL * 1000UL;
 constexpr unsigned long ROUTE_CACHE_MISS_MS = 30UL * 60UL * 1000UL;
 constexpr int ROUTE_LOOKUPS_PER_CYCLE = 3;
 constexpr size_t ROUTE_CACHE_MAX_ENTRIES = 512;
+
+#if defined(ARDUINO)
+static void log_network_heap(const char *provider)
+{
+    UI_TRACE("Planes", "request=%s internal_free=%u internal_largest=%u psram_free=%u",
+             provider,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+}
+#endif
 
 struct PlanesFetchResult {
     bool ok = false;
@@ -418,10 +431,8 @@ bool PlanesService::parse_payload(const std::string &payload,
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload.c_str(), payload.size());
     if (err != DeserializationError::Ok) {
-#if !defined(ARDUINO)
-        UI_TRACE("Planes", "JSON parse failed err=%s body=%s", err.c_str(), snippet_copy(payload).c_str());
-#endif
-        out_error = "Invalid API response";
+        UI_TRACE("Planes", "JSON parse failed err=%s bytes=%u", err.c_str(), (unsigned)payload.size());
+        out_error = std::string("Aircraft JSON: ") + err.c_str();
         return false;
     }
 
@@ -447,6 +458,8 @@ bool PlanesService::parse_payload(const std::string &payload,
     };
 
     JsonArray aircraft = doc["ac"].as<JsonArray>();
+    // adsb.fi uses "aircraft"; adsb.lol and airplanes.live use "ac".
+    if (aircraft.isNull()) aircraft = doc["aircraft"].as<JsonArray>();
     if (!aircraft.isNull()) {
         for (JsonVariant item : aircraft) {
             JsonObjectConst ac = item.as<JsonObjectConst>();
@@ -622,10 +635,13 @@ bool PlanesService::fetch_route_for_callsign(const std::string &callsign_key, st
     std::snprintf(url, sizeof(url), "https://api.adsbdb.com/v0/callsign/%s", callsign_key.c_str());
 
 #if defined(ARDUINO)
-    HTTPClient http;
+    // HTTPClient retains a pointer even after end() if connection failed.
+    // It must be destroyed before the client on every exit path.
     PlanesSecureClient client;
+    HTTPClient http;
 #if PLANES_HAS_SECURE_CLIENT
     client.setInsecure();
+    client.setHandshakeTimeout(5);
     if (!http.begin(client, url)) {
         return false;
     }
@@ -640,8 +656,16 @@ bool PlanesService::fetch_route_for_callsign(const std::string &callsign_key, st
     http.addHeader("User-Agent", "esp32-gadget-os/1.0");
     http.addHeader("Connection", "close");
 
+    log_network_heap("adsbdb");
     int code = http.GET();
     if (code != HTTP_CODE_OK) {
+#if PLANES_HAS_SECURE_CLIENT
+        char tls_error[160]{};
+        const int tls_code = client.lastError(tls_error, sizeof(tls_error));
+        UI_TRACE("Planes", "route request HTTP code=%d TLS code=%d error=%s",
+                 code, code < 0 && tls_code < 0 ? tls_code : 0,
+                 code < 0 && tls_code < 0 ? tls_error : "");
+#endif
         http.end();
         return false;
     }
@@ -684,6 +708,7 @@ bool PlanesService::start_async_fetch()
 {
     if (_fetch_in_progress)
         return true;
+    _fetch_routes = _has_data && _plane_count > 0;
 #if defined(ARDUINO)
     if (!planes_result_queue) {
         _last_error = "Result queue unavailable";
@@ -709,11 +734,9 @@ bool PlanesService::start_async_fetch()
                 _fetch_in_progress = false;
                 return;
             }
-            std::string payload;
-            result->ok = fetch_payload(payload, result->provider, result->error);
-            if (result->ok)
-                result->ok = parse_payload(payload, result->planes, result->count, result->error);
-            if (result->ok)
+            result->ok = fetch_aircraft(result->planes, result->count, result->provider, result->error);
+            // First show aircraft; optional routes can arrive on the next poll.
+            if (result->ok && _fetch_routes)
                 enrich_routes(result->planes, result->count);
 
             std::lock_guard<std::mutex> lock(planes_result_mutex);
@@ -742,15 +765,11 @@ void PlanesService::fetch_task_entry(void *user_data)
         return;
     }
 
-    std::string payload;
-    result->ok = self->fetch_payload(payload, result->provider, result->error);
-    if (result->ok)
-        result->ok = self->parse_payload(payload, result->planes, result->count, result->error);
-    if (result->ok)
+    result->ok = self->fetch_aircraft(result->planes, result->count, result->provider, result->error);
+    // A route service failure must not delay the first aircraft snapshot.
+    if (result->ok && self->_fetch_routes)
         self->enrich_routes(result->planes, result->count);
 
-    payload.clear();
-    payload.shrink_to_fit();
     if (xQueueSend(planes_result_queue, &result, 0) != pdTRUE) {
         delete result;
         self->_fetch_in_progress = false;
@@ -792,10 +811,13 @@ void PlanesService::process_async_result()
     delete result;
 }
 
-bool PlanesService::fetch_payload(std::string &out_payload,
+bool PlanesService::fetch_aircraft(PlaneState *out_planes, int &out_count,
                                   std::string &out_provider,
                                   std::string &out_error)
 {
+    // Parse inside the provider loop so unusable HTTP 200 responses fall back.
+    // The response buffer is released before optional route requests begin.
+    std::string out_payload;
 #if !defined(ARDUINO)
     if (std::getenv("GADGET_OS_TUTORIAL_PATH")) {
         std::this_thread::sleep_for(std::chrono::milliseconds(900));
@@ -806,7 +828,7 @@ bool PlanesService::fetch_payload(std::string &out_payload,
           {"hex":"4ca9d2","flight":"RYR8ZH","lat":47.29,"lon":8.38,"alt_baro":18400,"gs":355,"track":62,"baro_rate":832,"r":"EI-EVH","t":"B738"},
           {"hex":"3c65a1","flight":"DLH5CP","lat":47.39,"lon":8.75,"alt_baro":9600,"gs":270,"track":278,"baro_rate":0,"r":"D-AINA","t":"A20N"}
         ]})json";
-        return true;
+        return parse_payload(out_payload, out_planes, out_count, out_error);
     }
 #endif
     const int radius_nm = std::max(1, std::min(250, (int)std::ceil(_range_km / 1.852)));
@@ -821,18 +843,9 @@ bool PlanesService::fetch_payload(std::string &out_payload,
     const double lomax = std::min(180.0, _center_lon + dlon);
 
     char urls[4][320]{};
-#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
-    // The original Color Kit cannot reliably reserve enough contiguous
-    // internal RAM for an mbedTLS handshake while the Plane UI is resident.
-    // adsb.lol also serves this anonymous, read-only endpoint over HTTP.
-    std::snprintf(urls[0], sizeof(urls[0]),
-                  "http://api.adsb.lol/v2/point/%.4f/%.4f/%d",
-                  _center_lat, _center_lon, radius_nm);
-#else
     std::snprintf(urls[0], sizeof(urls[0]),
                   "https://api.adsb.lol/v2/point/%.4f/%.4f/%d",
                   _center_lat, _center_lon, radius_nm);
-#endif
     std::snprintf(urls[1], sizeof(urls[1]),
                   "https://api.airplanes.live/v2/point/%.4f/%.4f/%d",
                   _center_lat, _center_lon, radius_nm);
@@ -851,60 +864,43 @@ bool PlanesService::fetch_payload(std::string &out_payload,
 #if defined(ARDUINO)
 #if PLANES_HAS_SECURE_CLIENT
     for (int i = 0; i < 4; ++i) {
+        // A rejected response must not occupy RAM during the next handshake.
+        std::string().swap(out_payload);
+        // Clients outlive HTTPClient, including after a failed connection.
+        PlanesSecureClient secure_client;
+        secure_client.setInsecure();
+        secure_client.setHandshakeTimeout(5);
         HTTPClient http;
-#if defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
-        WiFiClient plain_client;
-        if (i == 0) {
-            if (!http.begin(plain_client, urls[i])) continue;
-        } else
-#endif
-        {
-        PlanesSecureClient client;
-        client.setInsecure();
-        if (!http.begin(client, urls[i])) continue;
-
+        http.setReuse(false);
+        if (!http.begin(secure_client, urls[i])) continue;
         http.setConnectTimeout(5000);
         http.setTimeout(10000);
         http.addHeader("Accept", "application/json");
         http.addHeader("User-Agent", "esp32-gadget-os/1.0");
         http.addHeader("Connection", "close");
 
+        log_network_heap(providers[i]);
         UI_TRACE("Planes", "request provider=%s url=%s", providers[i], urls[i]);
         int code = http.GET();
         if (code == HTTP_CODE_OK) {
             out_payload = http.getString().c_str();
             http.end();
-            if (!out_payload.empty()) {
+            secure_client.stop();
+            if (parse_payload(out_payload, out_planes, out_count, out_error)) {
                 out_provider = providers[i];
+                out_error.clear();
                 return true;
             }
+            UI_TRACE("Planes", "provider=%s rejected response: %s", providers[i], out_error.c_str());
+        } else if (code < 0) {
+            char tls_error[160]{};
+            const int tls_code = secure_client.lastError(tls_error, sizeof(tls_error));
+            UI_TRACE("Planes", "provider=%s HTTP code=%d TLS code=%d error=%s",
+                     providers[i], code, tls_code < 0 ? tls_code : 0, tls_code < 0 ? tls_error : "");
         } else {
             UI_TRACE("Planes", "provider=%s HTTP code=%d", providers[i], code);
         }
         http.end();
-        continue;
-        }
-
-#if defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
-        http.setConnectTimeout(5000);
-        http.setTimeout(10000);
-        http.addHeader("Accept", "application/json");
-        http.addHeader("User-Agent", "esp32-gadget-os/1.0");
-        http.addHeader("Connection", "close");
-        UI_TRACE("Planes", "request provider=%s url=%s", providers[i], urls[i]);
-        int code = http.GET();
-        if (code == HTTP_CODE_OK) {
-            out_payload = http.getString().c_str();
-            http.end();
-            if (!out_payload.empty()) {
-                out_provider = providers[i];
-                return true;
-            }
-        } else {
-            UI_TRACE("Planes", "provider=%s HTTP code=%d", providers[i], code);
-        }
-        http.end();
-#endif
     }
     out_error = "All aircraft providers failed";
     return false;
@@ -919,8 +915,12 @@ bool PlanesService::fetch_payload(std::string &out_payload,
         if (emulator_http_get_logged("Planes", urls[i], 10,
                                      out_payload, http_code, exit_code) &&
             http_code == 200) {
-            out_provider = providers[i];
-            return true;
+            if (parse_payload(out_payload, out_planes, out_count, out_error)) {
+                out_provider = providers[i];
+                out_error.clear();
+                return true;
+            }
+            UI_TRACE("Planes", "provider=%s rejected response: %s", providers[i], out_error.c_str());
         }
     }
     out_error = "All aircraft providers failed";

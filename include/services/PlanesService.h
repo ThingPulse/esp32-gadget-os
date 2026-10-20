@@ -69,7 +69,7 @@ private:
 
     bool is_wifi_connected() const;
     bool fetch_and_update();
-    bool fetch_payload(std::string &out_payload, std::string &out_provider, std::string &out_error);
+    bool fetch_aircraft(PlaneState *out_planes, int &out_count, std::string &out_provider, std::string &out_error);
     bool parse_payload(const std::string &payload, PlaneState *out_planes, int &out_count, std::string &out_error);
     void enrich_routes(PlaneState *planes, int count);
     void publish_result(PlaneState *planes, int count, const std::string &provider);
@@ -98,6 +98,7 @@ private:
 
     bool _configured = false;
     bool _has_data = false;
+    bool _fetch_routes = false; // Captured before starting the worker.
     bool _enabled = false;
     bool _metric = true;
     bool _hide_ground = false;

@@ -174,8 +174,8 @@ git push
 Create and push an annotated tag:
 
 ```bash
-git tag -a v0.1.0 -m "Gadget OS v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.4 -m "Gadget OS v0.1.4"
+git push origin v0.1.4
 ```
 
 The **Build and release firmware for ESP App Market** workflow then:
