@@ -231,7 +231,8 @@ float WeatherService::humidity_value() const
 
 float WeatherService::pressure_value() const
 {
-    return _pressure;
+    // Open-Meteo and the persisted cache always store pressure in hPa.
+    return _metric ? _pressure : _pressure * 0.029529983f;
 }
 
 float WeatherService::precipitation_value() const

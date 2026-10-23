@@ -41,7 +41,7 @@ int main() {
     s._configured=true;s._home_lat=47.4;s._home_lon=8.5;s._home_range_km=50;
     s._center_lat=47.4;s._center_lon=8.5;s._range_km=50;
     planes_app_launch();
-    assert(app_ctx.nearby.root && s.range_km()==10 && s._airborne_only);
+    assert(app_ctx.nearby.root && s.range_km()==25 && s._airborne_only);
     PlaneState planes[]={sample("a001","SWR3WZ",4,45,225),sample("a002","CFG314",4.2,280,90),
         sample("a003","SWR4B",7.8,145,315),sample("a004","BAW12",7.1,355,0),sample("a005","GROUND",1,0,0)};
     planes[4].on_ground=true;
@@ -62,8 +62,40 @@ int main() {
     assert(std::strstr(lv_label_get_text(v.route),"LHR"));
     lv_obj_send_event(v.card,LV_EVENT_CLICKED,nullptr);
     assert(v.dialog && v.dialog_icao=="a001");
-    assert(std::strstr(lv_label_get_text(v.dialog_body),"London Heathrow Airport"));
+    assert(std::strstr(lv_label_get_text(v.dialog_airports[1]),"London Heathrow Airport"));
     capture("details");
+    const auto original = planes[0];
+    planes[0].callsign="SWR2EG";planes[0].aircraft_type="A21N";
+    planes[0].route="ZRH->PMI";planes[0].destination_airport_name="Palma de Mallorca Airport";
+    planes[0].altitude_m=1509;planes[0].velocity_ms=286/3.6f;
+    planes[0].distance_km=11.2f;planes[0].bearing_deg=315;
+    planes[0].registration="HB-JPD";planes[0].squawk="1000";
+    s.publish_result(planes,5,"Test");planes_app_update_ui();
+    assert(std::string(lv_label_get_text(v.dialog_type))=="Airbus A321neo");
+    assert(std::string(lv_label_get_text(v.dialog_stats[3]))=="Northwest");
+    capture("details-redesign");
+    lv_obj_update_layout(v.dialog);
+    lv_area_t stats_before, stats_after, ids, close;
+    lv_obj_get_coords(v.dialog_stats[0], &stats_before);
+    planes[0].origin_airport_name="Thessaloniki Macedonia International Airport";
+    planes[0].destination_airport_name="Rome-Fiumicino Leonardo da Vinci International Airport";
+    s.publish_result(planes,5,"Test");planes_app_update_ui();
+    capture("details-long-airports");
+    lv_obj_get_coords(v.dialog_stats[0], &stats_after);
+    lv_obj_get_coords(v.dialog_hex, &ids);lv_obj_get_coords(v.dialog_close, &close);
+    assert(stats_before.y1 == stats_after.y1 && ids.y2 < close.y1);
+    assert(std::strstr(lv_label_get_text(v.dialog_airports[0]), "..."));
+    assert(std::strstr(lv_label_get_text(v.dialog_airports[1]), "..."));
+    // Returning to short names restores their complete labels.
+    planes[0].origin_airport_name="Zurich Airport";
+    planes[0].destination_airport_name="Palma de Mallorca Airport";
+    s.publish_result(planes,5,"Test");planes_app_update_ui();
+    assert(std::string(lv_label_get_text(v.dialog_airports[0])) == "Zurich Airport");
+    s._metric=false;planes_app_update_ui();
+    assert(std::strstr(lv_label_get_text(v.dialog_stats[0]),"ft"));
+    assert(std::strstr(lv_label_get_text(v.dialog_stats[1]),"kt"));
+    capture("details-imperial");
+    s._metric=true;planes[0]=original;s.publish_result(planes,5,"Test");planes_app_update_ui();
     lv_obj_send_event(v.dialog_close,LV_EVENT_CLICKED,nullptr);
     tick_ms+=10;lv_timer_handler();assert(!v.dialog);
     // Footer navigation reaches every aircraft and wraps in distance order.
@@ -74,21 +106,24 @@ int main() {
     lv_obj_send_event(v.next,LV_EVENT_CLICKED,nullptr);assert(v.selected_icao=="a001");
     auto *input=lv_indev_create();lv_indev_set_type(input,LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(input,[](lv_indev_t *,lv_indev_data_t *data){*data=input_data;});
-    input_data.point={194,213};input_data.state=LV_INDEV_STATE_PRESSED;lv_indev_read(input);
+    input_data.point={180,230};input_data.state=LV_INDEV_STATE_PRESSED;lv_indev_read(input);
     input_data.state=LV_INDEV_STATE_RELEASED;lv_indev_read(input);
     assert(app_ctx.nearby.selected_icao=="a003");
     app_ctx.nearby.selected_icao="a001";nearby_planes_update(app_ctx.nearby);
-    // Rows select, the featured card opens detail, back preserves selection.
-    lv_obj_send_event(app_ctx.nearby.rows[0],LV_EVENT_CLICKED,nullptr);
+    // Footer selects, the featured card opens details and preserves selection.
+    lv_obj_send_event(app_ctx.nearby.next,LV_EVENT_CLICKED,nullptr);
     assert(app_ctx.nearby.selected_icao=="a002");
     lv_obj_send_event(app_ctx.nearby.card,LV_EVENT_CLICKED,nullptr);
     assert(v.dialog && v.dialog_icao=="a002");
     assert(lv_obj_has_flag(v.route,LV_OBJ_FLAG_HIDDEN));
-    assert(std::strstr(lv_label_get_text(v.dialog_body),"Route unavailable"));
+    assert(std::strstr(lv_label_get_text(v.dialog_route_missing),"Route unavailable"));
+    assert(!lv_obj_has_flag(v.dialog_route_missing,LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(v.dialog_route,LV_OBJ_FLAG_HIDDEN));
+    capture("details-no-route");
     // Enrichment arriving during an open dialog is reflected without reopening it.
     planes[1].route="EDDF->EGLL";
     s.publish_result(planes,5,"Test");planes_app_update_ui();
-    assert(std::strstr(lv_label_get_text(v.dialog_body),"EDDF"));
+    assert(std::strstr(lv_label_get_text(v.dialog_codes[0]),"EDDF"));
     lv_obj_delete(v.dialog);assert(!v.dialog);
     std::swap(planes[0],planes[3]);s.publish_result(planes,5,"Test");planes_app_update_ui();
     assert(app_ctx.nearby.selected_icao=="a002"); // Not tied to provider ordering.
@@ -153,7 +188,7 @@ int main() {
     PlaneState parsed[PlanesService::MAX_PLANES];int count=0;std::string error;
     assert(s.parse_payload(payload,parsed,count,error));assert(count==1 && parsed[0].icao24=="air");
     // An in-flight request defers range/filter changes until it completes.
-    s._fetch_in_progress=true;s.reset_search_area();assert(s._airborne_only && s.range_km()==10);
+    s._fetch_in_progress=true;s.reset_search_area();assert(s._airborne_only && s.range_km()==25);
     s._fetch_in_progress=false;s.apply_search_area();assert(!s._airborne_only && s.range_km()==50);
     auto *old_screen=lv_screen_active();lv_screen_load(lv_obj_create(nullptr));lv_obj_delete(old_screen);
     assert(!app_ctx.nearby.root && !app_ctx.nearby.dialog);

@@ -137,7 +137,7 @@ void planes_app_launch() {
     };
     auto &service = PlanesService::instance();
     if (service.is_configured())
-        service.set_search_area(service.home_latitude(), service.home_longitude(), 10, true);
+        service.set_search_area(service.home_latitude(), service.home_longitude(), app_ctx.nearby.radius_km, true);
     service.resume();
     app_ctx.was_fetching = service.is_fetching();
     app_ctx.planes_revision = service.data_revision();

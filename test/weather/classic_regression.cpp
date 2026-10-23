@@ -137,8 +137,14 @@ int main() {
     view.last_clock.clear();
     classic_weather_tick(view);
     assert(view.last_moon_minute >= 0);
+    weather._pressure = 1013.25f;
+    weather._metric = true;
+    classic_weather_update(view);
+    assert(std::strcmp(lv_label_get_text(view.pressure), "1013 hPa") == 0);
     weather._metric = false;
     classic_weather_update(view);
+    assert(std::strcmp(lv_label_get_text(view.pressure), "29.92 inHg") == 0);
+    assert(std::abs(weather._pressure - 1013.25f) < .001f); // Keep cached source units unchanged.
     assert(std::strcmp(lv_label_get_text(view.wind), "4.0 mph") == 0);
     weather._hourly_forecast_count = 2;
     weather._hourly_forecast[0] = {true, "2026-10-21T23:00", 3, 54};

@@ -315,7 +315,7 @@ void classic_weather_update(ClassicWeatherView &v) {
         weather_icon_update(v.icon, weather_icon_kind_from_code(weather.weather_code()), 56);
         textf(v.temperature, "%.1f°", weather.temperature_value());
         textf(v.humidity, "%.0f%% humidity", weather.humidity_value());
-        textf(v.pressure, "%.0f hPa", weather.pressure_value());
+        textf(v.pressure, weather.is_metric() ? "%.0f hPa" : "%.2f inHg", weather.pressure_value());
         textf(v.wind, "%.1f %s", weather.wind_speed_value(), weather.is_metric() ? "km/h" : "mph");
         const double a = weather.wind_direction_degrees() * PI / 180;
         auto point = [&](double x, double y) { return lv_point_precise_t{

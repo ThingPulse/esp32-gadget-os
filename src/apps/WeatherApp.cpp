@@ -267,7 +267,7 @@ static void weather_app_update_ui()
   lv_label_set_text(app_ctx.humidity_label, humidity_buf);
 
   char pressure_buf[32] = {0};
-  std::snprintf(pressure_buf, sizeof(pressure_buf), "%.0f hPa", weather.pressure_value());
+  std::snprintf(pressure_buf, sizeof(pressure_buf), weather.is_metric() ? "%.0f hPa" : "%.2f inHg", weather.pressure_value());
   lv_label_set_text(app_ctx.pressure_label, pressure_buf);
 
   char precip_buf[32] = {0};

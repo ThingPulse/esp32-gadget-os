@@ -43,7 +43,7 @@ public:
     int weather_code() const;
     bool is_metric() const;
     float humidity_value() const;
-    float pressure_value() const;
+    float pressure_value() const; // hPa in metric mode, inHg otherwise.
     float precipitation_value() const;
     float wind_speed_value() const;
     float wind_direction_degrees() const;

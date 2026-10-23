@@ -10,12 +10,15 @@ struct NearbyPlanesView {
     lv_obj_t *status = nullptr;
     lv_obj_t *previous = nullptr, *next = nullptr, *page = nullptr;
     lv_obj_t *dialog = nullptr, *dialog_title = nullptr, *dialog_body = nullptr, *dialog_close = nullptr;
+    lv_obj_t *dialog_content = nullptr, *dialog_airline = nullptr, *dialog_type = nullptr;
+    lv_obj_t *dialog_route = nullptr, *dialog_route_missing = nullptr;
+    std::array<lv_obj_t *, 2> dialog_codes{}, dialog_airports{};
+    std::array<lv_obj_t *, 4> dialog_stats{};
+    lv_obj_t *dialog_registration = nullptr, *dialog_hex = nullptr, *dialog_squawk = nullptr;
     std::string dialog_icao;
-    std::array<lv_obj_t *, 2> rows{}, row_labels{};
     std::array<int, PlanesService::MAX_PLANES> indices{};
-    std::array<int, 2> alternatives{{-1, -1}};
     int count = 0;
-    double radius_km = 10;
+    double radius_km = 25;
     std::string selected_icao;
     struct TrailPoint { float east_km, north_km; };
     struct AircraftTrail {
