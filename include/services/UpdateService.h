@@ -34,6 +34,11 @@ public:
     bool manual_check() const { return _manual_check; }
     static const char *current_version();
     static bool supported();
+#if !defined(ARDUINO)
+    bool tutorial_available();
+    bool tutorial_progress(int percent);
+    bool tutorial_installed();
+#endif
 
 private:
 #if defined(ARDUINO) && defined(ESP_PLATFORM)

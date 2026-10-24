@@ -1,0 +1,82 @@
+{
+  "ThingPulse-30s-4x5-draft.mp4": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1080,
+        "height": 1350,
+        "duration": "30.000000",
+        "nb_frames": "900"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "duration": "30.000000",
+        "nb_frames": "1408"
+      }
+    ]
+  },
+  "ThingPulse-30s-16x9-draft.mp4": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1920,
+        "height": 1080,
+        "duration": "30.000000",
+        "nb_frames": "900"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "duration": "30.000000",
+        "nb_frames": "1408"
+      }
+    ]
+  },
+  "ThingPulse-30s-9x16-draft.mp4": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1080,
+        "height": 1920,
+        "duration": "30.000000",
+        "nb_frames": "900"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "duration": "30.000000",
+        "nb_frames": "1408"
+      }
+    ]
+  },
+  "ThingPulse-30s-1x1-draft.mp4": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1080,
+        "height": 1080,
+        "duration": "30.000000",
+        "nb_frames": "900"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "duration": "30.000000",
+        "nb_frames": "1408"
+      }
+    ]
+  }
+}

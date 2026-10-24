@@ -42,6 +42,10 @@ class LGFX {
 #include "SystemVersion.h"
 #include "apps/CalculatorApp.h"
 #include "apps/PlanesApp.h"
+#include "services/PlanesService.h"
+#if !defined(ARDUINO)
+#include <src/widgets/buttonmatrix/lv_buttonmatrix_private.h>
+#endif
 #include "apps/SettingsApp.h"
 #include "apps/WeatherApp.h"
 #include "apps/WeatherIconTestApp.h"
@@ -107,6 +111,7 @@ static lv_obj_t *update_dialog_progress_value = nullptr;
 static lv_timer_t *update_dialog_timer = nullptr;
 
 static void launch_route(const std::string &route);
+static lv_obj_t *create_splash_screen(const char *version);
 static lv_obj_t *update_dialog_button(lv_obj_t *parent, const char *text, intptr_t action);
 
 static void update_service_event(const SystemEvent &, void *) { update_dialog_pending = true; }
@@ -144,8 +149,11 @@ static void update_dialog_timer_cb(lv_timer_t *)
     }
     if (update_dialog_timer) { lv_timer_delete(update_dialog_timer); update_dialog_timer=nullptr; }
   }
-  else if (updates.state()==UpdateService::State::ReadyToReboot)
+  else if (updates.state()==UpdateService::State::ReadyToReboot) {
     std::snprintf(text,sizeof(text),"Verified. Restarting...");
+    if (update_dialog_progress) lv_bar_set_value(update_dialog_progress,100,LV_ANIM_OFF);
+    if (update_dialog_progress_value) lv_label_set_text(update_dialog_progress_value,"100%");
+  }
   else return;
   lv_label_set_text(update_dialog_status,text);
 }
@@ -271,11 +279,17 @@ static void show_update_installed_dialog()
 
 #if defined(SDL_h_)
 static uint32_t native_capture_started_ms = 0;
+static lv_obj_t *native_restart_home = nullptr, *native_restart_screen = nullptr;
+static bool native_restart_splash = false;
 static bool native_touch_enabled = false;
 static bool native_touch_pressed = false;
 static lv_coord_t native_touch_x = 0;
 static lv_coord_t native_touch_y = 0;
 static FILE *native_video_pipe = nullptr;
+static FILE *native_video_touch_trace = nullptr;
+static uint32_t native_video_pause_started = 0;
+static int native_video_touch_x = 0, native_video_touch_y = 0;
+static bool native_video_touch_pressed = false;
 static uint32_t native_video_started_ms = 0;
 static uint32_t native_video_next_frame = 0;
 static void native_push_touch(lv_coord_t x, lv_coord_t y, bool pressed);
@@ -341,6 +355,9 @@ static void native_show_caption(const std::string &text)
 
 static void native_show_touch(int x, int y, bool pressed)
 {
+  native_video_touch_x = x; native_video_touch_y = y;
+  native_video_touch_pressed = pressed;
+  if (std::getenv("GADGET_OS_HIDE_TOUCH_DOT")) return;
   if (!native_tutorial_touch_dot || !lv_obj_is_valid(native_tutorial_touch_dot)) {
     native_tutorial_touch_dot = lv_obj_create(lv_layer_top());
     lv_obj_set_size(native_tutorial_touch_dot, 22, 22);
@@ -421,14 +438,61 @@ static void native_run_tutorial()
     native_tutorial_action_applied = true;
     if (a.type == "caption") native_show_caption(a.text);
     else if (a.type == "route") launch_route(a.route);
-    else if (a.type == "tap_text") native_tap_object(native_find_label(lv_screen_active(), a.text));
-    else if (a.type == "tap_exact") native_tap_object(native_find_label_exact(lv_screen_active(), a.text));
+    else if (a.type == "tap_text" || a.type == "tap_exact") {
+      auto find = a.type == "tap_exact" ? native_find_label_exact : native_find_label;
+      auto *target = find(lv_layer_top(), a.text);
+      if (!target) target = find(lv_screen_active(), a.text);
+      if (!target) { std::fprintf(stderr, "[UI][Tutorial] missing button %s\n", a.text.c_str()); std::exit(4); }
+      native_tap_object(target);
+    }
+    else if (a.type == "ota_available") {
+      if (!UpdateService::instance().tutorial_available()) std::exit(4);
+    }
+    else if (a.type == "ota_restart") {
+      if (UpdateService::instance().state() != UpdateService::State::ReadyToReboot) std::exit(4);
+      close_update_dialog();
+      native_restart_home = lv_screen_active();
+      native_restart_screen = lv_obj_create(nullptr);
+      lv_obj_set_style_bg_color(native_restart_screen, lv_color_black(), 0);
+      lv_obj_set_style_bg_opa(native_restart_screen, LV_OPA_COVER, 0);
+      lv_screen_load(native_restart_screen); native_restart_splash = false;
+    }
+    else if (a.type == "ota_installed") {
+      if (!native_restart_home || !UpdateService::instance().tutorial_installed()) std::exit(4);
+      lv_screen_load(native_restart_home); lv_obj_delete(native_restart_screen);
+      native_restart_home = native_restart_screen = nullptr;
+      show_update_installed_dialog();
+    }
     else if (a.type == "home_page" && home_pager && lv_obj_is_valid(home_pager)) {
       lv_obj_scroll_to_x(home_pager, a.index * lv_obj_get_width(home_pager), LV_ANIM_ON);
     }
     else if (a.type == "focus_textarea") {
       int n=a.index; lv_obj_t *ta=native_find_type(lv_screen_active(), &lv_textarea_class, n);
       if (ta) { lv_obj_add_state(ta, LV_STATE_FOCUSED); lv_obj_send_event(ta, LV_EVENT_FOCUSED, nullptr); }
+    }
+    else if (a.type == "key") {
+      int n = 0;
+      auto *kb = native_find_type(lv_screen_active(), &lv_keyboard_class, n);
+      bool found = false;
+      if (kb) {
+        lv_obj_update_layout(kb);
+        const char *key = a.text == "BACKSPACE" ? LV_SYMBOL_BACKSPACE : a.text.c_str();
+        const auto *map = lv_buttonmatrix_get_map(kb);
+        unsigned id = 0;
+        for (unsigned i = 0; map[i] && map[i][0]; ++i) {
+          if (std::strcmp(map[i], "\n") == 0) continue;
+          if (std::strcmp(map[i], key) == 0) {
+            const auto area = reinterpret_cast<lv_buttonmatrix_t *>(kb)->button_areas[id];
+            lv_area_t bounds; lv_obj_get_coords(kb, &bounds);
+            a.x = a.x2 = bounds.x1 + (area.x1 + area.x2) / 2;
+            a.y = a.y2 = bounds.y1 + (area.y1 + area.y2) / 2;
+            native_push_touch(a.x, a.y, true); native_show_touch(a.x, a.y, true);
+            found = true; break;
+          }
+          ++id;
+        }
+      }
+      if (!found) { std::fprintf(stderr, "[UI][Tutorial] missing key %s\n", a.text.c_str()); std::exit(4); }
     }
     else if (a.type == "tap") { native_push_touch(a.x,a.y,true); native_show_touch(a.x,a.y,true); }
     else if (a.type == "type") {
@@ -461,7 +525,29 @@ static void native_run_tutorial()
     int x=a.x+(int)((a.x2-a.x)*p), y=a.y+(int)((a.y2-a.y)*p);
     native_push_touch(x,y,true); native_show_touch(x,y,true);
   }
-  if (elapsed >= a.duration) {
+  if (a.type == "ota_progress") {
+    if (!UpdateService::instance().tutorial_progress(std::min(100U, elapsed * 100U / std::max(1U, a.duration))))
+      std::exit(4);
+  }
+  if (a.type == "ota_restart" && elapsed >= 500 && !native_restart_splash) {
+    auto *black = native_restart_screen;
+    native_restart_screen = create_splash_screen(UpdateService::instance().available_version().c_str());
+    lv_screen_load(native_restart_screen); lv_obj_delete(black); native_restart_splash = true;
+  }
+  bool warmup_ready = false;
+  if (a.type == "planes_warmup") {
+    warmup_ready = planes_app_tutorial_ready(12);
+    static uint32_t last_refresh = 0;
+    if (!warmup_ready && now - last_refresh >= 1100) {
+      PlanesService::instance().refresh_now(); last_refresh = now;
+    }
+    if (!warmup_ready && elapsed >= a.duration) {
+      std::fprintf(stderr, "[UI][Tutorial] aircraft trail/route warmup timed out\n");
+      std::exit(4);
+    }
+    if (warmup_ready) std::fprintf(stderr, "[UI][Tutorial] all visible aircraft have >=12 trail points and routes\n");
+  }
+  if ((a.type != "planes_warmup" && elapsed >= a.duration) || warmup_ready) {
     native_push_touch(a.x2,a.y2,false); native_show_touch(a.x2,a.y2,false);
     ++native_tutorial_index; native_tutorial_action_started=now; native_tutorial_action_applied=false;
   }
@@ -471,6 +557,17 @@ static void native_record_video_if_requested()
 {
   const char *path = std::getenv("GADGET_OS_VIDEO_PATH");
   if (!path || !path[0]) return;
+  const uint32_t now = SDL_GetTicks();
+  const bool paused = native_tutorial_index < native_tutorial_actions.size() &&
+                      native_tutorial_actions[native_tutorial_index].type == "planes_warmup";
+  if (paused) {
+    if (!native_video_pause_started) native_video_pause_started = now;
+    return;
+  }
+  if (native_video_pause_started) {
+    native_video_started_ms += now - native_video_pause_started;
+    native_video_pause_started = 0;
+  }
   if (!native_video_pipe) {
     char command[1024] = {0};
     std::snprintf(command, sizeof(command),
@@ -479,6 +576,11 @@ static void native_record_video_if_requested()
                   "-c:v libx264 -pix_fmt yuv420p -movflags +faststart '%s'", path);
     native_video_pipe = popen(command, "w");
     if (!native_video_pipe) std::exit(3);
+    if (const char *trace = std::getenv("GADGET_OS_VIDEO_TOUCH_PATH")) {
+      native_video_touch_trace = std::fopen(trace, "w");
+      if (!native_video_touch_trace) { std::perror("touch trace"); std::exit(3); }
+      std::fprintf(native_video_touch_trace, "frame,x,y,pressed\n");
+    }
     native_video_started_ms = SDL_GetTicks();
     native_video_next_frame = 0;
   }
@@ -488,12 +590,16 @@ static void native_record_video_if_requested()
     lv_refr_now(disp);
     lcd.readRectRGB(0, 0, 320, 480, rgb.data());
     if (std::fwrite(rgb.data(), 1, rgb.size(), native_video_pipe) != rgb.size()) std::exit(3);
+    if (native_video_touch_trace)
+      std::fprintf(native_video_touch_trace, "%u,%d,%d,%d\n", native_video_next_frame,
+                   native_video_touch_x, native_video_touch_y, native_video_touch_pressed ? 1 : 0);
     ++native_video_next_frame;
   }
   unsigned long duration_ms = 0;
   if (const char *duration = std::getenv("GADGET_OS_VIDEO_DURATION_MS"))
     duration_ms = std::strtoul(duration, nullptr, 10);
   if (duration_ms && elapsed >= duration_ms) {
+    if (native_video_touch_trace) { std::fclose(native_video_touch_trace); native_video_touch_trace = nullptr; }
     pclose(native_video_pipe);
     native_video_pipe = nullptr;
     std::exit(0);
@@ -560,7 +666,7 @@ static uint32_t splash_now_ms()
 #endif
 }
 
-static void show_splash_screen(uint32_t duration_ms)
+static lv_obj_t *create_splash_screen(const char *version_string)
 {
   lv_obj_t *splash = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(splash, lv_color_hex(0x1e2030), 0);
@@ -579,11 +685,17 @@ static void show_splash_screen(uint32_t duration_ms)
   lv_obj_align(logo, LV_ALIGN_CENTER, 0, 18);
 
   lv_obj_t *version = lv_label_create(splash);
-  char version_text[64]; std::snprintf(version_text,sizeof(version_text),"Version %s",GADGET_OS_VERSION);
+  char version_text[64]; std::snprintf(version_text,sizeof(version_text),"Version %s",version_string);
   lv_label_set_text(version,version_text);
   lv_obj_set_style_text_color(version,lv_color_hex(0xb7bdd7),0);
   lv_obj_align(version,LV_ALIGN_BOTTOM_MID,0,-18);
 
+  return splash;
+}
+
+static void show_splash_screen(uint32_t duration_ms)
+{
+  lv_obj_t *splash = create_splash_screen(GADGET_OS_VERSION);
   lv_screen_load(splash);
   lv_refr_now(nullptr);
 

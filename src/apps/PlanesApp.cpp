@@ -147,3 +147,19 @@ void planes_app_launch() {
     ui_load_screen(screen, false);
     UiSessionState::set_route("planes");
 }
+
+#if !defined(ARDUINO)
+bool planes_app_tutorial_ready(unsigned minimum_points) {
+    if (!app_ctx.screen || app_ctx.closing || app_ctx.nearby.count < 2) return false;
+    const auto &service = PlanesService::instance();
+    for (int n = 0; n < app_ctx.nearby.count; ++n) {
+        const auto &plane = service.planes()[app_ctx.nearby.indices[n]];
+        if (plane.on_ground || plane.route.find("->") == std::string::npos) return false;
+        bool ready = false;
+        for (const auto &trail : app_ctx.nearby.trails)
+            if (plane.icao24 == trail.icao && trail.count >= minimum_points) ready = true;
+        if (!ready) return false;
+    }
+    return true;
+}
+#endif

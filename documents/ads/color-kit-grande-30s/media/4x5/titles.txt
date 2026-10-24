@@ -1,0 +1,17 @@
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-0.png'
+duration 3
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-1.png'
+duration 3
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-2.png'
+duration 3
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-3.png'
+duration 4
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-4.png'
+duration 4
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-5.png'
+duration 4
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-6.png'
+duration 3
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-7.png'
+duration 6
+file '/Users/deichhor/Documents/git/esp32-gadget-os/documents/ads/color-kit-grande-30s/media/4x5/title-7.png'

@@ -13,9 +13,43 @@
 #else
 #include <chrono>
 #include <thread>
+#include <cmath>
+#include <cstdlib>
 #endif
 
-namespace { stocks::YahooStockProvider yahoo; }
+namespace {
+stocks::YahooStockProvider yahoo;
+#if !defined(ARDUINO)
+class TutorialStockProvider : public stocks::StockDataProvider {
+public:
+    const char *id() const override { return "yahoo"; }
+    const char *name() const override { return "Demo quotes"; }
+    stocks::Result fetch(const std::string &symbol, stocks::Period period) override {
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        stocks::Result result;
+        auto &q = result.quote;
+        const char *symbols[] = {"AAPL", "NESN.SW", "7203.T", "SAP.DE", "VOD.L", "BTC-USD"};
+        const char *names[] = {"Apple", "Nestle", "Toyota", "SAP", "Vodafone", "Bitcoin"};
+        const char *currencies[] = {"USD", "CHF", "JPY", "EUR", "GBp", "USD"};
+        const char *exchanges[] = {"NASDAQ", "SIX", "Tokyo", "XETRA", "London", "Crypto"};
+        const double prices[] = {230, 80, 2750, 220, 75, 68000};
+        size_t item = 0;
+        for (size_t i = 0; i < 6; ++i) if (symbol == symbols[i]) item = i;
+        q.symbol = symbol; q.name = names[item]; q.currency = currencies[item]; q.exchange = exchanges[item];
+        q.price = prices[item]; q.previous_close = q.price / 1.0132; q.has_previous_close = true;
+        q.timestamp = 1792767600; q.period = period;
+        q.count = period == stocks::Period::FiveDays ? 5 : period == stocks::Period::Month ? 22 : 90;
+        for (size_t i = 0; i < q.count; ++i) {
+            const double t = double(i) / (q.count - 1);
+            q.samples[i].time = q.timestamp - (q.count - 1 - i) * 86400;
+            q.samples[i].price = q.price * (0.92 + 0.08*t + 0.014*std::sin(t*22) + 0.007*std::sin(t*57));
+        }
+        q.samples[q.count-1].price = q.price;
+        return result;
+    }
+} tutorial_provider;
+#endif
+}
 StockService::StockService():_provider(&yahoo) {}
 StockService &StockService::instance() { static StockService s; return s; }
 uint32_t StockService::now_ms() {
@@ -27,6 +61,10 @@ uint32_t StockService::now_ms() {
 #endif
 }
 bool StockService::begin() {
+#if !defined(ARDUINO)
+    if (std::getenv("GADGET_OS_TUTORIAL_PATH") && std::getenv("GADGET_OS_STOCK_FIXTURE"))
+        _provider = &tutorial_provider;
+#endif
     auto &cfg=ConfigStoreService::instance();
     if(!cfg.begin() || !cfg.load("stocks")) return false;
     std::array<std::string,stocks::MaxSymbols> symbols; size_t count=0; std::string error;
@@ -103,6 +141,10 @@ void StockService::loop() {
     if(_running && _finished.load(std::memory_order_acquire)) {
         _running=false;
         uint32_t delay=2000;
+#if !defined(ARDUINO)
+        // Offline tutorial data has no remote provider rate limit.
+        if (_provider == &tutorial_provider) delay=100;
+#endif
         if(_request_generation==_generation && _request_index<_count &&
            _entries[_request_index].symbol==_request_symbol) {
             auto &e=_entries[_request_index];

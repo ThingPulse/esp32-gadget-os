@@ -586,8 +586,14 @@ void PlanesService::enrich_routes(PlaneState *planes, int count)
 {
 #if !defined(ARDUINO)
     if (std::getenv("GADGET_OS_TUTORIAL_PATH")) {
-        static const char *routes[] = {"ZRH->JFK", "DUB->ZRH", "FRA->ZRH"};
-        for (int i = 0; i < count; ++i) planes[i].route = routes[i % 3];
+        for (int i = 0; i < count; ++i) {
+            auto &p = planes[i];
+            const bool swiss = p.callsign.find("SWR") == 0;
+            const bool ryanair = p.callsign.find("RYR") == 0;
+            p.route = swiss ? "ZRH->JFK" : ryanair ? "DUB->ZRH" : "FRA->ZRH";
+            p.origin_airport_name = swiss ? "Zurich Airport" : ryanair ? "Dublin Airport" : "Frankfurt Airport";
+            p.destination_airport_name = swiss ? "John F. Kennedy International" : "Zurich Airport";
+        }
         return;
     }
 #endif
@@ -880,7 +886,20 @@ bool PlanesService::fetch_aircraft(PlaneState *out_planes, int &out_count,
           {"hex":"4ca9d2","flight":"RYR8ZH","lat":47.29,"lon":8.38,"alt_baro":18400,"gs":355,"track":62,"baro_rate":832,"r":"EI-EVH","t":"B738"},
           {"hex":"3c65a1","flight":"DLH5CP","lat":47.39,"lon":8.75,"alt_baro":9600,"gs":270,"track":278,"baro_rate":0,"r":"D-AINA","t":"A20N"}
         ]})json";
-        return parse_payload(out_payload, out_planes, out_count, out_error);
+        const bool ok = parse_payload(out_payload, out_planes, out_count, out_error);
+        if (ok && std::getenv("GADGET_OS_PLANES_MOVING_FIXTURE")) {
+            static unsigned sample = 0;
+            const double travel_km = std::min(sample++, 14U) * 0.65;
+            for (int i = 0; i < out_count; ++i) {
+                auto &plane = out_planes[i];
+                const double heading = plane.heading_deg * 3.14159265358979323846 / 180.0;
+                plane.latitude += travel_km * std::cos(heading) / 111.0;
+                plane.longitude += travel_km * std::sin(heading) / (111.0 * std::cos(plane.latitude * 3.14159265358979323846 / 180.0));
+                plane.distance_km = distance_km(_center_lat, _center_lon, plane.latitude, plane.longitude);
+                plane.bearing_deg = bearing_deg(_center_lat, _center_lon, plane.latitude, plane.longitude);
+            }
+        }
+        return ok;
     }
 #endif
     const int radius_nm = std::max(1, std::min(250, (int)std::ceil(_range_km / 1.852)));

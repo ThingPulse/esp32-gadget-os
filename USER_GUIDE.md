@@ -229,3 +229,103 @@ that storyboard only with:
 
 It writes `documents/user-guide/video/gadget-os-tour.mp4`; it is not the native
 animated walkthrough.
+
+### Enclosure and hand video proof of concept
+
+After building the native target, create a six-second Home → Labs demonstration:
+
+```bash
+python3 scripts/create-enclosure-demo.py \
+  --background '/path/to/Tutorial_00_00_00_00.jpg' \
+  --hand '/path/to/naked hand gestures finger 1 click 4k.mov'
+```
+
+Requires FFmpeg on `PATH` and Python Pillow. The output is
+`documents/user-guide/video/enclosure-swipe-demo.mp4` (1920×1080, 30 FPS).
+The script is calibrated to these two source assets: it replaces the screen in
+the enclosure photograph, plays the hand's approach, holds frame 23 during the
+swipe, then plays its release. `--hand-scale` adjusts the hand size (default 1.5, calibrated against the hand/device reference photo).
+The default `--hand-treatment natural` feathers the alpha edge inward and adds a
+restrained soft shadow, while preserving skin detail. Use `--hand-treatment original`
+for the previous appearance. `--reuse-recording video/.build/<scene>/` reuses that
+scene's native video, touch trace, and timeline without running the emulator; pass
+the matching `--sequence` as well. `--preview-seconds 5` limits compositing to a short
+preview. These options allow visual comparisons from identical source frames.
+Source media stays outside the repository. Intermediate video, previews, and
+fixture copies go into the ignored `video/.build/<output-stem>/` directory.
+
+For future compositors, `GADGET_OS_VIDEO_TOUCH_PATH` records a CSV with one
+`frame,x,y,pressed` row per encoded native video frame. Coordinates use the
+320×480 device screen. `GADGET_OS_HIDE_TOUCH_DOT=1` suppresses the tutorial's
+yellow touch marker when an external hand overlay represents the touch instead.
+These options apply only to the native recorder; existing tutorial videos retain
+their original behavior unless the options are set.
+
+Use `--sequence weather` to record Home → Weather → another location → hourly
+forecast dialog → close dialog → Home. For example:
+
+```bash
+python3 scripts/create-enclosure-demo.py --sequence weather \
+  --background documents/user-guide/video/assets/cozy-enclosure.png \
+  --hand '/path/to/naked hand gestures finger 1 click 4k.mov' \
+  --output documents/user-guide/video/weather-tour-cozy.mp4
+```
+
+This sequence uses the classic Weather layout and sanitized Zurich/New York
+fixtures. The compositor detects each separate tap or swipe in the native touch
+trace and plays an approach/contact/release animation for each. Intermediate
+files and review frames are stored under `video/.build/<output-stem>/`.
+
+Use `--sequence planes` for Home → Planes → mature trails → another aircraft →
+route details → close details → Home. This scene enables moving, airborne demo
+aircraft with known routes. A native `planes_warmup` action pauses video capture
+(and its touch trace) while the app continues polling. Capture resumes only when
+at least two visible aircraft all have routes and at least 12 recorded trail
+points; the run fails after 30 seconds if that condition is not reached. The
+waiting time is omitted from the output. `GADGET_OS_PLANES_MOVING_FIXTURE=1` is
+native-only and takes effect only with a tutorial; real-device polling is
+unchanged.
+
+```bash
+python3 scripts/create-enclosure-demo.py --sequence planes \
+  --background documents/user-guide/video/assets/cozy-enclosure.png \
+  --hand '/path/to/naked hand gestures finger 1 click 4k.mov' \
+  --output documents/user-guide/video/planes-tour-cozy.mp4
+```
+
+Use `--sequence stocks` for Home → Stocks → AAPL → next symbol → 1M → 1Y →
+watchlist → Home. The scene shows stock details and chart periods without editing the watchlist.
+`GADGET_OS_STOCK_FIXTURE=1`, together with a tutorial, enables illustrative
+native-only quotes labelled "Demo quotes" and distinct histories for each period.
+Yahoo requests and device firmware behavior are unchanged.
+
+```bash
+python3 scripts/create-enclosure-demo.py --sequence stocks \
+  --background documents/user-guide/video/assets/cozy-enclosure.png \
+  --hand '/path/to/naked hand gestures finger 1 click 4k.mov' \
+  --output documents/user-guide/video/stocks-tour-cozy.mp4
+```
+
+Use `--sequence calculator` for Home → Calculator → `42 * 3.141` → `=` →
+`131.922` → Home. Each key is tapped individually, with a pause to read the result.
+
+```bash
+python3 scripts/create-enclosure-demo.py --sequence calculator \
+  --background documents/user-guide/video/assets/cozy-enclosure.png \
+  --hand '/path/to/naked hand gestures finger 1 click 4k.mov' \
+  --output documents/user-guide/video/calculator-tour-cozy.mp4
+```
+
+Use `--sequence ota` to demonstrate the existing update dialog, Install button,
+0–100% progress, a simulated restart with the standard boot splash, and the
+"Update installed" confirmation. The example version is `1.0.0-demo`.
+`GADGET_OS_OTA_FIXTURE=1` is honored only in a native tutorial: it performs no
+network download, firmware write, or real restart. The dialog actions still use
+the normal UI, while tutorial actions advance the simulated service state.
+
+```bash
+python3 scripts/create-enclosure-demo.py --sequence ota \
+  --background documents/user-guide/video/assets/cozy-enclosure.png \
+  --hand '/path/to/naked hand gestures finger 1 click 4k.mov' \
+  --output documents/user-guide/video/ota-tour-cozy.mp4
+```

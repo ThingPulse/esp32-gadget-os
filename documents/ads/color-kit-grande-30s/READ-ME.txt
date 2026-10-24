@@ -1,0 +1,33 @@
+ThingPulse Color Kit Grande — 30-second ad
+
+Four versions: 1920x1080 (16:9), 1080x1920 (9:16), 1080x1350 (4:5), 1080x1080 (1:1), all 30 fps.
+
+Status: corrected native Resolve project and four renders verified. Each video contains 900 frames (30 seconds); AAC padding adds approximately 0.08 seconds to the container duration.
+
+Resolve editing:
+Import ThingPulse-30s.drp in the Project Manager, or import the individual .drt timelines.
+Keep the media folder alongside the project exports. Relink to it if moving this folder.
+V1 contains individually reframed shots; V2 contains native Fusion titles; A1 contains music.
+Select a V2 clip, open Fusion, and edit Headline, Brand, or Caption → Styled Text.
+The shots are reframed renders, so screen/hand compositing is baked into each shot. Titles and music are separate.
+To extend a shot beyond its existing duration, regenerate it or use the original source listed in edit-manifest.json.
+
+Story:
+00–03 Build something you'll use every day — Weather app
+03–06 Meet Color Kit Grande — kit components and assembly rendering
+06–09 From parts to possibilities — electronics workbench and actual kit workshop
+09–13 Your weather. At a glance — locations/hourly forecast
+13–17 Discover what's flying overhead — Planes app
+17–21 Keep your watchlist close — Stocks detail/charts, no watchlist editing
+21–24 Make it yours — coding and Gadget OS home
+24–30 Color Kit Grande. Build. Explore. Enjoy. — product hero and website
+
+Music: supplied Dance loop 15.wav, trimmed to 30 seconds, reduced by 2 dB with a 1.2-second ending fade.
+
+Regeneration:
+Run scripts/create-gadget-ad.py using Python 3 with Pillow and OpenTimelineIO, with ffmpeg available.
+The script preserves existing rendered media: remove only the shot renders you want rebuilt before rerunning.
+Then run import.lua through Resolve's Lua console. Use a fresh project name in the generator when rebuilding an existing project.
+The .otio files contain shots/music only; use native .drp/.drt exports for the complete editable ad.
+
+Standalone preview regeneration: python3 scripts/render-gadget-ad-previews.py

@@ -1,0 +1,9 @@
+OTIO imported successfully
+FAILED: ...get-os/documents/ads/resolve-import-test/import-test.lua:24: Could not insert Text+
+stack traceback:
+	[C]: in function 'assert'
+	...get-os/documents/ads/resolve-import-test/import-test.lua:24: in function <...get-os/documents/ads/resolve-import-test/import-test.lua:6>
+	[C]: in function 'xpcall'
+	...get-os/documents/ads/resolve-import-test/import-test.lua:42: in main chunk
+	[C]: in function 'dofile'
+	[string "???"]:1: in main chunk

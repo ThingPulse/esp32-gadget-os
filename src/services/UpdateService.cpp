@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
 #include <Arduino.h>
@@ -201,6 +202,32 @@ bool UpdateService::fetch_manifest()
 }
 #endif
 
+#if !defined(ARDUINO)
+namespace {
+bool ota_tutorial_enabled() {
+    return std::getenv("GADGET_OS_TUTORIAL_PATH") && std::getenv("GADGET_OS_OTA_FIXTURE");
+}
+}
+bool UpdateService::tutorial_available() {
+    if (!ota_tutorial_enabled() || _state != State::Idle) return false;
+    _available_version = "1.0.0-demo";
+    _release_notes = "A new version is ready to install.";
+    _available_was_ignored = false; _error.clear(); _progress = 0;
+    _state = State::Available; return true;
+}
+bool UpdateService::tutorial_progress(int percent) {
+    if (!ota_tutorial_enabled() || _state != State::Downloading) return false;
+    if (_cancel_requested) { _state = State::Idle; return false; }
+    _progress = std::max(0, std::min(100, percent));
+    if (_progress == 100) _state = State::ReadyToReboot;
+    return true;
+}
+bool UpdateService::tutorial_installed() {
+    if (!ota_tutorial_enabled() || _state != State::ReadyToReboot) return false;
+    _installed_version_notice = _available_version; _state = State::Idle; return true;
+}
+#endif
+
 bool UpdateService::install()
 {
     if (_state!=State::Available) return false;
@@ -211,6 +238,9 @@ bool UpdateService::install()
     }
     return true;
 #else
+#if !defined(ARDUINO)
+    if (ota_tutorial_enabled()) return true;
+#endif
     _error="Installation is available on the device build"; _state=State::Error; return false;
 #endif
 }
