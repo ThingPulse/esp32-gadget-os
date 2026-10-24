@@ -50,6 +50,10 @@ jobs:
         if: matrix.env == 'native'
         run: python scripts/test-device-management.py
 
+      - name: Test OTA check schedule
+        if: matrix.env == 'native'
+        run: python scripts/test-update-schedule.py
+
       - name: Test aircraft radar and provider parsing
         if: matrix.env == 'native'
         run: |

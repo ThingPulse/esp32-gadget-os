@@ -18,6 +18,7 @@
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
+#include <esp_random.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/version.h>
 #if MBEDTLS_VERSION_MAJOR < 3
@@ -87,8 +88,6 @@ bool UpdateService::supported()
 bool UpdateService::begin()
 {
     load_preferences();
-    if (!supported()) return true;
-    _wifi_sub=EventBus::instance().subscribe(EventType::WifiConnected,wifi_connected,this);
     return true;
 }
 
@@ -114,25 +113,23 @@ void UpdateService::set_channel(Channel value)
     cfg.set("ignored_version",std::string()); cfg.save();
 }
 
-void UpdateService::wifi_connected(const SystemEvent &, void *user_data)
-{
-    auto *self=static_cast<UpdateService*>(user_data);
-    if (self && !self->_checked_this_boot) self->check(false);
-}
-
 bool UpdateService::check(bool manual)
 {
     if (!supported()) { _error="OTA is not enabled for this build"; _state=State::Error; return false; }
-    if (_state==State::Checking || _state==State::Downloading) return false;
-    _manual_check=manual; _checked_this_boot=true; _error.clear(); _available_version.clear();
+    if (_check_running || _state==State::Checking || _state==State::Downloading ||
+        _state==State::ReadyToReboot) return false;
+    _check_running=true;
+    _manual_check=manual; _error.clear(); _available_version.clear();
     _available_was_ignored=false;
     _progress=0; _state=State::Checking;
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
     if (xTaskCreate(check_task,"update_check",10240,this,1,nullptr)!=pdPASS) {
-        _error="Could not start update check"; _state=State::Error; return false;
+        _error="Could not start update check"; _state=State::Error;
+        _check_result.store(2, std::memory_order_release); return false;
     }
 #else
     _error="Update checks are available on the device build"; _state=State::Error;
+    _check_running=false;
 #endif
     return true;
 }
@@ -145,6 +142,7 @@ void UpdateService::check_task(void *user_data)
     if (!self->_error.empty()) self->_state=State::Error;
     else if (self->_available_version.empty()) self->_state=State::Idle;
     else self->_state=State::Available;
+    self->_check_result.store(self->_error.empty() ? 1 : 2, std::memory_order_release);
     vTaskDelete(nullptr);
 }
 #endif
@@ -296,6 +294,24 @@ void UpdateService::publish_if_changed()
     EventBus::instance().publish({EventType::UpdateStateChanged});
     if (current==State::Idle || current==State::Error) EventBus::instance().publish({EventType::UpdateCheckFinished});
 }
-void UpdateService::loop() { publish_if_changed(); }
+void UpdateService::loop()
+{
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
+    if (supported()) {
+        const uint32_t now = millis();
+        const int result = _check_result.exchange(0, std::memory_order_acquire);
+        if (result) {
+            _check_running = false;
+            _check_schedule.completed(now, result == 1, esp_random());
+        }
+        const bool due = _check_schedule.due(now);
+        // Keep a pending update dialog/installation intact. Manual checks remain
+        // available; overdue background checks resume when the dialog is dismissed.
+        if (due && !_check_running && WifiService::instance().is_connected() &&
+            (_state == State::Idle || _state == State::Error)) check(false);
+    }
+#endif
+    publish_if_changed();
+}
 
 SERVICE_REGISTER(UpdateService);

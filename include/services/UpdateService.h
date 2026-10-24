@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ServiceRegistry.h"
+#include "services/UpdateCheckSchedule.h"
+#include <atomic>
 #include <string>
 
 class UpdateService : public SystemService {
@@ -34,7 +36,6 @@ public:
     static bool supported();
 
 private:
-    static void wifi_connected(const struct SystemEvent &, void *user_data);
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
     static void check_task(void *user_data);
     static void install_task(void *user_data);
@@ -51,8 +52,9 @@ private:
     Channel _channel = Channel::Stable;
     bool _manual_check = false;
     bool _available_was_ignored = false;
-    bool _checked_this_boot = false;
-    int _wifi_sub = 0;
+    UpdateCheckSchedule _check_schedule;
+    bool _check_running = false;
+    std::atomic<int> _check_result{0}; // 0 pending, 1 success, 2 failure
     std::string _ignored_version;
     std::string _installed_version_notice;
     std::string _available_version;

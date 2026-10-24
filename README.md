@@ -281,6 +281,12 @@ Planes opens on a north-up radar centred on the location configured in **Setting
 
 The radar is the only main view. The footer’s Previous/Next arrows cycle through every nearby aircraft (with a selection index), including overlapping radar markers. Available origin/destination airport codes appear on the selected card; missing or partial routes are omitted. Tap the card for an organized flight-details dialog: airline and aircraft name, prominent airport codes with airport names capped at two lines (ellipsis for longer names), a grid of altitude/speed/distance/direction, and secondary registration/ICAO/squawk details. Long content scrolls while **Close** stays visible. Route information is fetched by callsign from ADSBdb on subsequent refreshes (normally every 15 seconds), with up to three uncached lookups per cycle. The selected aircraft gets first priority; selections changed during an active request take priority on the next refresh. Successful routes are cached for six hours, misses for 30 minutes. Routes are not available for every flight. Back returns home. Session range/filter changes never overwrite settings. The footer shows data age or an update error, and empty results offer a larger radius. The radar needs no map tiles, compass sensor, or extra network calls beyond the aircraft feed. The configured location is labelled “You”; it does not track device movement.
 
+## OTA update checks
+
+OTA-enabled devices check when Wi-Fi first connects after boot, then after each successful check wait 24 hours plus a random 0–15 minutes before checking again. Failed checks retry after 1, 2, 4, 8 minutes and so on, capped at 6 hours, with an additional random 0–30 seconds per retry. A successful check resets the retry delay. A missing release manifest (HTTP 404) retains the existing behavior of treating the feed as having no available update and uses the daily schedule.
+
+Overdue checks wait for Wi-Fi. Automatic checks defer while an update is offered, being installed, or awaiting reboot. Settings still allows manual checks; their results also reset the schedule. Rebooting starts a new boot check. Installation remains user-approved, and device-management reporting is independent of this schedule.
+
 ## Device management check-ins
 
 ESP32 builds can report to `https://devices.thingpulse.com/api/v1/check-in` independently of OTA. Both Color Kit Grande and Color Kit Pro are supported, including Pro builds without OTA. The native simulator never reports.

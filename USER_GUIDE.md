@@ -129,10 +129,15 @@ The memory and uptime values refresh once per second while the page is visible. 
 
 ## Software updates
 
-After Wi-Fi connects, Gadget OS checks once in the background for a newer
-version. When one is available, a dialog lets you install it, ignore that exact
-version, or close the dialog. Closing defers the reminder until a later startup;
-ignoring prevents that version from being offered again.
+After Wi-Fi first connects following a restart, Gadget OS checks in the background
+for a newer version. Successful checks repeat after 24 hours plus up to 15 minutes
+of random delay. Failed checks retry with increasing delays, starting at one minute
+and reaching six hours, plus up to 30 seconds of random delay. Checks wait for Wi-Fi
+and pause while an update is offered or being installed.
+
+When a newer version is available, a dialog lets you install it, ignore that exact
+version, or close the dialog. Closing allows it to be offered on a later check;
+ignoring prevents that version from being offered automatically again.
 
 Open **Settings → Software Update** to check manually. Stable updates are used
 by default. Enable **Include prereleases** only if you want to test unfinished
