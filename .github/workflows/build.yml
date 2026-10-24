@@ -54,6 +54,10 @@ jobs:
         if: matrix.env == 'native'
         run: python scripts/test-update-schedule.py
 
+      - name: Test stock ticker providers and UI
+        if: matrix.env == 'native'
+        run: python scripts/test-stocks.py
+
       - name: Test aircraft radar and provider parsing
         if: matrix.env == 'native'
         run: |

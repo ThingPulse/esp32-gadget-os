@@ -10,7 +10,7 @@ Tap an app icon to open it. Use the arrow at the upper left to return to the pre
 
 The status bar shows the current time, weather summary when available, and Wi-Fi status. While Gadget OS is trying to connect, the amber Wi-Fi symbol pulses. It becomes steady white when connected and steady gray when disconnected.
 
-The home screen has multiple pages. Swipe horizontally to reveal experimental apps such as Planes. Experimental apps can use more memory or depend on external services and may be less reliable than the primary apps.
+The home screen has multiple pages. Swipe horizontally to the Labs page to reveal experimental apps such as Dice Score. Experimental apps can use more memory or depend on external services and may be less reliable than the primary apps.
 
 ## Initial setup
 
@@ -126,6 +126,18 @@ Open **Settings → System** to inspect the software build and current memory us
 ![System information](documents/user-guide/screenshots/system.png)
 
 The memory and uptime values refresh once per second while the page is visible. The device build also reports internal heap health, PSRAM, firmware size, and flash capacity. This information is useful when diagnosing TLS failures or low-memory behavior.
+
+## Stocks
+
+Open **Stocks** from the main home screen for an international stock watchlist. No registration or API key is needed. It starts with Apple (`AAPL`), Nestle (`NESN.SW`), Toyota (`7203.T`), SAP (`SAP.DE`), and Vodafone (`VOD.L`). Yahoo availability and coverage can change.
+
+Tap **Edit watchlist** to enter up to ten symbols, one per line. Add or remove lines to change the list, or reorder the lines to reorder the watchlist, then tap **Save**. Use the exchange-specific Yahoo symbol for non-US listings. Invalid or unavailable symbols show an error rather than a zero price.
+
+Tap a row to open its price, change from the previous trading session's close, and daily-close chart. The chart uses a shaded area and a smooth line between daily closes, preserving the recorded highs/lows and gaps in missing data. Choose **5D**, **1M**, or **1Y**; use the arrows or swipe horizontally to switch stocks. The back arrow returns to the list, then to the launcher. Longer watchlists scroll vertically.
+
+Prices keep their quoted currency: `GBp`, for example, means British pence, not pounds. Quote timestamps are shown in UTC. Prices may be delayed; they are not guaranteed live quotes. Cached values are marked when a refresh fails or becomes overdue. Quotes refresh approximately every five minutes while Stocks is open, with retries after failures; polling pauses when you leave. The watchlist survives restarts, but quote/chart caches are kept only in memory, so a restarted device needs a connection to obtain prices.
+
+To refresh Stocks manually, pull down from the top of the watchlist and release, or tap **Refresh** on a stock’s detail screen. Requests run in the background and wait for connectivity when offline. An animated blue line beneath the header indicates an active request. Quotes fetched in the last 30 seconds are not requested again. Manual refresh respects request pacing and provider retry delays; a failed request keeps the cached quote.
 
 ## Software updates
 
