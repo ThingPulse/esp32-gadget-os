@@ -1,3 +1,4 @@
+#include "apps/TransitApp.h"
 #include "apps/StockTickerApp.h"
 #if __has_include(<LovyanGFX.h>)
 #define LGFX_AUTODETECT
@@ -861,6 +862,11 @@ static void launch_route(const std::string &route)
   if (route == "planes") {
     UI_TRACE("Route", "launch planes");
     planes_app_launch();
+    return;
+  }
+
+  if (route == "transit") {
+    transit_app_launch();
     return;
   }
 

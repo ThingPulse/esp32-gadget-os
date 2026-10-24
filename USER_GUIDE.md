@@ -127,6 +127,18 @@ Open **Settings → System** to inspect the software build and current memory us
 
 The memory and uptime values refresh once per second while the page is visible. The device build also reports internal heap health, PSRAM, firmware size, and flash capacity. This information is useful when diagnosing TLS failures or low-memory behavior.
 
+## Transit (Lab)
+
+Open **Transit** on the Lab page. Tap **Find a stop**, enter a station or stop name, then tap **Search**. Tap a result to save it. Up to eight favourite stops are stored across restarts. Use **Stops** to select or remove favourites, or swipe horizontally on the departures board to switch between them.
+
+The board shows upcoming departures, destinations, platforms, countdowns, cancellations, and live delays where the operator provides them. Tap a departure for its route stops. All clock times use the device timezone, including stops abroad. Predictions and coverage vary by operator; scheduled times are labelled separately from live predictions.
+
+Departures refresh every two minutes while the app is open. Tap the refresh icon for a manual update (30-second cooldown). The header spinner indicates pending requests. Requests pause outside the app, respect request spacing and retry backoff, and keep cached departures after a failed refresh. Cached data does not survive a restart.
+
+Transit uses [Transitous](https://transitous.org/api/) without a user API key. The public service is for non-commercial use; commercial distribution requires an arrangement with its operators or an alternative deployment. Attribution and the data-source link are available under **Transitous / Sources** in the app.
+
+Developers: after `pio run -e native`, run `python scripts/test-transit.py` for offline parser, persistence, worker, and UI regressions. Set `TRANSIT_PREVIEW_DIR` to an existing directory to save 320×480 screen captures. The native-only `GADGET_OS_TRANSIT_FIXTURE_DIR` override reads `search.json`, `board.json`, and `trip.json` instead of making network requests.
+
 ## Stocks
 
 Open **Stocks** from the main home screen for an international stock watchlist. No registration or API key is needed. It starts with Apple (`AAPL`), Nestle (`NESN.SW`), Toyota (`7203.T`), SAP (`SAP.DE`), and Vodafone (`VOD.L`). Yahoo availability and coverage can change.
