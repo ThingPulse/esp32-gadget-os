@@ -208,12 +208,14 @@ Install the native prerequisites described in the [README](README.md), then run 
 The script:
 
 1. Builds the `native` PlatformIO environment.
-2. Opens each documented route with data from `documents/user-guide-fixture`.
+2. Opens every app's main screen (including Lab apps), the home screen, and the documented settings screens using a temporary copy of `documents/user-guide-fixture` and offline demo providers.
 3. Captures the exact 320×480 framebuffer as a temporary PPM file.
 4. Converts it to PNG using the included Node.js converter.
 5. Replaces the images under `documents/user-guide/screenshots`.
 
-Requirements for screenshot generation are PlatformIO, SDL2, Node.js, and a graphical session in which the SDL simulator can start. Update the route list in `scripts/update-user-guide-screenshots.sh` when adding another documented screen.
+The app images are `weather.png`, `planes.png`, `transit.png`, `stocks.png`, `calculator.png`, `settings.png`, `dice-score.png`, and `weather-icons.png`. Transit departures are generated relative to capture time so they remain visible on subsequent runs. These are illustrative data, not live travel or market information. The checked-in fixture settings are left unchanged.
+
+Requirements for screenshot generation are PlatformIO, SDL2, Node.js, Python 3, and a graphical session in which the SDL simulator can start. Update the route list in `scripts/update-user-guide-screenshots.sh` when adding another documented screen.
 
 ## Updating the instructional movie
 
