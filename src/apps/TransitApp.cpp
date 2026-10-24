@@ -6,7 +6,7 @@
 #include "ui/StatusIcons.h"
 #include <algorithm>
 #include <ctime>
-APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Transit",LV_SYMBOL_SHUFFLE,transit_app_launch,0x26b99a,25);
+APP_REGISTER_COLOR_RANK("Transit",LV_SYMBOL_SHUFFLE,transit_app_launch,0x26b99a,25);
 namespace {
 constexpr uint32_t Bg=0x182131,Card=0x253449,Mint=0x55edc5,Muted=0xaab8d2,Amber=0xffc66d;
 struct Context {

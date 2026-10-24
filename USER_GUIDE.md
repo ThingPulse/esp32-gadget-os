@@ -127,9 +127,9 @@ Open **Settings → System** to inspect the software build and current memory us
 
 The memory and uptime values refresh once per second while the page is visible. The device build also reports internal heap health, PSRAM, firmware size, and flash capacity. This information is useful when diagnosing TLS failures or low-memory behavior.
 
-## Transit (Lab)
+## Transit
 
-Open **Transit** on the Lab page. Tap **Find a stop**, enter a station or stop name, then tap **Search**. Tap a result to save it. Up to eight favourite stops are stored across restarts. Use **Stops** to select or remove favourites, or swipe horizontally on the departures board to switch between them.
+Open **Transit** on the main home screen. Tap **Find a stop**, enter a station or stop name, then tap **Search**. Tap a result to save it. Up to eight favourite stops are stored across restarts. Use **Stops** to select or remove favourites, or swipe horizontally on the departures board to switch between them.
 
 The board shows upcoming departures, destinations, platforms, countdowns, cancellations, and live delays where the operator provides them. Tap a departure for its route stops. All clock times use the device timezone, including stops abroad. Predictions and coverage vary by operator; scheduled times are labelled separately from live predictions.
 
