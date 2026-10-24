@@ -557,7 +557,8 @@ bool PlanesService::parse_payload(const std::string &payload,
             candidate.origin_country = json_string_or_empty(row[2]);
             candidate.longitude = row[5].as<float>();
             candidate.latitude = row[6].as<float>();
-            candidate.altitude_m = row[7].isNull() ? 0.0f : row[7].as<float>();
+            if (row[7].is<float>() || row[7].is<int>())
+                candidate.altitude_m = row[7].as<float>();
             candidate.on_ground = row[8].isNull() ? false : row[8].as<bool>();
             candidate.velocity_ms = row[9].isNull() ? 0.0f : row[9].as<float>();
             candidate.heading_valid = !row[10].isNull();

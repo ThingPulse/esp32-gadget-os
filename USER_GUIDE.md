@@ -100,11 +100,24 @@ Open **Calculator** from the home screen. Tap the numeric and operation keys as 
 
 ## Planes — experimental
 
-Swipe to the experimental home-screen page and open **Planes**. Its center point, search range, unit system, and ground-aircraft filter are configured under **Settings → Planes**.
+Open **Planes** from the home screen. Set your location and units under **Settings → Planes**. The north-up radar shows airborne aircraft; use the range control to choose 5, 10, 25 or 50 km (shown in nautical miles with imperial units).
 
-The app can display nearby aircraft in a list or on a map. Tap a list card for aircraft, route, registration, altitude, speed, track, and distance details when those fields are available from the external data providers.
+Tap an aircraft or use the footer arrows to select it. The mint ring marks the selected aircraft, whose recent trail is shown on the radar. Tap the featured card for aircraft, route, registration, altitude, speed and direction details when available.
 
-Because route enrichment and map imagery require additional network requests, this app is more sensitive to connectivity and available memory than Weather.
+Aircraft symbols and trail segments use altitude colors:
+
+| Color | Reported altitude |
+| --- | --- |
+| Amber | Below 2,000 m |
+| Green | 2,000–under 4,000 m |
+| Cyan | 4,000–under 6,000 m |
+| Blue | 6,000–under 9,000 m |
+| Violet | 9,000 m and above |
+| Gray | Altitude unavailable |
+
+Colors use the same physical thresholds in imperial mode; changing units does not change colors. Altitude is above sea level, not height above your location. Each trail segment keeps the altitude color recorded at its newer endpoint, and older segments fade. This shows climbs and descents without recoloring the whole trail to the current altitude. Only the selected aircraft's trail is drawn.
+
+Aircraft and route information depend on external providers. Saved positions remain visible if a refresh fails. Coloring itself adds no network requests.
 
 ## System information
 

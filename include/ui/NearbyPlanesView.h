@@ -25,8 +25,13 @@ struct NearbyPlanesView {
         char icao[7]{};
         uint8_t count = 0, next = 0;
         std::array<TrailPoint, 20> points{};
+        // Parallel byte array avoids padding every pair of float coordinates.
+        std::array<uint8_t, 20> altitude_bands{};
         const TrailPoint &point(int index) const {
             return points[(next + points.size() - count + index) % points.size()];
+        }
+        uint8_t altitude_band(int index) const {
+            return altitude_bands[(next + points.size() - count + index) % points.size()];
         }
     };
     std::array<AircraftTrail, PlanesService::MAX_PLANES> trails{};

@@ -5,6 +5,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <limits>
 
 struct PlaneState {
     bool valid = false;
@@ -20,7 +21,7 @@ struct PlaneState {
     std::string squawk;
     float latitude = 0.0f;
     float longitude = 0.0f;
-    float altitude_m = 0.0f;
+    float altitude_m = std::numeric_limits<float>::quiet_NaN();
     float velocity_ms = 0.0f;
     float heading_deg = 0.0f;
     float vertical_rate_ms = 0.0f;

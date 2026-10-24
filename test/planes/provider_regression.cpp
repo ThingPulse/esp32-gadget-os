@@ -64,6 +64,12 @@ int main(int argc, char **argv)
     }
     assert(svc.parse_payload(R"({"states":[["4b1234","SWR123","Switzerland",0,0,8.55,47.43,1000,false,100,90]]})", planes, count, error));
     assert(count == 1);
+    assert(svc.parse_payload(R"({"ac":[{"hex":"4b1234","lat":47.43,"lon":8.55}]})", planes, count, error));
+    assert(count==1 && !std::isfinite(planes[0].altitude_m));
+    assert(svc.parse_payload(R"({"states":[["4b1234","SWR123","Switzerland",0,0,8.55,47.43,null,false,100,90]]})", planes, count, error));
+    assert(count==1 && !std::isfinite(planes[0].altitude_m));
+    assert(svc.parse_payload(R"({"states":[["4b1234","SWR123","Switzerland",0,0,8.55,47.43,0,false,100,90]]})", planes, count, error));
+    assert(count==1 && planes[0].altitude_m==0); // Sea level is known, not missing.
     assert(!svc.parse_payload(R"({"error":"unavailable"})", planes, count, error));
     assert(!svc.parse_payload("<html>unavailable</html>", planes, count, error));
 

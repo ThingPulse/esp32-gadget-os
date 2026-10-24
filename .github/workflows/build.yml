@@ -45,3 +45,13 @@ jobs:
 
       - name: Build ${{ matrix.env }}
         run: platformio run -e ${{ matrix.env }}
+
+      - name: Test device check-in policy
+        if: matrix.env == 'native'
+        run: python scripts/test-device-management.py
+
+      - name: Test aircraft radar and provider parsing
+        if: matrix.env == 'native'
+        run: |
+          python scripts/test-nearby-planes.py
+          python scripts/test-planes-providers.py

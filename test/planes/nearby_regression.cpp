@@ -5,6 +5,10 @@
 #include <fstream>
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
+#include <iterator>
+#include <limits>
+#include "ui/PlaneAltitudeColor.h"
 #define private public
 #include "services/PlanesService.h"
 #undef private
@@ -25,6 +29,11 @@ static void capture(const char *name) {
     }
 }
 int main() {
+    using PlaneAltitudeColor::band;
+    assert(band(-100)==1 && band(0)==1 && band(1999)==1 && band(2000)==2);
+    assert(band(3999)==2 && band(4000)==3 && band(6000)==4 && band(9000)==5);
+    assert(band(std::numeric_limits<float>::quiet_NaN())==0);
+    assert(band(std::numeric_limits<float>::infinity())==0);
     lv_init();lv_tick_set_cb([](){return tick_ms;});
     auto *display=lv_display_create(320,480);
     lv_obj_add_flag(lv_layer_sys(),LV_OBJ_FLAG_HIDDEN);
@@ -45,6 +54,8 @@ int main() {
     PlaneState planes[]={sample("a001","SWR3WZ",4,45,225),sample("a002","CFG314",4.2,280,90),
         sample("a003","SWR4B",7.8,145,315),sample("a004","BAW12",7.1,355,0),sample("a005","GROUND",1,0,0)};
     planes[4].on_ground=true;
+    planes[0].altitude_m=1500;planes[1].altitude_m=3500;
+    planes[2].altitude_m=4500;planes[3].altitude_m=7500;
     planes[0].route="ZRH->LHR";
     planes[0].origin_airport_name="Zurich Airport";
     planes[0].destination_airport_name="London Heathrow Airport";
@@ -53,7 +64,7 @@ int main() {
     assert(std::strstr(lv_label_get_text(app_ctx.nearby.look),"northeast"));
     assert(std::strstr(lv_label_get_text(app_ctx.nearby.distance),"Approaching"));
     auto &v=app_ctx.nearby;
-    static_assert(sizeof(v.trails) <= 3600, "Trail storage must stay within its RAM budget");
+    static_assert(sizeof(v.trails) == 3840, "Altitude bands add only 400 bytes to the trail history");
     auto trail = [&]() -> const NearbyPlanesView::AircraftTrail & {
         for (const auto &t : v.trails) if (v.selected_icao == t.icao) return t;
         assert(false);return v.trails[0];
@@ -131,12 +142,15 @@ int main() {
     for (int i=0;i<5;++i) planes_app_update_ui();
     assert(trail().count==1); // Redraws and unchanged reports don't fill the trail.
     for (int i=0;i<22;++i) {
+        planes[1].altitude_m=500+i*500;
         planes[1].distance_km=8.5f-i*.2f;
         planes[1].bearing_deg=240+i*4;
         planes[3].distance_km=4.0f+i*.05f; // a001 is not selected.
         s.publish_result(planes,5,"Test");planes_app_update_ui();
     }
     assert(trail().count==20);
+    assert(trail().altitude_band(0)==1 && trail().altitude_band(1)==2);
+    assert(trail().altitude_band(19)==5);
     const double oldest_angle=248*3.14159265358979323846/180;
     assert(std::abs(trail().point(0).east_km-8.1*std::sin(oldest_angle))<1e-5);
     capture("trail");
@@ -150,6 +164,24 @@ int main() {
     assert(trail().count==20 && std::string(trail().icao)=="a001");
     app_ctx.nearby.selected_icao="a002";nearby_planes_update(app_ctx.nearby);
     assert(trail().count==20); // Re-selecting preserves the existing history.
+
+    // Render the actual firmware UI with a fifth aircraft and a climbing trail.
+    PlaneState showcase[5];std::copy(std::begin(planes),std::end(planes),std::begin(showcase));
+    showcase[4]=sample("a005","KLM87",7.5,80,250);showcase[4].altitude_m=3500;
+    s.publish_result(showcase,5,"Test");planes_app_update_ui();capture("altitude-colors");
+    const auto newest_band=trail().altitude_band(19);
+    s._metric=false;planes_app_update_ui();
+    assert(trail().altitude_band(19)==newest_band);capture("altitude-colors-imperial");
+    s._metric=true;
+    planes[1].altitude_m=std::numeric_limits<float>::quiet_NaN();
+    s.publish_result(planes,5,"Test");planes_app_update_ui();
+    assert(trail().count==20 && trail().altitude_band(19)==0);
+    assert(trail().altitude_band(18)==5); // Older samples retain their own altitude.
+    assert(std::strstr(lv_label_get_text(v.type),"Altitude unknown"));
+    lv_obj_send_event(v.card,LV_EVENT_CLICKED,nullptr);
+    assert(std::string(lv_label_get_text(v.dialog_stats[0]))=="Unknown");
+    lv_obj_delete(v.dialog);
+    planes[1].altitude_m=11000;s.publish_result(planes,5,"Test");planes_app_update_ui();
 
     s._metric=false;planes_app_update_ui();
     assert(std::strstr(lv_label_get_text(app_ctx.nearby.distance),"nm"));

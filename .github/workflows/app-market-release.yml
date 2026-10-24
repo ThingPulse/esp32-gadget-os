@@ -27,6 +27,7 @@ jobs:
 
       - name: Build firmware
         env:
+          GADGET_OS_DEVICE_PRODUCT_KEY: ${{ secrets.GADGET_OS_DEVICE_PRODUCT_KEY }}
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
         run: |
           export PLATFORMIO_BUILD_FLAGS="-D GADGET_OS_VERSION=\\\"${RELEASE_TAG#v}\\\""

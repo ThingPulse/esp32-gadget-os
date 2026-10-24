@@ -1,4 +1,5 @@
 #include "ui/NearbyPlanesView.h"
+#include "ui/PlaneAltitudeColor.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -112,11 +113,14 @@ void update_details(NearbyPlanesView &v) {
         detail_text(v.dialog_airports[1], plane->destination_airport_name);
     }
     char value[64];
-    std::snprintf(value, sizeof(value), "%.0f %s", service.is_metric() ? plane->altitude_m : plane->altitude_m * 3.28084,
+    if (!std::isfinite(plane->altitude_m)) std::snprintf(value, sizeof(value), "Unknown");
+    else std::snprintf(value, sizeof(value), "%.0f %s", service.is_metric() ? plane->altitude_m : plane->altitude_m * 3.28084,
                   service.is_metric() ? "m" : "ft");
     std::string altitude = value;
-    for (int pos = int(altitude.find(' ')) - 3; pos > 0 && altitude[pos - 1] != '-'; pos -= 3)
-        altitude.insert(pos, ",");
+    const auto unit_separator = altitude.find(' ');
+    if (unit_separator != std::string::npos)
+        for (int pos = int(unit_separator) - 3; pos > 0 && altitude[pos - 1] != '-'; pos -= 3)
+            altitude.insert(pos, ",");
     detail_text(v.dialog_stats[0], altitude);
     std::snprintf(value, sizeof(value), "%.0f %s", service.is_metric() ? plane->velocity_ms * 3.6 : plane->velocity_ms * 1.943844,
                   service.is_metric() ? "km/h" : "kt");
@@ -318,9 +322,16 @@ void record_trails(NearbyPlanesView &v) {
         if (trail.count) {
             const auto &last = trail.point(trail.count - 1);
             if (std::abs(last.east_km - point.east_km) < 1e-7f &&
-                std::abs(last.north_km - point.north_km) < 1e-7f) continue;
+                std::abs(last.north_km - point.north_km) < 1e-7f) {
+                // A new altitude at the same position updates the newest sample
+                // without creating zero-length segments or filling the history.
+                trail.altitude_bands[(trail.next + trail.points.size() - 1) % trail.points.size()] =
+                    PlaneAltitudeColor::band(p.altitude_m);
+                continue;
+            }
         }
         trail.points[trail.next] = point;
+        trail.altitude_bands[trail.next] = PlaneAltitudeColor::band(p.altitude_m);
         trail.next = (trail.next + 1) % trail.points.size();
         if (trail.count < trail.points.size()) ++trail.count;
     }
@@ -371,15 +382,16 @@ void draw_radar(lv_event_t *e) {
         const double scale = RADAR_RADIUS / v.radius_km;
         const auto opacity = static_cast<lv_opa_t>(60 + 170 * i / (trail->count - 1));
         line(layer, x + RADAR_X + from.east_km * scale, y + RADAR_Y - from.north_km * scale,
-             x + RADAR_X + to.east_km * scale, y + RADAR_Y - to.north_km * scale, MINT, 2, opacity);
+             x + RADAR_X + to.east_km * scale, y + RADAR_Y - to.north_km * scale,
+             PlaneAltitudeColor::color(trail->altitude_band(i)), 2, opacity);
     }
     for (int n = 0; n < v.count; ++n) {
         const auto &p = PlanesService::instance().planes()[v.indices[n]];
         const auto pos = position(v,p);
         const bool active = p.icao24 == v.selected_icao;
-        const uint32_t color = active ? MINT : 0x96b4db;
+        const uint32_t color = PlaneAltitudeColor::color(PlaneAltitudeColor::band(p.altitude_m));
         const int cx=x+pos.x, cy=y+pos.y;
-        if (active) circle(layer,cx,cy,12,color);
+        if (active) circle(layer,cx,cy,12,MINT);
         if (!p.heading_valid || !std::isfinite(p.heading_deg)) { circle(layer,cx,cy,4,color,3); continue; }
         const double angle = p.heading_deg * PI / 180;
         auto stroke = [&](double ax, double ay, double bx, double by) {
@@ -389,6 +401,9 @@ void draw_radar(lv_event_t *e) {
         };
         stroke(0,-7,0,7); stroke(-7,2,0,-2); stroke(0,-2,7,2); stroke(-3,7,3,7);
     }
+    for (int band = 1; band <= 5; ++band)
+        line(layer, x + (band-1)*18, y+236, x + (band-1)*18+13, y+236,
+             PlaneAltitudeColor::color(band), 3);
 }
 }
 void nearby_planes_tick(NearbyPlanesView &v) {
@@ -444,7 +459,10 @@ void nearby_planes_update(NearbyPlanesView &v) {
         std::snprintf(text,sizeof(text),"%.1f %s away%s%s",s.is_metric()?p->distance_km:p->distance_km/1.852,
             s.is_metric()?"km":"nm",*movement?" - ":"",movement); lv_label_set_text(v.distance,text);
         std::snprintf(text,sizeof(text),"%s - %s",airline(*p),p->callsign.empty()?p->icao24.c_str():p->callsign.c_str()); lv_label_set_text(v.identity,text);
-        std::snprintf(text,sizeof(text),"%s | %.0f %s alt.",type_name(*p),s.is_metric()?p->altitude_m:p->altitude_m*3.28084,s.is_metric()?"m":"ft"); lv_label_set_text(v.type,text);
+        if (std::isfinite(p->altitude_m))
+            std::snprintf(text,sizeof(text),"%s | %.0f %s alt.",type_name(*p),s.is_metric()?p->altitude_m:p->altitude_m*3.28084,s.is_metric()?"m":"ft");
+        else std::snprintf(text,sizeof(text),"%s | Altitude unknown",type_name(*p));
+        lv_label_set_text(v.type,text);
         lv_obj_remove_state(v.card,LV_STATE_DISABLED);
     } else {
         lv_label_set_text(v.look,s.is_configured()?(s.has_data()&&home?"No aircraft nearby":"Looking for aircraft..."):"Set your location");
@@ -473,6 +491,7 @@ void nearby_planes_create(NearbyPlanesView &v,lv_obj_t *parent) {
     lv_obj_add_event_cb(v.radar,draw_radar,LV_EVENT_DRAW_MAIN,&v);
     label(v.radar,144,0,20,"N");label(v.radar,144,242,20,"S");label(v.radar,18,119,20,"W");label(v.radar,267,119,20,"E");
     label(v.radar,137,137,30,"You");label(v.radar,231,238,68,"North up",0x9aa5bd);
+    label(v.radar,0,243,100,"Low " LV_SYMBOL_RIGHT " High",0x9aa5bd);
     lv_obj_add_event_cb(v.radar,[](lv_event_t *e){
         auto &v=*static_cast<NearbyPlanesView *>(lv_event_get_user_data(e));
         auto *input=lv_indev_active();if(!input)return;
