@@ -80,7 +80,8 @@ int main(int argc,char **argv){
  if(const char *language=std::getenv("GADGET_OS_LANGUAGE")){assert(i18n::set_language(language));i18n::apply_fonts(display);}
     transit_app_launch();capture("transit-board");
  const auto originalBoard=s._board;
- auto longName=s._board.departures[0];longName.line="33";longName.destination="Zurich Tiefenbrunnen, Bahnhof";
+ auto longName=s._board.departures[0];longName.line="33";longName.destination="Zürich Tiefenbrunnen, Bahnhof";
+ longName.platform.clear();longName.scheduled=longName.time;
  s._board.departures.push_back(longName);render();capture("transit-long-destination");
  s._board=originalBoard;render();
  ctx.departure=s.board().departures[0];ctx.view=3;render();capture("transit-detail");

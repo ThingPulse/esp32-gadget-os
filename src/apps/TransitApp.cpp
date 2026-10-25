@@ -23,10 +23,18 @@ lv_obj_t *button(lv_obj_t*p,const std::string&t,int x,int y,int w,int h,lv_event
 lv_obj_t *bounded_label(lv_obj_t *parent,const std::string &text,int x,int y,int width,int height,uint32_t color=0xffffff,bool big=false){
  auto *value=label(parent,text,x,y,width,color,big);lv_obj_set_height(value,height);return value;
 }
-void route_badge(lv_obj_t *parent,const transit::Departure &departure,int x,int y){
- auto *pill=box(parent,x,y,52,28,departure.color);
- auto *name=bounded_label(pill,departure.line,0,0,48,lv_font_get_line_height(lv_obj_get_style_text_font(pill,LV_PART_MAIN)));
+void route_badge(lv_obj_t *parent,const transit::Departure &departure,int x,int y,int width=52,int height=28){
+ auto *pill=box(parent,x,y,width,height,departure.color);
+ lv_obj_clear_flag(pill,LV_OBJ_FLAG_CLICKABLE);
+ auto *name=bounded_label(pill,departure.line,0,0,width-4,lv_font_get_line_height(lv_obj_get_style_text_font(pill,LV_PART_MAIN)));
  lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(name);
+}
+// Only fresh realtime predictions receive an indicator.
+void live_dot(lv_obj_t *parent,int x,int y,bool live,bool cached=false){
+ if(!live||cached)return;
+ auto *dot=box(parent,x,y,8,8,Mint);
+ lv_obj_clear_flag(dot,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_set_style_radius(dot,LV_RADIUS_CIRCLE,0);
 }
 void board(){ctx.view=0;TransitService::instance().resume();render();}
 void back(lv_event_t*){if(ctx.view==2||ctx.view==5){ctx.view=1;render();return;}if(ctx.view){board();return;}TransitService::instance().pause();UiSessionState::set_route("home");if(ctx.home&&lv_obj_is_valid(ctx.home))ui_load_screen(ctx.home,true);}
@@ -99,39 +107,59 @@ void render(){
  }
  if(s.favourites().empty()){label(ctx.body,i18n::tr("Your next departure"),12,24,w-24,Mint,true);label(ctx.body,i18n::tr("Add a favourite stop to get started"),12,65,w-24,Muted);button(ctx.body,i18n::tr("Find a stop"),12,110,w-24,46,start_search,0,0x237a70);button(ctx.body,i18n::tr("About Transitous"),12,170,w-24,42,info);return;}
  const auto&stop=s.favourites()[s.selected()];
- auto*station=box(ctx.body,12,8,w-24,68,0x1d2c3e);
+ auto*station=box(ctx.body,12,8,w-24,56,0x1d2c3e);
  lv_obj_add_flag(station,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(station,stops,LV_EVENT_CLICKED,nullptr);
  bounded_label(station,stop.name,12,10,w-84,24);
- bounded_label(station,LV_SYMBOL_LIST,w-60,12,24,22,Mint);
+ bounded_label(station,LV_SYMBOL_DOWN,w-60,12,24,22,Mint);
  const bool cached=!s.online()||!s.board().error.empty()||(s.fetched()&&TransitService::now_ms()-s.fetched()>180000);
  std::string status=!s.notice().empty()?s.notice():!s.online()?i18n::tr("Offline / waiting for clock"):!s.board().error.empty()?s.board().error:s.busy()?i18n::tr("Updating..."):s.fetched()?i18n::tr("Updated ")+std::to_string((TransitService::now_ms()-s.fetched())/1000)+i18n::tr("s ago"):i18n::tr("Waiting for departures");
- bounded_label(station,(cached&&s.fetched()?i18n::tr("Cached: "):"")+status,12,40,w-48,20,cached?Amber:Muted);
- int y=88;size_t shown=0;
+ bounded_label(station,(cached&&s.fetched()?i18n::tr("Cached: "):"")+status,12,32,w-48,20,cached?Amber:Muted);
+ int y=72;size_t shown=0;
  for(size_t i=0;i<s.board().departures.size();++i){
   const auto&d=s.board().departures[i];if(d.time<std::time(nullptr)-60)continue;
-  bool hero=shown++==0;int height=hero?142:92;auto*row=box(ctx.body,12,y,w-24,height);
+  ++shown;
+  const int rowWidth=w-24,height=62;
+  auto*row=box(ctx.body,12,y,rowWidth,height);
   lv_obj_add_flag(row,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(row,detail,LV_EVENT_CLICKED,reinterpret_cast<void*>(i));
-  lv_obj_set_style_border_color(row,lv_color_hex(hero?Mint:0x34465b),0);lv_obj_set_style_border_width(row,1,0);
-  route_badge(row,d,12,12);
+  lv_obj_set_style_border_color(row,lv_color_hex(0x34465b),0);lv_obj_set_style_border_width(row,1,0);
+  route_badge(row,d,8,(height-32)/2,44,32);
   const std::string remaining=(cached?"~ ":"")+transit::countdown(d,std::time(nullptr));
-  const uint32_t stateColor=d.cancelled?Amber:d.live?Mint:Muted;
-  if(hero){
-   bounded_label(row,d.destination,76,12,w-114,40);
-   bounded_label(row,remaining,12,56,w-50,30,d.cancelled?Amber:Mint,true);
-   bounded_label(row,transit::clock_text(d.time)+i18n::tr(" / Platform ")+(d.platform.empty()?"--":d.platform),12,92,w-50,20,Muted);
-   bounded_label(row,prediction(d),12,116,w-50,20,stateColor);
-  }else{
-   const int countWidth=d.cancelled?92:68;
-   bounded_label(row,d.destination,76,12,w-120-countWidth,40);
-   auto*count=bounded_label(row,remaining,w-38-countWidth,12,countWidth,20,d.cancelled?Amber:0xffffff);
-   lv_obj_set_style_text_align(count,LV_TEXT_ALIGN_RIGHT,0);
-   bounded_label(row,transit::clock_text(d.time)+i18n::tr(" / Platform ")+(d.platform.empty()?"--":d.platform),76,52,w-114,18,Muted);
-   bounded_label(row,prediction(d),76,72,w-114,18,stateColor);
+  const int countWidth=d.cancelled?88:cached?74:58;
+  const int timeRight=rowWidth-22,destinationWidth=rowWidth-84-countWidth;
+  const int delay=d.live?int((d.time-d.scheduled)/60):0;
+  const bool showDelay=delay&&!d.cancelled;
+  const auto*font=lv_obj_get_style_text_font(row,LV_PART_MAIN);
+  const int lineHeight=lv_font_get_line_height(font);
+  const int lineSpace=lv_obj_get_style_text_line_space(row,LV_PART_MAIN);
+  const bool hasMetadata=showDelay||!d.platform.empty();
+  lv_point_t destinationSize;
+  lv_text_get_size(&destinationSize,d.destination.c_str(),font,0,lineSpace,destinationWidth,LV_TEXT_FLAG_NONE);
+  const int destinationHeight=std::min(int(destinationSize.y),height-8-(hasMetadata?18:0));
+  const int destinationY=(height-destinationHeight-(hasMetadata?18:0))/2;
+  bounded_label(row,d.destination,60,destinationY,destinationWidth,destinationHeight);
+  const int timeY=(height-2*lineHeight-2)/2;
+  auto*count=bounded_label(row,remaining,timeRight-countWidth,timeY,countWidth,lineHeight,d.cancelled?Amber:cached?Muted:Mint);
+  lv_obj_set_style_text_align(count,LV_TEXT_ALIGN_RIGHT,0);
+  bounded_label(row,LV_SYMBOL_RIGHT,rowWidth-16,(height-lineHeight)/2,10,lineHeight,Muted);
+  const auto absoluteTime=transit::clock_text(d.time);
+  lv_point_t timeSize;
+  lv_text_get_size(&timeSize,absoluteTime.c_str(),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+  const int absoluteY=timeY+lineHeight+2;
+  live_dot(row,timeRight-timeSize.x-11,absoluteY+(lineHeight-8)/2,d.live,cached);
+  bounded_label(row,absoluteTime,timeRight-timeSize.x,absoluteY,timeSize.x,lineHeight,Muted);
+  const int metadataY=destinationY+destinationHeight+2;
+  int platformX=60;
+  if(showDelay){
+   bounded_label(row,(delay>0?"+":"")+std::to_string(delay)+i18n::tr(" min"),60,metadataY,76,18,Amber);
+   platformX=136;
   }
-  y+=height+8;
+  if(!d.platform.empty())bounded_label(row,i18n::tr("Platform ")+d.platform,platformX,metadataY,60+destinationWidth-platformX,18,Muted);
+  y+=height+6;
  }
  if(!shown){label(ctx.body,s.busy()?i18n::tr("Loading departures..."):i18n::tr("No upcoming departures"),12,y,w-24,Muted);y+=42;}
- button(ctx.body,LV_SYMBOL_LEFT,12,y,44,40,navigate,-1);button(ctx.body,i18n::tr("Stops"),64,y,80,40,stops);button(ctx.body,LV_SYMBOL_REFRESH,152,y,68,40,refresh);button(ctx.body,LV_SYMBOL_RIGHT,w-56,y,44,40,navigate,1);y+=48;
+ live_dot(ctx.body,16,y+5,true);label(ctx.body,i18n::tr("Live"),30,y,92,Muted);
+ y+=26;
+ button(ctx.body,LV_SYMBOL_LEFT,12,y,44,40,navigate,-1);button(ctx.body,i18n::tr("Stops"),64,y,w-184,40,stops);button(ctx.body,LV_SYMBOL_REFRESH,w-112,y,44,40,refresh);button(ctx.body,LV_SYMBOL_RIGHT,w-56,y,44,40,navigate,1);y+=48;
  label(ctx.body,i18n::tr("Times: device timezone"),12,y,w-24,Muted);y+=26;button(ctx.body,i18n::tr("Transitous / Sources"),12,y,w-24,36,info);
  lv_obj_scroll_to_y(ctx.body,scroll,LV_ANIM_OFF);
 }

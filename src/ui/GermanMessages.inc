@@ -185,6 +185,7 @@ static const Message messages[] = {
  {"Language saved. Returning home.", "Sprache gespeichert. Zur Startseite."},
  {"Last quarter", "Letztes Viertel"},
  {"Last trade - may be delayed", "Kurs ggf. verzögert"},
+ {"Live", "Echtzeit"},
  {"Live  ", "Echtzeit "},
  {"Live  +", "Echtzeit +"},
  {"Live prediction", "Echtzeitprognose"},
