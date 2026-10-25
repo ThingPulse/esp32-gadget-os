@@ -1,0 +1,1 @@
+{"legs": [{"from": {"stopId": "demo-zurich", "name": "Z\u00fcrich HB", "departure": "2026-10-25T07:25:21Z", "track": "41"}, "intermediateStops": [{"stopId": "demo-oerlikon", "name": "Z\u00fcrich Oerlikon", "departure": "2026-10-25T07:32:21Z", "track": "6"}], "to": {"stopId": "demo-winterthur", "name": "Winterthur", "departure": "2026-10-25T07:49:21Z", "track": "4"}}]}

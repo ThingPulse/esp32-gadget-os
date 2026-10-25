@@ -280,6 +280,29 @@ preview. These options allow visual comparisons from identical source frames.
 Source media stays outside the repository. Intermediate video, previews, and
 fixture copies go into the ignored `video/.build/<output-stem>/` directory.
 
+All seven sequences support `--language en` (default) and `--language de`. This sets
+the emulator language and translates semantic button taps using the firmware's
+translation catalogue, including **Rechner**, **Installieren**, **Schließen**, and
+the **1J** stock-chart period. Launcher apps are selected by their translated
+labels so changes to the launcher order do not open the wrong app.
+
+For example, generate the German Weather scene with the same hand and background:
+
+```bash
+python3 scripts/create-enclosure-demo.py --sequence weather --language de \
+  --background documents/user-guide/video/assets/cozy-enclosure.png \
+  --hand '/path/to/naked hand gestures finger 1 click 4k.mov' \
+  --output documents/user-guide/video/de/weather-tour-cozy.mp4
+```
+
+Use a separate output path per scene/language. Without `--output`, German writes
+`documents/user-guide/video/de/enclosure-swipe-demo.mp4`; the English default stays
+unchanged. With `--reuse-recording`, the selected language must match the recorded
+language: an English recording cannot be translated during compositing. Older
+recordings without language metadata are treated as English. Rerecord them with
+`--language de` to get German footage. Language selection affects only the copied
+video fixtures, not your device or normal simulator settings.
+
 For future compositors, `GADGET_OS_VIDEO_TOUCH_PATH` records a CSV with one
 `frame,x,y,pressed` row per encoded native video frame. Coordinates use the
 320×480 device screen. `GADGET_OS_HIDE_TOUCH_DOT=1` suppresses the tutorial's
@@ -355,3 +378,19 @@ python3 scripts/create-enclosure-demo.py --sequence ota \
   --hand '/path/to/naked hand gestures finger 1 click 4k.mov' \
   --output documents/user-guide/video/ota-tour-cozy.mp4
 ```
+
+Use `--sequence transit` for Home → Transit → departures → Winterthur departure
+and route details → departures → Home. It uses illustrative Zürich HB departures
+with realtime indicators, a delayed service, and a timetable-only service. The
+three-stop route is a demo, not a live timetable. Fixture timestamps are refreshed
+on each recording, and the scene makes no Transitous requests.
+
+```bash
+python3 scripts/create-enclosure-demo.py --sequence transit --language de \
+  --background documents/user-guide/video/assets/cozy-enclosure.png \
+  --hand '/path/to/naked hand gestures finger 1 click 4k.mov' \
+  --output documents/user-guide/video/de/transit-tour-cozy.mp4
+```
+
+Use `--language en` and `--output documents/user-guide/video/transit-tour-cozy.mp4`
+for the English version.

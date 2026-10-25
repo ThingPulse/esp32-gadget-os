@@ -1,0 +1,38 @@
+2026-10-25 08:02:28.556 program[37873:15653028] Failure on line 688 in function id scheduleApplicationNotification(LSNotificationCode, NSWorkspaceNotificationCenter *): noErr == _LSModifyNotification(notificationID, 1, &code, 0, NULL, NULL, NULL)
+2026-10-25 08:02:28.617 program[37873:15653028] Error received in message reply handler: Connection invalid
+2026-10-25 08:02:28.617 program[37873:15653234] Connection Invalid error for service com.apple.hiservices-xpcservice.
+[UI][Boot] setup start
+[UI][Planes] search center=47.37000,8.54000 range=50.0km
+[UI][Weather] fetch complete bytes=1575
+[UI][Weather] parse complete
+[UI][Weather] update complete days=4 hours=11
+[UI][Weather] update published
+[UI][Boot] draw buffer rows=8 bytes=5120 memory=heap
+[UI][Route] begin persistence disabled current=home
+[UI][Boot] setup done restore_route_pending=1
+[UI][Boot] restore_route_pending fired
+[UI][Boot] current_route=home
+[UI][Route] launch_route route=home
+[UI][Route] loading home screen
+[UI][Weather] fetch complete bytes=1575
+[UI][Weather] parse complete
+[UI][Weather] update complete days=4 hours=11
+[UI][Weather] update published
+[UI][Tap] app_icon_clicked idx=0 app=Weather
+[UI][Weather] launch begin
+[UI][Weather] compact_list_icons=0 days=4 hours=12
+[UI][Nav] ui_load_screen delete_previous=0 prev=0x1064f0a00 target=0x1064f14a0
+[UI][Weather] launch loaded screen
+[UI][Route] set_route from=home to=weather
+[UI][Weather] carousel location=1 name=New York
+[UI][Weather] fetch complete bytes=1575
+[UI][Weather] parse complete
+[UI][Weather] update complete days=4 hours=11
+[UI][Weather] update published
+[UI][Weather] back clicked
+[UI][Weather] back deleted refresh timer
+[UI][Route] set_route from=weather to=home
+[UI][Weather] back target valid=1
+[UI][Nav] ui_load_screen delete_previous=1 prev=0x1064f14a0 target=0x1064f0a00
+[UI][Weather] screen delete event
+=================================================================

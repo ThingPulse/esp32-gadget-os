@@ -1,0 +1,25 @@
+2026-10-25 08:22:22.459 program[66393:15800987] Failure on line 688 in function id scheduleApplicationNotification(LSNotificationCode, NSWorkspaceNotificationCenter *): noErr == _LSModifyNotification(notificationID, 1, &code, 0, NULL, NULL, NULL)
+2026-10-25 08:22:22.798 program[66393:15800997] Connection Invalid error for service com.apple.hiservices-xpcservice.
+2026-10-25 08:22:22.798 program[66393:15800987] Error received in message reply handler: Connection invalid
+[UI][Boot] setup start
+[UI][Planes] search center=47.37000,8.54000 range=50.0km
+[UI][Weather] fetch complete bytes=1575
+[UI][Weather] parse complete
+[UI][Weather] update complete days=4 hours=11
+[UI][Weather] update published
+[UI][Boot] draw buffer rows=8 bytes=5120 memory=heap
+[UI][Route] begin persistence disabled current=home
+[UI][Boot] setup done restore_route_pending=1
+[UI][Boot] restore_route_pending fired
+[UI][Boot] current_route=home
+[UI][Route] launch_route route=home
+[UI][Route] loading home screen
+[UI][Weather] fetch complete bytes=1575
+[UI][Weather] parse complete
+[UI][Weather] update complete days=4 hours=11
+[UI][Weather] update published
+[UI][Tap] app_icon_clicked idx=2 app=Transit
+[UI][Nav] ui_load_screen delete_previous=0 prev=0x106528a00 target=0x1065294a0
+[UI][Route] set_route from=home to=transit
+[UI][Route] set_route from=transit to=home
+[UI][Nav] ui_load_screen delete_previous=1 prev=0x1065294a0 target=0x106528a00

@@ -1,0 +1,23 @@
+{
+  "language": "de",
+  "sequence": "swipe",
+  "actions": [
+    {
+      "type": "route",
+      "route": "home",
+      "duration_ms": 1000
+    },
+    {
+      "type": "swipe",
+      "x": 270,
+      "y": 240,
+      "x2": 55,
+      "y2": 240,
+      "duration_ms": 900
+    },
+    {
+      "type": "wait",
+      "duration_ms": 2400
+    }
+  ]
+}

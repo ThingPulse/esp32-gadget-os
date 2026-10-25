@@ -1,0 +1,52 @@
+2026-10-25 08:03:35.027 program[39525:15660753] Failure on line 688 in function id scheduleApplicationNotification(LSNotificationCode, NSWorkspaceNotificationCenter *): noErr == _LSModifyNotification(notificationID, 1, &code, 0, NULL, NULL, NULL)
+2026-10-25 08:03:35.088 program[39525:15660753] Error received in message reply handler: Connection invalid
+2026-10-25 08:03:35.088 program[39525:15660755] Connection Invalid error for service com.apple.hiservices-xpcservice.
+[UI][Boot] setup start
+[UI][Planes] search center=47.37000,8.54000 range=50.0km
+[UI][Weather] fetch complete bytes=1575
+[UI][Weather] parse complete
+[UI][Weather] update complete days=4 hours=11
+[UI][Weather] update published
+[UI][Boot] draw buffer rows=8 bytes=5120 memory=heap
+[UI][Route] begin persistence disabled current=home
+[UI][Boot] setup done restore_route_pending=1
+[UI][Boot] restore_route_pending fired
+[UI][Boot] current_route=home
+[UI][Route] launch_route route=home
+[UI][Route] loading home screen
+[UI][Weather] fetch complete bytes=1575
+[UI][Weather] parse complete
+[UI][Weather] update complete days=4 hours=11
+[UI][Weather] update published
+[UI][Tap] app_icon_clicked idx=1 app=Planes
+[UI][Planes] search center=47.37000,8.54000 range=25.0km
+[UI][Nav] ui_load_screen delete_previous=0 prev=0x1068b4a00 target=0x1068b54a0
+[UI][Route] set_route from=home to=planes
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Planes] native HTTP thread started
+[UI][Planes] update complete provider=Tutorial fixture planes=3
+[UI][Tutorial] all visible aircraft have >=12 trail points and routes
+[UI][Route] set_route from=planes to=home
+[UI][Nav] ui_load_screen delete_previous=1 prev=0x1068b54a0 target=0x1068b4a00
+[UI][Planes] search center=47.37000,8.54000 range=50.0km

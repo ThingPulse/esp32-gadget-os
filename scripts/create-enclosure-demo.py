@@ -4,6 +4,7 @@ Requires a native build, ffmpeg on PATH, and Pillow. Inputs remain external.
 """
 import argparse
 import csv
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import json
 import math
@@ -21,8 +22,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--background', type=Path, required=True)
     parser.add_argument('--hand', type=Path, required=True)
-    parser.add_argument('--output', type=Path, default=ROOT / 'documents/user-guide/video/enclosure-swipe-demo.mp4')
-    parser.add_argument('--sequence', choices=['swipe', 'weather', 'planes', 'stocks', 'calculator', 'ota'], default='swipe')
+    parser.add_argument('--output', type=Path, help='Output MP4; German defaults to video/de/ to preserve English videos')
+    parser.add_argument('--language', choices=['en', 'de'], default='en',
+                        help='UI language for recording and button taps (default: en)')
+    parser.add_argument('--sequence', choices=['swipe', 'weather', 'planes', 'stocks', 'transit', 'calculator', 'ota'], default='swipe')
     parser.add_argument('--hand-scale', type=float, default=1.5)
     parser.add_argument('--hand-treatment', choices=['natural', 'original'], default='natural',
                         help='Natural adds inward edge feathering and a soft shadow')
@@ -35,13 +38,23 @@ def main():
         parser.error('--preview-seconds must be positive')
     if not 0.1 <= args.hand_scale <= 3:
         parser.error('--hand-scale must be between 0.1 and 3')
-    output = args.output.resolve()
+    default_dir = ROOT / 'documents/user-guide/video'
+    if args.language != 'en':
+        default_dir /= args.language
+    output = (args.output or default_dir / 'enclosure-swipe-demo.mp4').resolve()
+    translations = json.loads((ROOT / 'translations/de.json').read_text()) if args.language == 'de' else {}
+    def translated(text):
+        return translations.get(text, text)
     work = output.parent / '.build' / output.stem
     work.mkdir(parents=True, exist_ok=True)
     if args.reuse_recording:
         native = args.reuse_recording / 'native.mp4'
         trace = args.reuse_recording / 'touch.csv'
-        actions = json.loads((args.reuse_recording / 'tutorial.json').read_text())['actions']
+        recording = json.loads((args.reuse_recording / 'tutorial.json').read_text())
+        recorded_language = recording.get('language', 'en')
+        if recorded_language != args.language:
+            parser.error(f'Reused recording is {recorded_language}, not {args.language}; record it again with --language {args.language}')
+        actions = recording['actions']
     else:
         fixture = work / 'fixture'
         if fixture.exists():
@@ -60,13 +73,13 @@ def main():
             weather_path.write_text(json.dumps(weather))
             actions = [
                 {'type': 'route', 'route': 'home', 'duration_ms': 1000},
-                {'type': 'tap', 'x': 60, 'y': 85, 'duration_ms': 160},
+                {'type': 'tap_exact', 'text': 'Weather', 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 2300},
                 {'type': 'swipe', 'x': 270, 'y': 145, 'x2': 55, 'y2': 145, 'duration_ms': 900},
                 {'type': 'wait', 'duration_ms': 2500},
                 {'type': 'tap', 'x': 268, 'y': 245, 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 3000},
-                {'type': 'tap', 'x': 160, 'y': 398, 'duration_ms': 160},
+                {'type': 'tap_exact', 'text': 'Close', 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 1800},
                 {'type': 'tap', 'x': 30, 'y': 22, 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 1800},
@@ -74,7 +87,7 @@ def main():
         if args.sequence == 'planes':
             actions = [
                 {'type': 'route', 'route': 'home', 'duration_ms': 1000},
-                {'type': 'tap', 'x': 160, 'y': 85, 'duration_ms': 160},
+                {'type': 'tap_exact', 'text': 'Planes', 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 1000},
                 {'type': 'planes_warmup', 'duration_ms': 30000},
                 {'type': 'wait', 'duration_ms': 2300},
@@ -82,7 +95,7 @@ def main():
                 {'type': 'wait', 'duration_ms': 2300},
                 {'type': 'tap', 'x': 160, 'y': 385, 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 3200},
-                {'type': 'tap', 'x': 160, 'y': 412, 'duration_ms': 160},
+                {'type': 'tap_exact', 'text': 'Close', 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 1700},
                 {'type': 'tap', 'x': 24, 'y': 22, 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 1800},
@@ -94,7 +107,8 @@ def main():
             def tap(x, y, wait=1800):
                 actions.extend([{'type': 'tap', 'x': x, 'y': y, 'duration_ms': 160},
                                 {'type': 'wait', 'duration_ms': wait}])
-            tap(265, 85, 2700)  # Stocks
+            actions.extend([{'type': 'tap_exact', 'text': 'Stocks', 'duration_ms': 160},
+                            {'type': 'wait', 'duration_ms': 2700}])
             tap(80, 115, 2200)  # AAPL
             tap(285, 74, 2200)  # Next stock: NESN.SW, initially 5D
             # Semantic button taps survive quote-driven UI rebuilds between press and release.
@@ -103,6 +117,44 @@ def main():
                                 {'type': 'wait', 'duration_ms': 2700}])
             tap(28, 22)  # Watchlist
             tap(28, 22)  # Close Stocks
+        if args.sequence == 'transit':
+            (fixture / 'config/transit.json').write_text(json.dumps({
+                'provider': 'transitous',
+                'favourites': json.dumps([{'id': 'demo-zurich', 'name': 'Zürich HB', 'area': 'CH'}])}))
+            now = datetime.now(timezone.utc)
+            def departure_time(minutes):
+                return (now + timedelta(minutes=minutes)).strftime('%Y-%m-%dT%H:%M:%SZ')
+            departures = []
+            for line, destination, minutes, platform, delay, live, color in [
+                ('S8', 'Winterthur', 3, '41', 0, True, '168CF0'),
+                ('IR13', 'St. Gallen', 8, '7', 2, True, 'DB4545'),
+                ('S24', 'Zug', 14, '4', 0, False, '8056DB'),
+                ('S16', 'Zürich Flughafen', 18, '43', 0, True, '168CF0'),
+            ]:
+                departures.append({'displayName': line, 'headsign': destination,
+                    'tripId': 'demo-trip', 'realTime': live, 'routeColor': color,
+                    'place': {'departure': departure_time(minutes),
+                              'scheduledDeparture': departure_time(minutes-delay), 'track': platform}})
+            (fixture / 'board.json').write_text(json.dumps({'stopTimes': departures}))
+            def stop(identifier, name, minutes, platform):
+                return {'stopId': identifier, 'name': name, 'departure': departure_time(minutes), 'track': platform}
+            (fixture / 'trip.json').write_text(json.dumps({'legs': [{
+                'from': stop('demo-zurich', 'Zürich HB', 3, '41'),
+                'intermediateStops': [stop('demo-oerlikon', 'Zürich Oerlikon', 10, '6')],
+                'to': stop('demo-winterthur', 'Winterthur', 27, '4'),
+            }]}))
+            (fixture / 'search.json').write_text('[]')
+            actions = [
+                {'type': 'route', 'route': 'home', 'duration_ms': 1000},
+                {'type': 'tap_exact', 'text': 'Transit', 'duration_ms': 160},
+                {'type': 'wait', 'duration_ms': 3200},
+                {'type': 'tap_exact', 'text': 'Winterthur', 'duration_ms': 160},
+                {'type': 'wait', 'duration_ms': 3600},
+                {'type': 'tap', 'x': 24, 'y': 22, 'duration_ms': 160},
+                {'type': 'wait', 'duration_ms': 2000},
+                {'type': 'tap', 'x': 24, 'y': 22, 'duration_ms': 160},
+                {'type': 'wait', 'duration_ms': 1800},
+            ]
         if args.sequence == 'calculator':
             actions = [
                 {'type': 'route', 'route': 'home', 'duration_ms': 1000},
@@ -126,14 +178,22 @@ def main():
                 {'type': 'tap_exact', 'text': 'Close', 'duration_ms': 160},
                 {'type': 'wait', 'duration_ms': 1800},
             ]
-        timeline.write_text(json.dumps({'actions': actions}, indent=2))
+        # Translate visible labels only; route IDs, symbols, and calculator keys
+        # remain stable. Use the same catalogue as the firmware (e.g. 1Y -> 1J).
+        for action in actions:
+            if action['type'] in ('tap_text', 'tap_exact'):
+                action['text'] = translated(action['text'])
+        timeline.write_text(json.dumps({'language': args.language, 'sequence': args.sequence,
+                                        'actions': actions}, indent=2, ensure_ascii=False))
         duration = sum(a['duration_ms'] for a in actions if a['type'] != 'planes_warmup') + 1700
         native = work / 'native.mp4'
         trace = work / 'touch.csv'
-        env = dict(os.environ, ASAN_OPTIONS='detect_leaks=0',
+        env = dict(os.environ, ASAN_OPTIONS='detect_leaks=0', GADGET_OS_LANGUAGE=args.language,
                    GADGET_OS_DATA_DIR=str(fixture), GADGET_OS_TUTORIAL_PATH=str(timeline),
                    GADGET_OS_VIDEO_PATH=str(native), GADGET_OS_VIDEO_DURATION_MS=str(duration),
                    GADGET_OS_VIDEO_TOUCH_PATH=str(trace), GADGET_OS_HIDE_TOUCH_DOT='1')
+        if args.sequence == 'transit':
+            env['GADGET_OS_TRANSIT_FIXTURE_DIR'] = str(fixture)
         if args.sequence == 'ota':
             env['GADGET_OS_OTA_FIXTURE'] = '1'
         if args.sequence == 'stocks':

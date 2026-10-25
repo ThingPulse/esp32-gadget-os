@@ -1,0 +1,67 @@
+{
+  "language": "de",
+  "sequence": "planes",
+  "actions": [
+    {
+      "type": "route",
+      "route": "home",
+      "duration_ms": 1000
+    },
+    {
+      "type": "tap_exact",
+      "text": "Flugzeuge",
+      "duration_ms": 160
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1000
+    },
+    {
+      "type": "planes_warmup",
+      "duration_ms": 30000
+    },
+    {
+      "type": "wait",
+      "duration_ms": 2300
+    },
+    {
+      "type": "tap",
+      "x": 288,
+      "y": 464,
+      "duration_ms": 160
+    },
+    {
+      "type": "wait",
+      "duration_ms": 2300
+    },
+    {
+      "type": "tap",
+      "x": 160,
+      "y": 385,
+      "duration_ms": 160
+    },
+    {
+      "type": "wait",
+      "duration_ms": 3200
+    },
+    {
+      "type": "tap_exact",
+      "text": "Schließen",
+      "duration_ms": 160
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1700
+    },
+    {
+      "type": "tap",
+      "x": 24,
+      "y": 22,
+      "duration_ms": 160
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1800
+    }
+  ]
+}

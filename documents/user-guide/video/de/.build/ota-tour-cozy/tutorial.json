@@ -1,0 +1,45 @@
+{
+  "language": "de",
+  "sequence": "ota",
+  "actions": [
+    {
+      "type": "route",
+      "route": "home",
+      "duration_ms": 1800
+    },
+    {
+      "type": "ota_available",
+      "duration_ms": 2500
+    },
+    {
+      "type": "tap_exact",
+      "text": "Installieren",
+      "duration_ms": 160
+    },
+    {
+      "type": "ota_progress",
+      "duration_ms": 6000
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1200
+    },
+    {
+      "type": "ota_restart",
+      "duration_ms": 2000
+    },
+    {
+      "type": "ota_installed",
+      "duration_ms": 2500
+    },
+    {
+      "type": "tap_exact",
+      "text": "Schließen",
+      "duration_ms": 160
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1800
+    }
+  ]
+}

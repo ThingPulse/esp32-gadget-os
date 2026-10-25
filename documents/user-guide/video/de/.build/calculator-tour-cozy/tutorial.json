@@ -1,0 +1,111 @@
+{
+  "language": "de",
+  "sequence": "calculator",
+  "actions": [
+    {
+      "type": "route",
+      "route": "home",
+      "duration_ms": 1000
+    },
+    {
+      "type": "tap_exact",
+      "text": "Rechner",
+      "duration_ms": 160
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1800
+    },
+    {
+      "type": "tap_exact",
+      "text": "4",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1500
+    },
+    {
+      "type": "tap_exact",
+      "text": "2",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1500
+    },
+    {
+      "type": "tap_exact",
+      "text": "*",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1500
+    },
+    {
+      "type": "tap_exact",
+      "text": "3",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1500
+    },
+    {
+      "type": "tap_exact",
+      "text": ".",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1500
+    },
+    {
+      "type": "tap_exact",
+      "text": "1",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1500
+    },
+    {
+      "type": "tap_exact",
+      "text": "4",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1500
+    },
+    {
+      "type": "tap_exact",
+      "text": "1",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1500
+    },
+    {
+      "type": "tap_exact",
+      "text": "=",
+      "duration_ms": 120
+    },
+    {
+      "type": "wait",
+      "duration_ms": 3000
+    },
+    {
+      "type": "tap",
+      "x": 28,
+      "y": 22,
+      "duration_ms": 160
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1800
+    }
+  ]
+}
