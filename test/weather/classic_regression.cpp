@@ -91,6 +91,17 @@ int main() {
     assert(std::strcmp(lv_label_get_text(view.temperature), "14.3°") == 0);
     assert(std::strcmp(lv_label_get_text(view.wind), "4.0 km/h") == 0);
     assert(!lv_obj_has_flag(view.moon, LV_OBJ_FLAG_HIDDEN));
+    // N/E/S/W source bearings must blow toward S/W/N/E respectively.
+    const int flow[][2]={{0,1},{-1,0},{0,-1},{1,0}};
+    for(int cardinal=0;cardinal<4;++cardinal){
+        weather._wind_direction=cardinal*90;
+        classic_weather_update(view);
+        const auto &tail=view.arrow_points[0],&tip=view.arrow_points[1];
+        assert(std::abs(double(tip.x-tail.x)-34*flow[cardinal][0])<1.1);
+        assert(std::abs(double(tip.y-tail.y)-34*flow[cardinal][1])<1.1);
+        assert(weather.wind_direction_degrees()==cardinal*90);
+    }
+
     shade_moon(view, .25f);
     const auto first = view.moon_pixels;
     shade_moon(view, .75f);

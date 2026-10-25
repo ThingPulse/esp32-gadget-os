@@ -220,12 +220,14 @@ void classic_weather_create(ClassicWeatherView &v, lv_obj_t *parent) {
     v.date = label(root, 0, 0, 320, "--, --.--.----");
     v.clock = label(root, 30, 28, 244, "--:--", &weather_clock_48);
     v.seconds = label(root, 210, 40, 52, "--");
-    v.condition = label(root, 0, 78, 320, i18n::tr("No weather data"));
+    // Keep all condition readings on the same column centre.
+    constexpr int readingsX=72, readingsWidth=152;
+    v.condition = label(root, readingsX, 78, readingsWidth, i18n::tr("No weather data"));
     v.icon = weather_icon_create(root, WeatherIconKind::Cloudy, 56);
     lv_obj_set_pos(v.icon, 10, 108);
-    v.temperature = label(root, 72, 110, 152, "--", &weather_temperature_36);
-    v.humidity = label(root, 72, 146, 152, "--");
-    v.pressure = label(root, 72, 167, 152, "--");
+    v.temperature = label(root, readingsX, 110, readingsWidth, "--", &weather_temperature_36);
+    v.humidity = label(root, readingsX, 146, readingsWidth, "--");
+    v.pressure = label(root, readingsX, 167, readingsWidth, "--");
     auto *compass = lv_obj_create(root);
     lv_obj_set_pos(compass, 244, 100);
     lv_obj_set_size(compass, 60, 60);
@@ -239,7 +241,7 @@ void classic_weather_create(ClassicWeatherView &v, lv_obj_t *parent) {
     v.wind_arrow = lv_line_create(compass);
     lv_obj_set_style_line_color(v.wind_arrow, lv_color_hex(0xff6b7a), 0);
     lv_obj_set_style_line_width(v.wind_arrow, 3, 0);
-    v.wind = label(root, 228, 168, 90, "--");
+    v.wind = label(root, 229, 168, 90, "--");
     // Keep the existing daily section footprint; the small hint sits above the days.
     v.daily_row = lv_obj_create(root);
     plain_container(v.daily_row);
@@ -318,7 +320,9 @@ void classic_weather_update(ClassicWeatherView &v) {
         textf(v.humidity, i18n::tr("%.0f%% humidity"), weather.humidity_value());
         textf(v.pressure, weather.is_metric() ? "%.0f hPa" : "%.2f inHg", weather.pressure_value());
         textf(v.wind, "%.1f %s", weather.wind_speed_value(), weather.is_metric() ? "km/h" : "mph");
-        const double a = weather.wind_direction_degrees() * PI / 180;
+        // Meteorological bearings describe where wind comes FROM.
+        // The arrowhead shows airflow, so point toward the opposite bearing.
+        const double a = (weather.wind_direction_degrees() + 180.0) * PI / 180;
         auto point = [&](double x, double y) { return lv_point_precise_t{
             (lv_value_precise_t)(29 + x * std::cos(a) - y * std::sin(a)),
             (lv_value_precise_t)(29 + x * std::sin(a) + y * std::cos(a))}; };
