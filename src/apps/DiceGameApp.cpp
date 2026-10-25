@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "apps/DiceGameApp.h"
 
 #include "AppRegistry.h"
@@ -151,9 +152,9 @@ static void refresh_game_ui()
 
   char text[48] = {};
   if (game.rolling)
-    std::snprintf(text, sizeof(text), "Player %d  -  rolling...", game.active_player + 1);
+    std::snprintf(text, sizeof(text), i18n::tr("Player %d  -  rolling..."), game.active_player + 1);
   else
-    std::snprintf(text, sizeof(text), "Player %d  -  roll %d of 3",
+    std::snprintf(text, sizeof(text), i18n::tr("Player %d  -  roll %d of 3"),
                   game.active_player + 1, game.rolls);
   lv_label_set_text(game.turn_label, text);
   lv_obj_set_style_bg_color(game.turn_label, player_color(game.active_player), 0);
@@ -214,13 +215,13 @@ static void refresh_game_ui()
   }
 
   if (game.rolling) {
-    lv_label_set_text(game.roll_label, "Rolling...");
+    lv_label_set_text(game.roll_label, i18n::tr("Rolling..."));
     lv_obj_add_state(game.roll_button, LV_STATE_DISABLED);
   } else if (game.rolls >= 3) {
-    lv_label_set_text(game.roll_label, "Choose score");
+    lv_label_set_text(game.roll_label, i18n::tr("Choose score"));
     lv_obj_add_state(game.roll_button, LV_STATE_DISABLED);
   } else {
-    lv_label_set_text(game.roll_label, game.rolls == 0 ? "Roll dice" : "Roll again");
+    lv_label_set_text(game.roll_label, game.rolls == 0 ? i18n::tr("Roll dice") : i18n::tr("Roll again"));
     lv_obj_clear_state(game.roll_button, LV_STATE_DISABLED);
   }
 }
@@ -239,8 +240,8 @@ static void show_finished_dialog()
 
   lv_obj_t *box = lv_msgbox_create(nullptr);
   char message[80] = {};
-  std::snprintf(message, sizeof(message), "Player %d wins with %d points!", winner + 1, best);
-  lv_msgbox_add_title(box, "Game finished");
+  std::snprintf(message, sizeof(message), i18n::tr("Player %d wins with %d points!"), winner + 1, best);
+  lv_msgbox_add_title(box, i18n::tr("Game finished"));
   lv_msgbox_add_text(box, message);
   lv_msgbox_add_close_button(box);
   lv_obj_set_width(box, 280);
@@ -302,8 +303,8 @@ static void show_score_confirmation(int player, int category, lv_obj_t *cell)
   lv_obj_t *popup = lv_label_create(lv_layer_top());
   game.score_confirmation = popup;
   char text[80] = {};
-  std::snprintf(text, sizeof(text), "%s: %d points\nRelease to confirm",
-                CATEGORY_NAMES[category], score_for_category(category));
+  std::snprintf(text, sizeof(text), i18n::tr("%s: %d points\nRelease to confirm"),
+                i18n::tr(CATEGORY_NAMES[category]), score_for_category(category));
   lv_label_set_text(popup, text);
   lv_obj_set_size(popup, 230, 62);
   lv_obj_align(popup, LV_ALIGN_TOP_MID, 0, 48);
@@ -358,7 +359,7 @@ static void score_gesture(lv_event_t *event)
              !game.pending_score_cancelled && !pointer_inside(event, cell)) {
     game.pending_score_cancelled = true;
     if (game.score_confirmation && lv_obj_is_valid(game.score_confirmation)) {
-      lv_label_set_text(game.score_confirmation, "Selection cancelled\nRelease to continue");
+      lv_label_set_text(game.score_confirmation, i18n::tr("Selection cancelled\nRelease to continue"));
       lv_obj_set_style_bg_color(game.score_confirmation, lv_color_hex(0x495057), 0);
     }
   } else if (code == LV_EVENT_CLICKED && cell == game.pending_score_cell) {
@@ -419,7 +420,7 @@ static void create_game_board()
     lv_obj_add_event_cb(button, die_clicked, LV_EVENT_CLICKED, (void *)(intptr_t)die);
     lv_obj_t *label = lv_label_create(button);
     lv_obj_set_style_text_color(label, lv_color_hex(0x20243a), 0);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(label, i18n::font24(), 0);
     lv_obj_center(label);
     game.dice_buttons[die] = button;
     game.dice_labels[die] = label;
@@ -438,7 +439,7 @@ static void create_game_board()
   lv_obj_set_size(category_header, name_w, header_h);
   lv_obj_set_style_bg_color(category_header, lv_color_hex(0x25283c), 0);
   lv_obj_t *category_header_label = lv_label_create(category_header);
-  lv_label_set_text(category_header_label, "Score");
+  lv_label_set_text(category_header_label, i18n::tr("Score"));
   lv_obj_set_style_text_color(category_header_label, lv_color_hex(0xb7bdd7), 0);
   lv_obj_center(category_header_label);
 
@@ -461,7 +462,7 @@ static void create_game_board()
     lv_obj_set_size(name, name_w, row_h - 1);
     lv_obj_set_style_bg_color(name, lv_color_hex(category & 1 ? 0x292d42 : 0x30344b), 0);
     lv_obj_t *label = lv_label_create(name);
-    lv_label_set_text(label, CATEGORY_NAMES[category]);
+    lv_label_set_text(label, i18n::tr(CATEGORY_NAMES[category]));
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
     lv_obj_align(label, LV_ALIGN_LEFT_MID, 5, 0);
 
@@ -505,13 +506,13 @@ static void player_count_clicked(lv_event_t *event)
 static void show_player_selection()
 {
   lv_obj_t *title = lv_label_create(game.body);
-  lv_label_set_text(title, "How many players?");
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+  lv_label_set_text(title, i18n::tr("How many players?"));
+  lv_obj_set_style_text_font(title, i18n::font24(), 0);
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 42);
 
   lv_obj_t *hint = lv_label_create(game.body);
-  lv_label_set_text(hint, "Pass the device after each turn");
+  lv_label_set_text(hint, i18n::tr("Pass the device after each turn"));
   lv_obj_set_style_text_color(hint, lv_color_hex(0xb7bdd7), 0);
   lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 82);
 
@@ -526,7 +527,7 @@ static void show_player_selection()
     lv_obj_add_event_cb(button, player_count_clicked, LV_EVENT_CLICKED,
                         (void *)(intptr_t)(player + 1));
     char value[16] = {};
-    std::snprintf(value, sizeof(value), "%d player%s", player + 1, player ? "s" : "");
+    std::snprintf(value, sizeof(value), i18n::tr("%d player%s"), player + 1, player && !i18n::german() ? "s" : "");
     lv_obj_t *label = lv_label_create(button);
     lv_label_set_text(label, value);
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
@@ -592,7 +593,7 @@ void dice_game_app_launch(void)
   lv_obj_center(back_label);
 
   lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "Dice Score");
+  lv_label_set_text(title, i18n::tr("Dice Score"));
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_center(title);
 

@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "apps/StockTickerApp.h"
 #include "AppRegistry.h"
 #include "services/StockService.h"
@@ -31,7 +32,7 @@ lv_obj_t *box(lv_obj_t *parent,int x,int y,int w,int h,uint32_t color=Card) {
 lv_obj_t *label(lv_obj_t *p,const std::string &text,int x,int y,int w,uint32_t color=0xffffff,bool large=false) {
     auto *o=lv_label_create(p);lv_label_set_text(o,text.c_str());lv_obj_set_pos(o,x,y);lv_obj_set_width(o,w);
     lv_label_set_long_mode(o,LV_LABEL_LONG_DOT);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
-    if(large)lv_obj_set_style_text_font(o,&lv_font_montserrat_24,0);return o;
+    if(large)lv_obj_set_style_text_font(o,i18n::font24(),0);return o;
 }
 lv_obj_t *button(lv_obj_t *p,const char *text,int x,int y,int w,int h,lv_event_cb_t fn,intptr_t data=0,uint32_t color=0x2196f3) {
     auto *o=lv_button_create(p);lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);
@@ -49,14 +50,14 @@ std::string quote_time(const stocks::Quote &q) {
 #else
     gmtime_r(&t,&tm);
 #endif
-    char b[40];std::strftime(b,sizeof(b),"%d %b %H:%M UTC",&tm);return b;
+    char b[40];std::strftime(b,sizeof(b),i18n::german()?"%d.%m. %H:%M UTC":"%d %b %H:%M UTC",&tm);return b;
 }
 std::string status(const StockService::Entry &e) {
-    if(!e.error.empty()) return (e.valid?"Cached: ":"")+e.error;
-    if(!e.valid) return "Waiting for quote / Wi-Fi";
-    if(StockService::now_ms()-e.fetched>15*60000U) return "Cached - refresh pending";
-    if(e.quote.delay_minutes>0) return std::to_string(e.quote.delay_minutes)+" min delayed";
-    return "Last trade - may be delayed";
+    if(!e.error.empty()) return (e.valid?i18n::tr("Cached: "):"")+e.error;
+    if(!e.valid) return i18n::tr("Waiting for quote / Wi-Fi");
+    if(StockService::now_ms()-e.fetched>15*60000U) return i18n::tr("Cached - refresh pending");
+    if(e.quote.delay_minutes>0) return std::to_string(e.quote.delay_minutes)+i18n::tr(" min delayed");
+    return i18n::tr("Last trade - may be delayed");
 }
 void update_loading() {
     const bool busy=StockService::instance().busy();
@@ -84,8 +85,8 @@ void show_notice(const char *text) {
 void refresh(lv_event_t *) {
     auto &s=StockService::instance();
     const auto result=ctx.view==0?s.refresh_all():s.refresh(ctx.selected);
-    show_notice(result==StockService::Refresh::Queued?"Refresh queued":
-                result==StockService::Refresh::Recent?"Up to date (30s cooldown)":"Retry scheduled - please wait");
+    show_notice(result==StockService::Refresh::Queued?i18n::tr("Refresh queued"):
+                result==StockService::Refresh::Recent?i18n::tr("Up to date (30s cooldown)"):i18n::tr("Retry scheduled - please wait"));
 }
 void pull_event(lv_event_t *event) {
     if(ctx.view!=0) return;
@@ -94,7 +95,7 @@ void pull_event(lv_event_t *event) {
     if(code==LV_EVENT_SCROLL) {
         const int pull=std::max<int32_t>(0,-lv_obj_get_scroll_y(ctx.body));
         if(pull>=56) ctx.pull_armed=true;
-        if(pull>=8) show_notice(ctx.pull_armed?"Release to refresh":"Pull to refresh");
+        if(pull>=8) show_notice(ctx.pull_armed?i18n::tr("Release to refresh"):i18n::tr("Pull to refresh"));
     }
     if(code==LV_EVENT_SCROLL_END) {
         const bool armed=ctx.pull_armed;
@@ -135,8 +136,8 @@ void render() {
     lv_obj_clean(ctx.body);ctx.input=nullptr;ctx.error=nullptr;
     ctx.revision=s.revision();
     if(ctx.view==2) {
-        label(ctx.body,"One symbol per line (maximum 10)",12,8,w-24);
-        label(ctx.body,"Reorder lines to reorder your watchlist",12,29,w-24,Muted);
+        label(ctx.body,i18n::tr("One symbol per line (maximum 10)"),12,8,w-24);
+        label(ctx.body,i18n::tr("Reorder lines to reorder your watchlist"),12,29,w-24,Muted);
         ctx.input=lv_textarea_create(ctx.body);lv_obj_set_pos(ctx.input,12,54);lv_obj_set_size(ctx.input,w-24,110);
         lv_textarea_set_max_length(ctx.input,250);lv_textarea_set_text(ctx.input,s.watchlist_text().c_str());
         lv_obj_set_style_bg_color(ctx.input,lv_color_hex(Card),0);lv_obj_set_style_text_color(ctx.input,lv_color_white(),0);
@@ -151,17 +152,18 @@ void render() {
             lv_obj_set_style_anim_duration(ctx.input,400,state);
         }
         lv_obj_add_state(ctx.input,LV_STATE_FOCUSED);
-        ctx.error=label(ctx.body,"Examples: AAPL  NESN.SW  7203.T",12,170,w-24,Muted);
-        button(ctx.body,"Save",12,198,(w-36)/2,38,save);
-        button(ctx.body,"Cancel",24+(w-36)/2,198,(w-36)/2,38,back,0,Card);
+        ctx.error=label(ctx.body,i18n::tr("Examples: AAPL  NESN.SW  7203.T"),12,170,w-24,Muted);
+        button(ctx.body,i18n::tr("Save"),12,198,(w-36)/2,38,save);
+        button(ctx.body,i18n::tr("Cancel"),24+(w-36)/2,198,(w-36)/2,38,back,0,Card);
         auto *keyboard=lv_keyboard_create(ctx.body);lv_obj_align(keyboard,LV_ALIGN_TOP_LEFT,0,244);lv_obj_set_size(keyboard,w,std::max(150,h-244));
         lv_keyboard_set_textarea(keyboard,ctx.input);return;
     }
     if(ctx.view==0) {
-        label(ctx.body,"Watchlist",12,10,140,0xffffff,true);
+        label(ctx.body,i18n::tr("Watchlist"),12,10,140,0xffffff,true);
         bool pending=false;
         for(size_t i=0;i<s.count();++i) pending=pending || s.entry(i).refresh_pending;
-        label(ctx.body,s.busy()?"Refreshing...":pending?"Refresh queued":"Pull to refresh",w-140,17,128,Muted);
+        auto *hint=label(ctx.body,s.busy()?i18n::tr("Refreshing..."):pending?i18n::tr("Refresh queued"):i18n::tr("Pull to refresh"),w-156,17,144,Muted);
+        lv_obj_set_height(hint,18);
         int y=46;
         for(size_t i=0;i<s.count();++i) {
             const auto &e=s.entry(i);auto *row=box(ctx.body,12,y,w-24,55);
@@ -169,15 +171,15 @@ void render() {
             label(row,e.symbol,10,7,105);
             auto *price=label(row,e.valid?stocks::price_text(e.quote.price,e.quote.currency):"--",110,7,w-144);
             lv_obj_set_style_text_align(price,LV_TEXT_ALIGN_RIGHT,0);
-            label(row,e.valid?e.quote.name:(!e.error.empty()?e.error:"Waiting for quote"),10,32,140,Muted);
+            label(row,e.valid?e.quote.name:(!e.error.empty()?e.error:i18n::tr("Waiting for quote")),10,32,140,Muted);
             auto *change=label(row,e.valid?stocks::change_text(e.quote,true):"",150,32,w-184,e.valid?change_color(e.quote):Muted);
             lv_obj_set_style_text_align(change,LV_TEXT_ALIGN_RIGHT,0);
-            if(e.valid && (!e.error.empty() || StockService::now_ms()-e.fetched>900000U)) label(row,"Cached",10,32,140,0xffc66d);
+            if(e.valid && (!e.error.empty() || StockService::now_ms()-e.fetched>900000U)) label(row,i18n::tr("Cached"),10,32,140,0xffc66d);
             y+=61;
         }
-        if(!s.count()) {label(ctx.body,"Add symbols to start your watchlist",12,y,w-24,Muted);y+=40;}
-        label(ctx.body,std::string(s.provider_name())+" - quotes may be delayed",12,y,w-24,Muted);y+=26;
-        button(ctx.body,"Edit watchlist",12,y,w-24,42,edit);
+        if(!s.count()) {label(ctx.body,i18n::tr("Add symbols to start your watchlist"),12,y,w-24,Muted);y+=40;}
+        label(ctx.body,std::string(s.provider_name())+i18n::tr(" - quotes may be delayed"),12,y,w-24,Muted);y+=26;
+        button(ctx.body,i18n::tr("Edit watchlist"),12,y,w-24,42,edit);
         // LVGL needs a scrollable extent to recognize elastic pulls on short lists.
         auto *extent=lv_obj_create(ctx.body);
         lv_obj_remove_style_all(extent);lv_obj_set_pos(extent,0,std::max(h,y+42));
@@ -189,12 +191,13 @@ void render() {
     button(ctx.body,LV_SYMBOL_LEFT,12,10,45,40,navigate,-1);
     button(ctx.body,LV_SYMBOL_RIGHT,w-57,10,45,40,navigate,1);
     auto *symbol=label(ctx.body,e.symbol,60,13,w-120,Mint,true);lv_obj_set_style_text_align(symbol,LV_TEXT_ALIGN_CENTER,0);
-    auto *name=label(ctx.body,e.valid?q.name+" / "+q.exchange:"Waiting for data",12,58,w-24,Muted);
+    auto *name=label(ctx.body,e.valid?q.name+" / "+q.exchange:i18n::tr("Waiting for data"),12,58,w-24,Muted);
     lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);
     label(ctx.body,e.valid?stocks::price_text(q.price,q.currency):"--",12,84,w-24,0xffffff,true);
     label(ctx.body,e.valid?stocks::change_text(q):"",12,119,w-24,e.valid?change_color(q):Muted);
-    label(ctx.body,status(e),12,145,w-126,0xffc66d);
-    auto *refresh_button=button(ctx.body,s.fetching(ctx.selected)?"Loading":e.refresh_pending?"Queued":LV_SYMBOL_REFRESH " Refresh",w-110,136,98,32,refresh,0,Card);
+    auto *detail_status=label(ctx.body,status(e),12,145,w-126,0xffc66d);
+    lv_obj_set_height(detail_status,18);
+    auto *refresh_button=button(ctx.body,s.fetching(ctx.selected)?i18n::tr("Loading"):e.refresh_pending?i18n::tr("Queued"):i18n::tr(LV_SYMBOL_REFRESH " Refresh"),w-110,136,98,32,refresh,0,Card);
     if(e.refresh_pending || s.fetching(ctx.selected)) lv_obj_add_state(refresh_button,LV_STATE_DISABLED);
     auto *card=box(ctx.body,12,174,w-24,130);
     if(e.valid && q.period==ctx.period && q.count>1) {
@@ -219,17 +222,17 @@ void render() {
                 lv_chart_set_value_by_id(chart,series,i,!std::isfinite(value)?LV_CHART_POINT_NONE:
                     hi==lo?500:int(80+840*(value-lo)/(hi-lo)));
             }
-        } else label(card,"No history available",12,50,w-48,Muted);
-    } else label(card,e.error.empty()?"Loading daily history...":"History unavailable",12,50,w-48,Muted);
+        } else label(card,i18n::tr("No history available"),12,50,w-48,Muted);
+    } else label(card,e.error.empty()?i18n::tr("Loading daily history..."):i18n::tr("History unavailable"),12,50,w-48,Muted);
     for(int i=0;i<3;++i) {
         const auto period=static_cast<stocks::Period>(i);
         auto *control=button(ctx.body,stocks::period_text(period),12+i*(w-24)/3,314,(w-36)/3,36,period_click,i,
                               ctx.period==period?0x2196f3:Card);
         if(!s.supports(period)) lv_obj_add_state(control,LV_STATE_DISABLED);
     }
-    label(ctx.body,e.valid?"Quote: "+quote_time(q):"Quote time unavailable",12,362,w-24,Muted);
-    label(ctx.body,e.valid && q.has_previous_close?"Prev close: "+stocks::price_text(q.previous_close,q.currency):"Previous close unavailable",12,385,w-24,Muted);
-    label(ctx.body,std::string(s.provider_name())+" / daily closes",12,408,w-24,Muted);
+    label(ctx.body,e.valid?i18n::tr("Quote: ")+quote_time(q):i18n::tr("Quote time unavailable"),12,362,w-24,Muted);
+    label(ctx.body,e.valid && q.has_previous_close?i18n::tr("Prev close: ")+stocks::price_text(q.previous_close,q.currency):i18n::tr("Previous close unavailable"),12,385,w-24,Muted);
+    label(ctx.body,std::string(s.provider_name())+i18n::tr(" / daily closes"),12,408,w-24,Muted);
 }
 void cleanup(lv_event_t *) {
     if(ctx.timer)lv_timer_delete(ctx.timer);ctx.timer=nullptr;ctx.screen=nullptr;
@@ -242,7 +245,7 @@ void stock_ticker_app_launch() {
     lv_obj_set_style_border_width(ctx.screen,0,0);lv_obj_clear_flag(ctx.screen,LV_OBJ_FLAG_SCROLLABLE);
     auto *bar=box(ctx.screen,0,0,lv_display_get_horizontal_resolution(nullptr),44,0x101426);lv_obj_set_style_radius(bar,0,0);
     button(bar,LV_SYMBOL_LEFT,4,0,48,44,back,0,0x101426);
-    auto *title=lv_label_create(bar);lv_label_set_text(title,"Stocks");lv_obj_set_style_text_color(title,lv_color_white(),0);lv_obj_center(title);
+    auto *title=lv_label_create(bar);lv_label_set_text(title,i18n::tr("Stocks"));lv_obj_set_style_text_color(title,lv_color_white(),0);lv_obj_center(title);
     create_wifi_status_icon(bar,-8);
     ctx.loading_line=box(bar,-76,41,76,3,0x64c8ff);
     lv_obj_set_style_radius(ctx.loading_line,LV_RADIUS_CIRCLE,0);

@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "services/UpdateService.h"
 
 #include "EventBus.h"
@@ -66,7 +67,7 @@ bool https_get(const std::string &url, std::string &body, int *status_code=nullp
     HTTPClient http; http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.setConnectTimeout(7000); http.setTimeout(12000);
     if (!http.begin(client,url.c_str())) return false;
-    http.addHeader("Accept","application/json"); http.addHeader("User-Agent","gadget-os/" GADGET_OS_VERSION);
+    http.addHeader(i18n::tr("Accept"),"application/json"); http.addHeader("User-Agent","gadget-os/" GADGET_OS_VERSION);
     int code=http.GET();
     if (status_code) *status_code=code;
     if (code!=HTTP_CODE_OK) { http.end(); return false; }
@@ -116,7 +117,7 @@ void UpdateService::set_channel(Channel value)
 
 bool UpdateService::check(bool manual)
 {
-    if (!supported()) { _error="OTA is not enabled for this build"; _state=State::Error; return false; }
+    if (!supported()) { _error=i18n::tr("OTA is not enabled for this build"); _state=State::Error; return false; }
     if (_check_running || _state==State::Checking || _state==State::Downloading ||
         _state==State::ReadyToReboot) return false;
     _check_running=true;
@@ -125,11 +126,11 @@ bool UpdateService::check(bool manual)
     _progress=0; _state=State::Checking;
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
     if (xTaskCreate(check_task,"update_check",10240,this,1,nullptr)!=pdPASS) {
-        _error="Could not start update check"; _state=State::Error;
+        _error=i18n::tr("Could not start update check"); _state=State::Error;
         _check_result.store(2, std::memory_order_release); return false;
     }
 #else
-    _error="Update checks are available on the device build"; _state=State::Error;
+    _error=i18n::tr("Update checks are available on the device build"); _state=State::Error;
     _check_running=false;
 #endif
     return true;
@@ -139,7 +140,7 @@ bool UpdateService::check(bool manual)
 void UpdateService::check_task(void *user_data)
 {
     auto *self=static_cast<UpdateService*>(user_data);
-    if (!self->fetch_manifest() && self->_error.empty()) self->_error="Could not check for updates";
+    if (!self->fetch_manifest() && self->_error.empty()) self->_error=i18n::tr("Could not check for updates");
     if (!self->_error.empty()) self->_state=State::Error;
     else if (self->_available_version.empty()) self->_state=State::Idle;
     else self->_state=State::Available;
@@ -174,7 +175,7 @@ bool UpdateService::fetch_manifest()
                 }
             }
         }
-        if (manifest_url.empty()) { _error="No prerelease update feed found"; return false; }
+        if (manifest_url.empty()) { _error=i18n::tr("No prerelease update feed found"); return false; }
     }
     payload.clear();
     int status=0;
@@ -184,10 +185,10 @@ bool UpdateService::fetch_manifest()
         if (status==HTTP_CODE_NOT_FOUND) return true;
         return false;
     }
-    JsonDocument doc; if (deserializeJson(doc,payload)!=DeserializationError::Ok) { _error="Invalid update manifest"; return false; }
+    JsonDocument doc; if (deserializeJson(doc,payload)!=DeserializationError::Ok) { _error=i18n::tr("Invalid update manifest"); return false; }
     std::string version=doc["version"]|"";
     JsonObject target=doc["targets"]["esp32-color-kit"].as<JsonObject>();
-    if (version.empty() || target.isNull()) { _error="Update does not support this device"; return false; }
+    if (version.empty() || target.isNull()) { _error=i18n::tr("Update does not support this device"); return false; }
     if (compare_version(version,current_version())<=0) {
         _available_version.clear(); return true;
     }
@@ -197,7 +198,7 @@ bool UpdateService::fetch_manifest()
     }
     _firmware_url=target["url"]|""; _sha256=target["sha256"]|"";
     _firmware_size=target["size"]|0; _release_notes=doc["release_notes"]|"";
-    if (_firmware_url.empty() || _sha256.size()!=64 || !_firmware_size) { _error="Incomplete update manifest"; return false; }
+    if (_firmware_url.empty() || _sha256.size()!=64 || !_firmware_size) { _error=i18n::tr("Incomplete update manifest"); return false; }
     _available_version=version; return true;
 }
 #endif
@@ -211,7 +212,7 @@ bool ota_tutorial_enabled() {
 bool UpdateService::tutorial_available() {
     if (!ota_tutorial_enabled() || _state != State::Idle) return false;
     _available_version = "1.0.0-demo";
-    _release_notes = "A new version is ready to install.";
+    _release_notes = i18n::tr("A new version is ready to install.");
     _available_was_ignored = false; _error.clear(); _progress = 0;
     _state = State::Available; return true;
 }
@@ -234,14 +235,14 @@ bool UpdateService::install()
     _cancel_requested=false; _state=State::Downloading; _progress=0; _error.clear();
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
     if (xTaskCreate(install_task,"update_install",12288,this,1,nullptr)!=pdPASS) {
-        _error="Could not start installation"; _state=State::Error; return false;
+        _error=i18n::tr("Could not start installation"); _state=State::Error; return false;
     }
     return true;
 #else
 #if !defined(ARDUINO)
     if (ota_tutorial_enabled()) return true;
 #endif
-    _error="Installation is available on the device build"; _state=State::Error; return false;
+    _error=i18n::tr("Installation is available on the device build"); _state=State::Error; return false;
 #endif
 }
 
@@ -265,13 +266,13 @@ void UpdateService::install_task(void *user_data)
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
 bool UpdateService::download_and_install()
 {
-    if (_cancel_requested) { _error="Update cancelled"; return false; }
+    if (_cancel_requested) { _error=i18n::tr("Update cancelled"); return false; }
     const esp_partition_t *next=esp_ota_get_next_update_partition(nullptr);
-    if (!next || _firmware_size>next->size) { _error="Firmware does not fit OTA partition"; return false; }
+    if (!next || _firmware_size>next->size) { _error=i18n::tr("Firmware does not fit OTA partition"); return false; }
     WiFiClientSecure client; client.setInsecure(); HTTPClient http;
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); http.setTimeout(15000);
-    if (!http.begin(client,_firmware_url.c_str()) || http.GET()!=HTTP_CODE_OK) { _error="Firmware download failed"; http.end(); return false; }
-    if (!Update.begin(_firmware_size,U_FLASH)) { _error="Could not open OTA partition"; http.end(); return false; }
+    if (!http.begin(client,_firmware_url.c_str()) || http.GET()!=HTTP_CODE_OK) { _error=i18n::tr("Firmware download failed"); http.end(); return false; }
+    if (!Update.begin(_firmware_size,U_FLASH)) { _error=i18n::tr("Could not open OTA partition"); http.end(); return false; }
     mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha,0);
     auto *stream=http.getStreamPtr(); uint8_t buffer[2048]; size_t written=0;
     while (written<_firmware_size) {
@@ -286,17 +287,17 @@ bool UpdateService::download_and_install()
     }
     if (_cancel_requested) {
         mbedtls_sha256_free(&sha); http.end(); Update.abort();
-        _error="Update cancelled"; return false;
+        _error=i18n::tr("Update cancelled"); return false;
     }
     unsigned char digest[32]; mbedtls_sha256_finish(&sha,digest); mbedtls_sha256_free(&sha); http.end();
     char hex[65]; for (int i=0;i<32;++i) std::sprintf(hex+i*2,"%02x",digest[i]); hex[64]=0;
-    if (written!=_firmware_size || _sha256!=hex) { Update.abort(); _error="Firmware verification failed"; return false; }
-    if (_cancel_requested) { Update.abort(); _error="Update cancelled"; return false; }
+    if (written!=_firmware_size || _sha256!=hex) { Update.abort(); _error=i18n::tr("Firmware verification failed"); return false; }
+    if (_cancel_requested) { Update.abort(); _error=i18n::tr("Update cancelled"); return false; }
     auto &cfg=ConfigStoreService::instance();
     cfg.load("update");
     cfg.set("installed_version_pending",_available_version);
-    if (!cfg.save()) { _error="Could not save update confirmation"; return false; }
-    if (!Update.end(true)) { _error="Could not activate firmware"; return false; }
+    if (!cfg.save()) { _error=i18n::tr("Could not save update confirmation"); return false; }
+    if (!Update.end(true)) { _error=i18n::tr("Could not activate firmware"); return false; }
     _progress=100; return true;
 }
 #endif

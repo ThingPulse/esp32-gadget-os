@@ -18,6 +18,10 @@ Open **Settings** from the home screen. The setup areas are collected on one pag
 
 ![Settings overview](documents/user-guide/screenshots/settings.png)
 
+### Language
+
+The interface supports English and German. In **Settings → Language / Sprache**, select **Deutsch** and tap **Apply language / Sprache übernehmen**. The app returns to the home screen in the selected language without restarting the device. The selection survives restarts. Use the same control to return to English. Language is independent of timezone, units and the 12/24-hour clock setting. Provider-supplied place names, company names, symbols and release notes are not translated.
+
 ### 1. Connect to Wi-Fi
 
 Open **Settings → Wi-Fi**.
@@ -204,6 +208,14 @@ Install the native prerequisites described in the [README](README.md), then run 
 ```bash
 ./scripts/update-user-guide-screenshots.sh
 ```
+
+Pass `de` to generate the German screenshots under `documents/user-guide/screenshots/de` without replacing the English images:
+
+```bash
+./scripts/update-user-guide-screenshots.sh de
+```
+
+Translations are maintained in `translations/de.json`, keyed by the original English text. Run `python3 scripts/generate-translations.py` after editing the catalogue; it validates printf placeholders and generates the firmware table. Unknown messages fall back to English. The small German fallback fonts are checked in; `scripts/generate-language-fonts.sh` regenerates them using the existing Montserrat source and `lv_font_conv`. After building native, `python3 scripts/test-i18n.py` verifies both languages, the Settings selector, persisted preferences and German glyph coverage.
 
 The script:
 

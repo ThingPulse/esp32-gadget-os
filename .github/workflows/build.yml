@@ -62,6 +62,13 @@ jobs:
         if: matrix.env == 'native'
         run: python scripts/test-transit.py
 
+      - name: Test language catalogue, fonts and settings
+        if: matrix.env == 'native'
+        run: |
+          python scripts/generate-translations.py
+          git diff --exit-code -- src/ui/GermanMessages.inc
+          python scripts/test-i18n.py
+
       - name: Test aircraft radar and provider parsing
         if: matrix.env == 'native'
         run: |

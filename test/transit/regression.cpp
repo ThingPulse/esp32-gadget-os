@@ -37,7 +37,7 @@ int main(int argc,char **argv){
  const std::string search=R"([{"type":"STOP","id":"zh","name":"Zürich HB","country":"CH"},{"type":"PLACE","id":"ignore"}])";
  const std::string boardData=R"({"stopTimes":[{"displayName":"S8","headsign":"Winterthur","tripId":"trip","realTime":true,"place":{"departure":"2026-10-24T14:10:00Z","scheduledDeparture":"2026-10-24T14:08:00Z","track":"43"}},{"routeShortName":"IR13","tripTo":{"name":"St. Gallen"},"tripCancelled":true,"place":{"scheduledDeparture":"2026-10-24T14:20:00Z"}}]})";
  const std::string tripData=R"({"legs":[{"from":{"stopId":"zh","name":"Zürich HB","departure":"2026-10-24T14:10:00Z"},"intermediateStops":[{"stopId":"o","name":"Oerlikon","arrival":"2026-10-24T14:15:00Z"}],"to":{"stopId":"w","name":"Winterthur","arrival":"2026-10-24T14:30:00Z"}}]})";
- auto r=TransitousProvider::parse(Request::Search,search);assert(r.ok()&&r.stops.size()==1&&r.stops[0].name=="Zurich HB");
+ auto r=TransitousProvider::parse(Request::Search,search);assert(r.ok()&&r.stops.size()==1&&r.stops[0].name=="Zürich HB");
  r=TransitousProvider::parse(Request::Board,boardData);assert(r.ok()&&r.departures.size()==2);
  assert(r.departures[0].time-r.departures[0].scheduled==120&&r.departures[0].live);
  assert(r.departures[1].cancelled&&r.departures[1].destination=="St. Gallen"&&r.departures[1].platform.empty());
@@ -77,7 +77,8 @@ int main(int argc,char **argv){
         }lv_display_flush_ready(d);
     });
 
- transit_app_launch();capture("transit-board");
+ if(const char *language=std::getenv("GADGET_OS_LANGUAGE")){assert(i18n::set_language(language));i18n::apply_fonts(display);}
+    transit_app_launch();capture("transit-board");
  const auto originalBoard=s._board;
  auto longName=s._board.departures[0];longName.line="33";longName.destination="Zurich Tiefenbrunnen, Bahnhof";
  s._board.departures.push_back(longName);render();capture("transit-long-destination");

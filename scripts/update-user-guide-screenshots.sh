@@ -6,12 +6,20 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 FIXTURE_DIR="$PROJECT_DIR/documents/user-guide-fixture"
 OUTPUT_DIR="$PROJECT_DIR/documents/user-guide/screenshots"
 PROGRAM="$PROJECT_DIR/.pio/build/native/program"
+LANGUAGE_CODE="${1:-en}"
+case "$LANGUAGE_CODE" in
+  en) ;;
+  de) OUTPUT_DIR="$OUTPUT_DIR/de" ;;
+  *) echo "Usage: $0 [en|de]" >&2; exit 2 ;;
+esac
 
 # Work on a copy so captures cannot change the checked-in demo settings.
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gadget-screenshots.XXXXXX")"
 trap 'rm -rf "$WORK_DIR"' EXIT
 cp -R "$FIXTURE_DIR/." "$WORK_DIR/"
-pio run --project-dir "$PROJECT_DIR" -e native
+if [[ "${GADGET_OS_SKIP_BUILD:-0}" != 1 ]]; then
+  pio run --project-dir "$PROJECT_DIR" -e native
+fi
 python3 - "$WORK_DIR" <<'PYFIXTURE'
 import json
 import sys
@@ -71,6 +79,7 @@ PYTIMES
   (
     cd "$PROJECT_DIR"
     ASAN_OPTIONS=detect_leaks=0 \
+      GADGET_OS_LANGUAGE="$LANGUAGE_CODE" \
       GADGET_OS_DATA_DIR="$WORK_DIR" \
       GADGET_OS_TUTORIAL_PATH="$WORK_DIR/tutorial.json" \
       GADGET_OS_STOCK_FIXTURE=1 \

@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "apps/WeatherIconTestApp.h"
 
 #include "AppRegistry.h"
@@ -61,7 +62,7 @@ void weather_icon_test_app_launch(void)
   lv_obj_center(back_label);
 
   lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "Weather Icons");
+  lv_label_set_text(title, i18n::tr("Weather Icons"));
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
 
@@ -80,12 +81,12 @@ void weather_icon_test_app_launch(void)
   lv_obj_set_flex_align(content, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
   const IconSpec icons[] = {
-      {WeatherIconKind::Clear, "Clear"},
-      {WeatherIconKind::Cloudy, "Cloudy"},
-      {WeatherIconKind::Rain, "Rain"},
-      {WeatherIconKind::Snow, "Snow"},
-      {WeatherIconKind::Storm, "Storm"},
-      {WeatherIconKind::Fog, "Fog"},
+      {WeatherIconKind::Clear, i18n::tr("Clear")},
+      {WeatherIconKind::Cloudy, i18n::tr("Cloudy")},
+      {WeatherIconKind::Rain, i18n::tr("Rain")},
+      {WeatherIconKind::Snow, i18n::tr("Snow")},
+      {WeatherIconKind::Storm, i18n::tr("Storm")},
+      {WeatherIconKind::Fog, i18n::tr("Fog")},
   };
 
   for (const IconSpec &icon_spec : icons) {

@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "apps/PlanesApp.h"
 #include "AppRegistry.h"
 #include "services/PlanesService.h"
@@ -92,7 +93,7 @@ void planes_app_launch() {
     lv_label_set_text(back_label, LV_SYMBOL_LEFT);
     lv_obj_center(back_label);
     auto *title = lv_label_create(bar);
-    lv_label_set_text(title, "Nearby aircraft");
+    lv_label_set_text(title, i18n::tr("Nearby aircraft"));
     lv_obj_set_style_text_color(title, lv_color_white(), 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 56, 0);
     auto *refresh = lv_button_create(bar);

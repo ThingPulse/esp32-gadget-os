@@ -26,6 +26,9 @@ std::string ascii_fold_latin(const std::string &text)
             ++i;
             continue;
         }
+        if (cp == 0xC4 || cp == 0xD6 || cp == 0xDC || cp == 0xE4 || cp == 0xF6 || cp == 0xFC || cp == 0xDF) {
+            out.append(text, i, count);i += count;continue;
+        }
         i += count;
         if ((cp >= 0x00c0 && cp <= 0x00c5) || cp == 0x0100 || cp == 0x0102 || cp == 0x0104) out += 'A';
         else if ((cp >= 0x00e0 && cp <= 0x00e5) || cp == 0x0101 || cp == 0x0103 || cp == 0x0105) out += 'a';

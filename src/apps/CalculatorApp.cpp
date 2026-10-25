@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "apps/CalculatorApp.h"
 
 #include "AppRegistry.h"
@@ -38,7 +39,7 @@ static void nav_back_event(lv_event_t *e)
 
 static std::string format_value(double value)
 {
-  if (std::isnan(value) || std::isinf(value)) return "Error";
+  if (std::isnan(value) || std::isinf(value)) return i18n::tr("Error");
 
   char buf[64] = {0};
   std::snprintf(buf, sizeof(buf), "%.10g", value);
@@ -59,7 +60,7 @@ static double current_value()
 static void set_error_state()
 {
   calc_ctx.has_error = true;
-  calc_ctx.input = "Error";
+  calc_ctx.input = i18n::tr("Error");
   calc_ctx.accumulator = 0.0;
   calc_ctx.pending_op = 0;
   calc_ctx.entering_new = true;
@@ -69,7 +70,7 @@ static void set_error_state()
 static void set_input_from_double(double value)
 {
   calc_ctx.input = format_value(value);
-  if (calc_ctx.input == "Error") {
+  if (calc_ctx.input == i18n::tr("Error")) {
     set_error_state();
     return;
   }
@@ -248,7 +249,7 @@ static lv_obj_t *create_calc_btn(lv_obj_t *parent,
   lv_obj_t *label = lv_label_create(btn);
   lv_label_set_text(label, text);
   lv_obj_set_style_text_color(label, fg, 0);
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_font(label, i18n::font24(), 0);
   lv_obj_center(label);
 
   lv_obj_add_event_cb(btn, on_calc_button, LV_EVENT_CLICKED, (void *)text);
@@ -290,7 +291,7 @@ void calculator_app_launch(void)
   lv_obj_center(back_label);
 
   lv_obj_t *title = lv_label_create(bar);
-  lv_label_set_text(title, "Calculator");
+  lv_label_set_text(title, i18n::tr("Calculator"));
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
   lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);
 
@@ -312,7 +313,7 @@ void calculator_app_launch(void)
   lv_obj_set_width(display, lv_pct(100));
   lv_obj_set_style_text_align(display, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_set_style_text_color(display, lv_color_white(), 0);
-  lv_obj_set_style_text_font(display, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_font(display, i18n::font24(), 0);
   lv_obj_align(display, LV_ALIGN_TOP_RIGHT, 0, 6);
 
   calc_ctx.display_label = display;

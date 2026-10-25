@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "ui/ClassicWeatherView.h"
 #include "ui/WeatherIconSet.h"
 #include "ui/MoonAppearance.h"
@@ -22,7 +23,7 @@ void textf(lv_obj_t *obj, const char *format, ...) {
     lv_label_set_text(obj, text);
 }
 lv_obj_t *label(lv_obj_t *parent, int x, int y, int width, const char *text,
-                const lv_font_t *font = &lv_font_montserrat_14) {
+                const lv_font_t *font = i18n::font14()) {
     auto *obj = lv_label_create(parent);
     lv_obj_set_pos(obj, x, y);
     lv_obj_set_width(obj, width);
@@ -33,14 +34,14 @@ lv_obj_t *label(lv_obj_t *parent, int x, int y, int width, const char *text,
     return obj;
 }
 const char *condition(int code) {
-    if (code == 0) return "Clear sky";
-    if (code <= 3) return "Cloudy";
-    if (code <= 48) return "Fog";
-    if (code <= 67) return "Rain";
-    if (code <= 77) return "Snow";
-    if (code <= 82) return "Showers";
-    if (code >= 95) return "Thunderstorm";
-    return "Unknown";
+    if (code == 0) return i18n::tr("Clear sky");
+    if (code <= 3) return i18n::tr("Cloudy");
+    if (code <= 48) return i18n::tr("Fog");
+    if (code <= 67) return i18n::tr("Rain");
+    if (code <= 77) return i18n::tr("Snow");
+    if (code <= 82) return i18n::tr("Showers");
+    if (code >= 95) return i18n::tr("Thunderstorm");
+    return i18n::tr("Unknown");
 }
 std::string hour(const std::string &iso) {
     return iso.size() >= 16 ? iso.substr(11, 5) : "--:--";
@@ -89,7 +90,7 @@ void populate_hourly(ClassicWeatherView &v) {
         ++shown;
     }
     if (!shown) {
-        auto *empty = label(v.hourly_list, 0, 0, 240, "Hourly forecast unavailable");
+        auto *empty = label(v.hourly_list, 0, 0, 240, i18n::tr("Hourly forecast unavailable"));
         lv_obj_set_width(empty, lv_pct(100));
     }
     lv_obj_update_layout(v.hourly_list);
@@ -120,9 +121,9 @@ void show_hourly(ClassicWeatherView &v) {
     lv_obj_set_style_bg_color(dialog, lv_color_hex(0x2a2d42), 0);
     lv_obj_clear_flag(dialog, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(dialog, LV_FLEX_FLOW_COLUMN);
-    auto *title = label(dialog, 0, 0, 272, "Hourly forecast", &lv_font_montserrat_24);
+    auto *title = label(dialog, 0, 0, 272, i18n::tr("Hourly forecast"), i18n::font24());
     lv_obj_set_width(title, lv_pct(100));
-    auto *subtitle = label(dialog, 0, 0, 272, "Upcoming hours (local time)");
+    auto *subtitle = label(dialog, 0, 0, 272, i18n::tr("Upcoming hours (local time)"));
     lv_obj_set_width(subtitle, lv_pct(100));
     v.hourly_list = lv_obj_create(dialog);
     plain_container(v.hourly_list);
@@ -137,7 +138,7 @@ void show_hourly(ClassicWeatherView &v) {
     auto *close = lv_button_create(dialog);
     lv_obj_set_size(close, lv_pct(100), 40);
     auto *close_label = lv_label_create(close);
-    lv_label_set_text(close_label, "Close");
+    lv_label_set_text(close_label, i18n::tr("Close"));
     lv_obj_center(close_label);
     lv_obj_add_event_cb(close, [](lv_event_t *event) {
         auto *overlay = static_cast<lv_obj_t *>(lv_event_get_user_data(event));
@@ -187,11 +188,11 @@ void update_moon(ClassicWeatherView &v, time_t now) {
     if (!weather.has_weather()) return;
     if (TimeService::instance().is_synchronized()) {
         const auto appearance = moon_appearance::calculate(now, weather.latitude(), weather.longitude());
-        textf(v.phase, "%s\n%.0f%% lit", moon_appearance::phase_name(appearance.phase), appearance.illumination * 100);
+        textf(v.phase, i18n::tr("%s\n%.0f%% lit"), i18n::tr(moon_appearance::phase_name(appearance.phase)), appearance.illumination * 100);
         shade_moon(v, appearance.phase, appearance.bright_angle, appearance.parallactic_angle, true);
     } else {
         // No trusted clock yet: retain the date-based phase, without inventing a local tilt.
-        textf(v.phase, "%s\n%.0f%% lit", weather.moon_phase_name(), weather.moon_illumination_percent());
+        textf(v.phase, i18n::tr("%s\n%.0f%% lit"), i18n::tr(weather.moon_phase_name()), weather.moon_illumination_percent());
         shade_moon(v, weather.moon_phase_fraction());
     }
     v.last_moon_minute = TimeService::instance().is_synchronized() ? now / 60 : -1;
@@ -219,7 +220,7 @@ void classic_weather_create(ClassicWeatherView &v, lv_obj_t *parent) {
     v.date = label(root, 0, 0, 320, "--, --.--.----");
     v.clock = label(root, 30, 28, 244, "--:--", &weather_clock_48);
     v.seconds = label(root, 210, 40, 52, "--");
-    v.condition = label(root, 0, 78, 320, "No weather data");
+    v.condition = label(root, 0, 78, 320, i18n::tr("No weather data"));
     v.icon = weather_icon_create(root, WeatherIconKind::Cloudy, 56);
     lv_obj_set_pos(v.icon, 10, 108);
     v.temperature = label(root, 72, 110, 152, "--", &weather_temperature_36);
@@ -249,7 +250,7 @@ void classic_weather_create(ClassicWeatherView &v, lv_obj_t *parent) {
     lv_obj_add_event_cb(v.daily_row, [](lv_event_t *event) {
         show_hourly(*static_cast<ClassicWeatherView *>(lv_event_get_user_data(event)));
     }, LV_EVENT_CLICKED, &v);
-    auto *hint = label(v.daily_row, 228, 0, 80, "Hourly " LV_SYMBOL_RIGHT);
+    auto *hint = label(v.daily_row, 228, 0, 80, (std::string(i18n::tr("Hourly "))+LV_SYMBOL_RIGHT).c_str());
     lv_obj_set_style_text_color(hint, lv_color_hex(0x63e6be), 0);
     for (int i = 0; i < 4; ++i) {
         v.days[i] = label(v.daily_row, i * 80, 18, 80, "--");
@@ -258,8 +259,8 @@ void classic_weather_create(ClassicWeatherView &v, lv_obj_t *parent) {
         lv_obj_clear_flag(v.icons[i], LV_OBJ_FLAG_CLICKABLE);
         v.ranges[i] = label(v.daily_row, i * 80, 82, 80, "--");
     }
-    label(root, 0, 311, 110, "Sun", &lv_font_montserrat_24);
-    v.sun = label(root, 0, 342, 110, "Rise --:--\nSet --:--");
+    label(root, 0, 311, 110, i18n::tr("Sun"), i18n::font24());
+    v.sun = label(root, 0, 342, 110, i18n::tr("Rise --:--\nSet --:--"));
     v.moon_pixels.resize(72 * 72 * 4);
     v.moon_image.header.magic = LV_IMAGE_HEADER_MAGIC;
     v.moon_image.header.cf = LV_COLOR_FORMAT_ARGB8888;
@@ -270,8 +271,8 @@ void classic_weather_create(ClassicWeatherView &v, lv_obj_t *parent) {
     v.moon = lv_image_create(root);
     lv_image_set_src(v.moon, &v.moon_image);
     lv_obj_set_pos(v.moon, 122, 310);
-    label(root, 204, 311, 112, "Moon", &lv_font_montserrat_24);
-    v.phase = label(root, 204, 342, 112, "Unavailable");
+    label(root, 204, 311, 112, i18n::tr("Moon"), i18n::font24());
+    v.phase = label(root, 204, 342, 112, i18n::tr("Unavailable"));
     lv_obj_add_flag(v.moon, LV_OBJ_FLAG_HIDDEN);
     classic_weather_tick(v);
 }
@@ -291,13 +292,13 @@ void classic_weather_tick(ClassicWeatherView &v) {
     if (!synced || !local_known) {
         lv_label_set_text(v.clock, "--:--");
         lv_label_set_text(v.seconds, "--");
-        lv_label_set_text(v.date, synced ? "Waiting for location time" : "Waiting for time");
+        lv_label_set_text(v.date, synced ? i18n::tr("Waiting for location time") : i18n::tr("Waiting for time"));
         return;
     }
     if (v.last_moon_minute != now / 60) update_moon(v, now);
 
     char text[64];
-    strftime(text, sizeof(text), "%A, %d.%m.%Y", &local);
+    i18n::date(text, sizeof(text), local);
     lv_label_set_text(v.date, text);
     strftime(text, sizeof(text), TimeService::instance().use_24h() ? "%H:%M" : "%I:%M", &local);
     lv_label_set_text(v.clock, text);
@@ -309,12 +310,12 @@ void classic_weather_update(ClassicWeatherView &v) {
     auto &weather = WeatherService::instance();
     const bool valid = weather.has_weather();
     populate_hourly(v);
-    lv_label_set_text(v.condition, valid ? condition(weather.weather_code()) : "No weather data");
+    lv_label_set_text(v.condition, valid ? condition(weather.weather_code()) : i18n::tr("No weather data"));
     if (valid) {
         lv_obj_clear_flag(v.icon, LV_OBJ_FLAG_HIDDEN);
         weather_icon_update(v.icon, weather_icon_kind_from_code(weather.weather_code()), 56);
         textf(v.temperature, "%.1f°", weather.temperature_value());
-        textf(v.humidity, "%.0f%% humidity", weather.humidity_value());
+        textf(v.humidity, i18n::tr("%.0f%% humidity"), weather.humidity_value());
         textf(v.pressure, weather.is_metric() ? "%.0f hPa" : "%.2f inHg", weather.pressure_value());
         textf(v.wind, "%.1f %s", weather.wind_speed_value(), weather.is_metric() ? "km/h" : "mph");
         const double a = weather.wind_direction_degrees() * PI / 180;
@@ -326,13 +327,13 @@ void classic_weather_update(ClassicWeatherView &v) {
         v.arrow_points[4] = point(7, -7);
         lv_line_set_points(v.wind_arrow, v.arrow_points, 5);
         lv_obj_clear_flag(v.wind_arrow, LV_OBJ_FLAG_HIDDEN);
-        textf(v.sun, "Rise %s\nSet %s", hour(weather.sunrise_time()).c_str(), hour(weather.sunset_time()).c_str());
+        textf(v.sun, i18n::tr("Rise %s\nSet %s"), hour(weather.sunrise_time()).c_str(), hour(weather.sunset_time()).c_str());
         update_moon(v, time(nullptr));
     } else {
         lv_obj_add_flag(v.icon, LV_OBJ_FLAG_HIDDEN);
         for (auto *obj : {v.temperature, v.humidity, v.pressure, v.wind}) lv_label_set_text(obj, "--");
-        lv_label_set_text(v.sun, "Rise --:--\nSet --:--");
-        lv_label_set_text(v.phase, "Unavailable");
+        lv_label_set_text(v.sun, i18n::tr("Rise --:--\nSet --:--"));
+        lv_label_set_text(v.phase, i18n::tr("Unavailable"));
         lv_obj_add_flag(v.wind_arrow, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(v.moon, LV_OBJ_FLAG_HIDDEN);
     }
@@ -350,7 +351,7 @@ void classic_weather_update(ClassicWeatherView &v) {
         if (std::sscanf(day.date.c_str(), "%d-%d-%d", &year, &month, &d) == 3) {
             date.tm_year = year - 1900; date.tm_mon = month - 1; date.tm_mday = d;
             date.tm_hour = 12; date.tm_isdst = -1;
-            mktime(&date); strftime(name, sizeof(name), "%a", &date);
+            mktime(&date); std::snprintf(name,sizeof(name),"%s",i18n::weekday(date.tm_wday,true));
         }
         lv_label_set_text(v.days[i], name);
         textf(v.ranges[i], "%.0f-%.0f°", day.temp_min, day.temp_max);

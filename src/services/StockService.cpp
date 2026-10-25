@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "services/StockService.h"
 #include "services/ConfigStoreService.h"
 #include "services/WifiService.h"
@@ -23,7 +24,7 @@ stocks::YahooStockProvider yahoo;
 class TutorialStockProvider : public stocks::StockDataProvider {
 public:
     const char *id() const override { return "yahoo"; }
-    const char *name() const override { return "Demo quotes"; }
+    const char *name() const override { return i18n::tr("Demo quotes"); }
     stocks::Result fetch(const std::string &symbol, stocks::Period period) override {
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         stocks::Result result;
@@ -81,10 +82,10 @@ bool StockService::save_watchlist(const std::string &text,std::string &error) {
     std::array<std::string,stocks::MaxSymbols> symbols; size_t count=0;
     if(!stocks::parse_watchlist(text,symbols,count,error)) return false;
     auto &cfg=ConfigStoreService::instance();
-    if(!cfg.load("stocks")) { error="Cannot open settings"; return false; }
+    if(!cfg.load("stocks")) { error=i18n::tr("Cannot open settings"); return false; }
     std::string normalized; for(size_t i=0;i<count;++i) { if(i)normalized+='\n'; normalized+=symbols[i]; }
     cfg.set("symbols",normalized); cfg.set("provider",std::string(_provider->id()));
-    if(!cfg.save()) { error="Could not save watchlist"; return false; }
+    if(!cfg.save()) { error=i18n::tr("Could not save watchlist"); return false; }
     std::vector<Entry> entries(count);
     for(size_t i=0;i<count;++i) {
         entries[i].symbol=symbols[i];
@@ -174,7 +175,7 @@ void StockService::loop() {
     if(int32_t(now-_gate)>=0) _gate_due=true;
     if(!_active || _running || !_gate_due || !_count) return;
     if(_mapping_provider!=_provider->id()) {
-        for(size_t i=0;i<_count;++i) _entries[i].error="Re-save symbols for selected provider";
+        for(size_t i=0;i<_count;++i) _entries[i].error=i18n::tr("Re-save symbols for selected provider");
         return;
     }
 #if defined(ARDUINO)
@@ -191,7 +192,7 @@ void StockService::loop() {
     _finished.store(false,std::memory_order_relaxed); _running=true; ++_revision;
 #if defined(ARDUINO)
     if(xTaskCreate(worker,"stock_quote",12288,this,1,nullptr)!=pdPASS) {
-        _result.error=stocks::Error::Unavailable; _result.message="Not enough memory for request";
+        _result.error=stocks::Error::Unavailable; _result.message=i18n::tr("Not enough memory for request");
         _finished.store(true,std::memory_order_release);
     }
 #else

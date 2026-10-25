@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "services/WeatherLocationSearchService.h"
 
 #include "ui/UiTrace.h"
@@ -73,13 +74,13 @@ bool fetch_search(const std::string &query, SearchResult &result)
     // the original ESP32, avoiding TLS here saves the large temporary mbedTLS
     // handshake allocation that otherwise competes with the Settings UI.
     const std::string url = "http://geocoding-api.open-meteo.com/v1/search?name=" +
-                            url_encode(query) + "&count=5&language=en&format=json";
+                            url_encode(query) + "&count=5&language=" + std::string(i18n::language_code()) + "&format=json";
     std::string payload;
 #if defined(ARDUINO)
     WiFiClient client;
     HTTPClient http;
     if (!http.begin(client, url.c_str())) {
-        result.error = "Could not start lookup";
+        result.error = i18n::tr("Could not start lookup");
         return false;
     }
     http.setConnectTimeout(5000);
@@ -87,7 +88,7 @@ bool fetch_search(const std::string &query, SearchResult &result)
     http.addHeader("User-Agent", "esp32-gadget-os/1.0");
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {
-        result.error = "Lookup HTTP error";
+        result.error = i18n::tr("Lookup HTTP error");
         http.end();
         return false;
     }
@@ -97,20 +98,20 @@ bool fetch_search(const std::string &query, SearchResult &result)
     const std::string command = "curl -sS -L --max-time 8 \"" + url + "\"";
     FILE *pipe = popen(command.c_str(), "r");
     if (!pipe) {
-        result.error = "Could not start lookup";
+        result.error = i18n::tr("Could not start lookup");
         return false;
     }
     char buffer[512];
     while (fgets(buffer, sizeof(buffer), pipe)) payload += buffer;
     if (pclose(pipe) != 0 || payload.empty()) {
-        result.error = "Lookup request failed";
+        result.error = i18n::tr("Lookup request failed");
         return false;
     }
 #endif
 
     JsonDocument doc;
     if (deserializeJson(doc, payload.c_str(), payload.size()) != DeserializationError::Ok) {
-        result.error = "Invalid lookup response";
+        result.error = i18n::tr("Invalid lookup response");
         return false;
     }
     JsonArray items = doc["results"].as<JsonArray>();
@@ -125,7 +126,7 @@ bool fetch_search(const std::string &query, SearchResult &result)
         if (!location.name.empty()) result.locations.push_back(location);
     }
     if (result.locations.empty()) {
-        result.error = "No matching locations";
+        result.error = i18n::tr("No matching locations");
         return false;
     }
     result.ok = true;
@@ -171,7 +172,7 @@ bool WeatherLocationSearchService::start_fetch(const std::string &query)
     BaseType_t created = xTaskCreate(task_entry, "weather_places", 8192, this, 1, nullptr);
     if (created != pdPASS) {
         _fetching = false;
-        _error = "Could not start lookup";
+        _error = i18n::tr("Could not start lookup");
         return false;
     }
 #else
@@ -215,7 +216,7 @@ void WeatherLocationSearchService::process_result()
 #endif
     _fetching = false;
     if (result->ok) _results.swap(result->locations);
-    else _error = result->error.empty() ? "Location lookup failed" : result->error;
+    else _error = result->error.empty() ? i18n::tr("Location lookup failed") : result->error;
     ++_revision;
     UI_TRACE("Weather", "location search complete results=%u", (unsigned)_results.size());
     delete result;

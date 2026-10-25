@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "ui/NearbyPlanesView.h"
 #include "ui/PlaneAltitudeColor.h"
 #include <algorithm>
@@ -32,7 +33,7 @@ const char *airline(const PlaneState &p) {
         {"RYR","Ryanair"},{"UAE","Emirates"},{"QTR","Qatar Airways"},{"DAL","Delta"},
         {"UAL","United"},{"AAL","American"},{"EIN","Aer Lingus"}};
     for (const auto &n : names) if (p.callsign.compare(0, 3, n.prefix) == 0) return n.name;
-    return "Aircraft";
+    return i18n::tr("Aircraft");
 }
 const char *type_name(const PlaneState &p) {
     if (!p.aircraft_description.empty()) return p.aircraft_description.c_str();
@@ -42,18 +43,19 @@ const char *type_name(const PlaneState &p) {
         {"A20N","Airbus A320neo"},{"A21N","Airbus A321neo"},{"A321","Airbus A321"},{"A339","Airbus A330-900"},{"BCS3","Airbus A220-300"},
         {"B738","Boeing 737-800"},{"B77W","Boeing 777-300ER"}};
     for (const auto &n : names) if (p.aircraft_type == n.code) return n.name;
-    return p.aircraft_type.empty() ? "Unknown type" : p.aircraft_type.c_str();
+    return p.aircraft_type.empty() ? i18n::tr("Unknown type") : p.aircraft_type.c_str();
 }
 const char *direction(float b, bool short_name = false) {
     static const char *names[] = {"north","northeast","east","southeast","south","southwest","west","northwest"};
     static const char *shorts[] = {"N","NE","E","SE","S","SW","W","NW"};
     const int i = int(std::lround(b / 45)) & 7;
-    return short_name ? shorts[i] : names[i];
+    static const char *de[] = {"N","NO","O","SO","S","SW","W","NW"};
+    return short_name ? (i18n::german()?de[i]:shorts[i]) : i18n::tr(names[i]);
 }
 const char *motion(const PlaneState &p) {
     if (!p.heading_valid || !std::isfinite(p.heading_deg) || p.velocity_ms < 5) return "";
     const double outward = std::cos((p.heading_deg - p.bearing_deg) * PI / 180);
-    return outward < -.35 ? "Approaching" : outward > .35 ? "Moving away" : "Passing by";
+    return outward < -.35 ? i18n::tr("Approaching") : outward > .35 ? i18n::tr("Moving away") : i18n::tr("Passing by");
 }
 const PlaneState *selected(const NearbyPlanesView &v) {
     const auto &s = PlanesService::instance();
@@ -96,8 +98,8 @@ void update_details(NearbyPlanesView &v) {
         if (service.planes()[i].icao24 == v.dialog_icao) plane = &service.planes()[i];
     visible(v.dialog_content, plane != nullptr);
     visible(v.dialog_body, !plane || !service.last_error().empty());
-    detail_text(v.dialog_body, plane ? "Saved data - update failed" :
-                "This aircraft is no longer in the nearby results.");
+    detail_text(v.dialog_body, plane ? i18n::tr("Saved data - update failed") :
+                i18n::tr("This aircraft is no longer in the nearby results."));
     if (!plane) return;
     detail_text(v.dialog_title, plane->callsign.empty() ? plane->icao24 : plane->callsign);
     detail_text(v.dialog_airline, airline(*plane));
@@ -113,7 +115,7 @@ void update_details(NearbyPlanesView &v) {
         detail_text(v.dialog_airports[1], plane->destination_airport_name);
     }
     char value[64];
-    if (!std::isfinite(plane->altitude_m)) std::snprintf(value, sizeof(value), "Unknown");
+    if (!std::isfinite(plane->altitude_m)) std::snprintf(value,sizeof(value),"%s",i18n::tr("Unknown"));
     else std::snprintf(value, sizeof(value), "%.0f %s", service.is_metric() ? plane->altitude_m : plane->altitude_m * 3.28084,
                   service.is_metric() ? "m" : "ft");
     std::string altitude = value;
@@ -131,7 +133,7 @@ void update_details(NearbyPlanesView &v) {
     std::string bearing = direction(plane->bearing_deg);
     bearing[0] = std::toupper(static_cast<unsigned char>(bearing[0]));
     detail_text(v.dialog_stats[3], bearing);
-    detail_text(v.dialog_registration, plane->registration.empty() ? "Unknown" : plane->registration);
+    detail_text(v.dialog_registration, plane->registration.empty() ? i18n::tr("Unknown") : plane->registration);
     detail_text(v.dialog_hex, "ICAO  " + plane->icao24);
     detail_text(v.dialog_squawk, "Squawk  " + (plane->squawk.empty() ? std::string("--") : plane->squawk));
 }
@@ -189,16 +191,16 @@ void show_details(NearbyPlanesView &v) {
     auto *header = detail_column(v.dialog_content, 2);
     v.dialog_airline = label(header, 0, 0, 276, "", MINT);
     v.dialog_title = label(header, 0, 0, 276, "");
-    lv_obj_set_style_text_font(v.dialog_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(v.dialog_title, i18n::font24(), 0);
     v.dialog_type = label(header, 0, 0, 276, "");
     lv_label_set_long_mode(v.dialog_type, LV_LABEL_LONG_WRAP);
     detail_divider(v.dialog_content);
-    v.dialog_route_missing = label(v.dialog_content, 0, 0, 276, "Route unavailable", 0x9aa5bd);
+    v.dialog_route_missing = label(v.dialog_content, 0, 0, 276, i18n::tr("Route unavailable"), 0x9aa5bd);
     v.dialog_route = detail_column(v.dialog_content, 3);
     auto *codes = lv_obj_create(v.dialog_route); plain(codes);lv_obj_set_size(codes, 276, 30);
     v.dialog_codes[0] = label(codes, 0, 0, 106, "", MINT);
     v.dialog_codes[1] = label(codes, 170, 0, 106, "", MINT);
-    for (auto *code : v.dialog_codes) lv_obj_set_style_text_font(code, &lv_font_montserrat_24, 0);
+    for (auto *code : v.dialog_codes) lv_obj_set_style_text_font(code, i18n::font24(), 0);
     lv_obj_set_style_text_align(v.dialog_codes[1], LV_TEXT_ALIGN_RIGHT, 0);
     // Small plane and direction arrow, drawn with the same lightweight strokes as the radar.
     lv_obj_add_event_cb(codes, [](lv_event_t *event) {
@@ -231,24 +233,24 @@ void show_details(NearbyPlanesView &v) {
     lv_obj_set_style_text_align(v.dialog_airports[1], LV_TEXT_ALIGN_RIGHT, 0);
     detail_divider(v.dialog_content);
     auto *stats = lv_obj_create(v.dialog_content); plain(stats);lv_obj_set_size(stats, 276, 116);
-    const char *titles[] = {"Altitude", "Speed", "Distance", "Direction"};
+    const char *titles[] = {i18n::tr("Altitude"), i18n::tr("Speed"), i18n::tr("Distance"), i18n::tr("Direction")};
     for (int i = 0; i < 4; ++i) {
         const int x = (i % 2) * 146, y = (i / 2) * 68;
         label(stats, x, y, 130, titles[i], 0x9aa5bd);
         v.dialog_stats[i] = label(stats, x, y + 18, 130, "");
-        lv_obj_set_style_text_font(v.dialog_stats[i], &lv_font_montserrat_24, 0);
+        lv_obj_set_style_text_font(v.dialog_stats[i], i18n::font24(), 0);
     }
-    label(stats, 0, 45, 138, "above sea level", 0x9aa5bd);
+    label(stats, 0, 45, 138, i18n::tr("above sea level"), 0x9aa5bd);
     detail_divider(v.dialog_content);
     auto *ids = lv_obj_create(v.dialog_content); plain(ids);lv_obj_set_size(ids, 276, 42);
-    label(ids, 0, 0, 112, "Registration", 0x9aa5bd);
+    label(ids, 0, 0, 112, i18n::tr("Registration"), 0x9aa5bd);
     v.dialog_registration = label(ids, 116, 0, 160, "");
     v.dialog_hex = label(ids, 0, 24, 138, "", 0x9aa5bd);
     v.dialog_squawk = label(ids, 146, 24, 130, "", 0x9aa5bd);
     v.dialog_close = lv_button_create(panel);
     lv_obj_set_size(v.dialog_close, lv_pct(100), 40);
     auto *close_label = lv_label_create(v.dialog_close);
-    lv_label_set_text(close_label, "Close");
+    lv_label_set_text(close_label, i18n::tr("Close"));
     lv_obj_center(close_label);
     lv_obj_add_event_cb(v.dialog_close, [](lv_event_t *event) {
         lv_obj_delete_async(static_cast<lv_obj_t *>(lv_event_get_user_data(event)));
@@ -410,10 +412,10 @@ void nearby_planes_tick(NearbyPlanesView &v) {
     if (!v.status) return;
     const auto &s=PlanesService::instance();
     char text[64];
-    if (s.is_fetching()) std::snprintf(text,sizeof(text),"Updating...");
-    else if (!s.last_error().empty()) std::snprintf(text,sizeof(text),s.has_data()?"Saved data - retrying":"Update failed - retry");
-    else if (!s.has_data()) std::snprintf(text,sizeof(text),"Waiting for aircraft");
-    else std::snprintf(text,sizeof(text),"Updated %lus ago",s.data_age_ms()/1000);
+    if (s.is_fetching()) std::snprintf(text,sizeof(text),"%s",i18n::tr("Updating..."));
+    else if (!s.last_error().empty()) std::snprintf(text,sizeof(text),"%s",s.has_data()?i18n::tr("Saved data - retrying"):i18n::tr("Update failed - retry"));
+    else if (!s.has_data()) std::snprintf(text,sizeof(text),"%s",i18n::tr("Waiting for aircraft"));
+    else std::snprintf(text,sizeof(text),i18n::tr("Updated %lus ago"),s.data_age_ms()/1000);
     if (std::strcmp(lv_label_get_text(v.status),text)) lv_label_set_text(v.status,text);
 }
 void nearby_planes_update(NearbyPlanesView &v) {
@@ -430,7 +432,7 @@ void nearby_planes_update(NearbyPlanesView &v) {
     std::sort(v.indices.begin(),v.indices.begin()+v.count,[&](int a,int b){return s.planes()[a].distance_km<s.planes()[b].distance_km;});
     if (!selected(v) && v.count) v.selected_icao=s.planes()[v.indices[0]].icao24;
     char text[160];
-    std::snprintf(text,sizeof(text),"%d airborne nearby",v.count); lv_label_set_text(v.summary,text);
+    std::snprintf(text,sizeof(text),i18n::tr("%d airborne nearby"),v.count); lv_label_set_text(v.summary,text);
     lv_dropdown_set_options_static(v.range_label,s.is_metric()?"5 km\n10 km\n25 km\n50 km":"2.7 nm\n5.4 nm\n13.5 nm\n27 nm");
     lv_dropdown_set_selected(v.range_label,v.radius_km<=5?0:v.radius_km<=10?1:v.radius_km<=25?2:3);
     const auto *p=selected(v);
@@ -454,27 +456,27 @@ void nearby_planes_update(NearbyPlanesView &v) {
     }
     update_details(v);
     if (p) {
-        std::snprintf(text,sizeof(text),"Look %s",direction(p->bearing_deg)); lv_label_set_text(v.look,text);
+        std::snprintf(text,sizeof(text),i18n::tr("Look %s"),direction(p->bearing_deg)); lv_label_set_text(v.look,text);
         const char *movement=motion(*p);
-        std::snprintf(text,sizeof(text),"%.1f %s away%s%s",s.is_metric()?p->distance_km:p->distance_km/1.852,
+        std::snprintf(text,sizeof(text),i18n::tr("%.1f %s away%s%s"),s.is_metric()?p->distance_km:p->distance_km/1.852,
             s.is_metric()?"km":"nm",*movement?" - ":"",movement); lv_label_set_text(v.distance,text);
         std::snprintf(text,sizeof(text),"%s - %s",airline(*p),p->callsign.empty()?p->icao24.c_str():p->callsign.c_str()); lv_label_set_text(v.identity,text);
         if (std::isfinite(p->altitude_m))
-            std::snprintf(text,sizeof(text),"%s | %.0f %s alt.",type_name(*p),s.is_metric()?p->altitude_m:p->altitude_m*3.28084,s.is_metric()?"m":"ft");
-        else std::snprintf(text,sizeof(text),"%s | Altitude unknown",type_name(*p));
+            std::snprintf(text,sizeof(text),i18n::tr("%s | %.0f %s alt."),type_name(*p),s.is_metric()?p->altitude_m:p->altitude_m*3.28084,s.is_metric()?"m":"ft");
+        else std::snprintf(text,sizeof(text),i18n::tr("%s | Altitude unknown"),type_name(*p));
         lv_label_set_text(v.type,text);
         lv_obj_remove_state(v.card,LV_STATE_DISABLED);
     } else {
-        lv_label_set_text(v.look,s.is_configured()?(s.has_data()&&home?"No aircraft nearby":"Looking for aircraft..."):"Set your location");
-        lv_label_set_text(v.distance,s.is_configured()?"Try a larger radius":"Settings > Planes");
-        lv_label_set_text(v.identity,"Airborne aircraft appear here"); lv_label_set_text(v.type,"");
+        lv_label_set_text(v.look,s.is_configured()?(s.has_data()&&home?i18n::tr("No aircraft nearby"):i18n::tr("Looking for aircraft...")):i18n::tr("Set your location"));
+        lv_label_set_text(v.distance,s.is_configured()?i18n::tr("Try a larger radius"):i18n::tr("Settings > Planes"));
+        lv_label_set_text(v.identity,i18n::tr("Airborne aircraft appear here")); lv_label_set_text(v.type,"");
         lv_obj_add_state(v.card,LV_STATE_DISABLED);
     }
     lv_obj_invalidate(v.radar); nearby_planes_tick(v);
 }
 void nearby_planes_create(NearbyPlanesView &v,lv_obj_t *parent) {
     v.root=lv_obj_create(parent);plain(v.root);lv_obj_set_size(v.root,320,436);lv_obj_align(v.root,LV_ALIGN_TOP_MID,0,0);
-    v.summary=label(v.root,10,10,210,"Looking for aircraft");
+    v.summary=label(v.root,10,10,210,i18n::tr("Looking for aircraft"));
     auto *range=lv_dropdown_create(v.root);lv_obj_set_pos(range,224,0);lv_obj_set_size(range,86,38);
     lv_obj_set_style_bg_color(range,lv_color_hex(0x293448),0);
     lv_obj_set_style_text_color(range,lv_color_hex(0x96b4db),0);
@@ -489,9 +491,9 @@ void nearby_planes_create(NearbyPlanesView &v,lv_obj_t *parent) {
     },LV_EVENT_VALUE_CHANGED,&v);
     v.radar=lv_obj_create(v.root);plain(v.radar);lv_obj_set_pos(v.radar,10,30);lv_obj_set_size(v.radar,300,262);
     lv_obj_add_event_cb(v.radar,draw_radar,LV_EVENT_DRAW_MAIN,&v);
-    label(v.radar,144,0,20,"N");label(v.radar,144,242,20,"S");label(v.radar,18,119,20,"W");label(v.radar,267,119,20,"E");
-    label(v.radar,137,137,30,"You");label(v.radar,231,238,68,"North up",0x9aa5bd);
-    label(v.radar,0,243,100,"Low " LV_SYMBOL_RIGHT " High",0x9aa5bd);
+    label(v.radar,144,0,20,"N");label(v.radar,144,242,20,"S");label(v.radar,18,119,20,"W");label(v.radar,267,119,20,i18n::german()?"O":"E");
+    label(v.radar,137,137,30,i18n::tr("You"));auto *north=label(v.radar,209,238,90,i18n::tr("North up"),0x9aa5bd);lv_obj_set_style_text_align(north,LV_TEXT_ALIGN_RIGHT,0);
+    label(v.radar,0,243,100,(std::string(i18n::tr("Low "))+LV_SYMBOL_RIGHT+i18n::tr(" High")).c_str(),0x9aa5bd);
     lv_obj_add_event_cb(v.radar,[](lv_event_t *e){
         auto &v=*static_cast<NearbyPlanesView *>(lv_event_get_user_data(e));
         auto *input=lv_indev_active();if(!input)return;
@@ -504,12 +506,12 @@ void nearby_planes_create(NearbyPlanesView &v,lv_obj_t *parent) {
     v.card=lv_obj_create(v.root);plain(v.card);lv_obj_set_pos(v.card,10,294);lv_obj_set_size(v.card,300,108);
     lv_obj_set_style_border_width(v.card,1,0);lv_obj_set_style_border_color(v.card,lv_color_hex(MINT),0);
     lv_obj_set_style_bg_color(v.card,lv_color_hex(0x293448),LV_STATE_PRESSED);lv_obj_set_style_bg_opa(v.card,LV_OPA_COVER,LV_STATE_PRESSED);
-    v.look=label(v.card,10,7,280,"Looking for aircraft",MINT);lv_obj_set_style_text_font(v.look,&lv_font_montserrat_24,0);
+    v.look=label(v.card,10,7,280,i18n::tr("Looking for aircraft"),MINT);lv_obj_set_style_text_font(v.look,i18n::font24(),0);
     label(v.card,280,13,14,LV_SYMBOL_RIGHT,MINT);
     v.route=label(v.card,10,70,280,"",MINT);
     v.distance=label(v.card,10,38,280,"");v.identity=label(v.card,10,61,280,"");v.type=label(v.card,10,83,280,"");
     lv_obj_add_event_cb(v.card,[](lv_event_t *e){auto &v=*static_cast<NearbyPlanesView *>(lv_event_get_user_data(e));show_details(v);},LV_EVENT_CLICKED,&v);
-    v.status=label(v.root,10,412,152,"Waiting for aircraft",0x9aa5bd);
+    v.status=label(v.root,10,412,152,i18n::tr("Waiting for aircraft"),0x9aa5bd);
     v.page=label(v.root,216,412,46,"0/0",0x9aa5bd);
     lv_obj_set_style_text_align(v.page,LV_TEXT_ALIGN_CENTER,0);
     v.previous=lv_button_create(v.root);

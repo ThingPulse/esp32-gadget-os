@@ -148,6 +148,7 @@ int main(int argc,char **argv) {
             frame[dst]=pixels[src+2];frame[dst+1]=pixels[src+1];frame[dst+2]=pixels[src];
         }lv_display_flush_ready(d);
     });
+    if(const char *language=std::getenv("GADGET_OS_LANGUAGE")){assert(i18n::set_language(language));i18n::apply_fonts(display);}
     stock_ticker_app_launch();capture("stocks-watchlist");
     assert(lv_obj_get_child_count(ctx.body)==10);
     lv_obj_send_event(lv_obj_get_child(ctx.body,2),LV_EVENT_CLICKED,nullptr);

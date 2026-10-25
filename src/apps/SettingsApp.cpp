@@ -1,3 +1,4 @@
+#include "ui/I18n.h"
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"
 #include "SystemVersion.h"
@@ -48,11 +49,11 @@ static void update_settings_refresh(lv_timer_t *)
   if (!update_settings_ctx.status || !lv_obj_is_valid(update_settings_ctx.status)) return;
   UpdateService &updates=UpdateService::instance(); char text[192];
   switch (updates.state()) {
-    case UpdateService::State::Checking: std::snprintf(text,sizeof(text),"Checking for updates..."); break;
-    case UpdateService::State::Available: std::snprintf(text,sizeof(text),"Version %s is available. Return to the app to install it.",updates.available_version().c_str()); break;
-    case UpdateService::State::Downloading: std::snprintf(text,sizeof(text),"Installing... %d%%",updates.progress_percent()); break;
+    case UpdateService::State::Checking: std::snprintf(text,sizeof(text),"%s",i18n::tr("Checking for updates...")); break;
+    case UpdateService::State::Available: std::snprintf(text,sizeof(text),i18n::tr("Version %s is available. Return to the app to install it."),updates.available_version().c_str()); break;
+    case UpdateService::State::Downloading: std::snprintf(text,sizeof(text),i18n::tr("Installing... %d%%"),updates.progress_percent()); break;
     case UpdateService::State::Error: std::snprintf(text,sizeof(text),"%s",updates.error().c_str()); break;
-    default: std::snprintf(text,sizeof(text),"Gadget OS %s is installed.",updates.current_version()); break;
+    default: std::snprintf(text,sizeof(text),i18n::tr("Gadget OS %s is installed."),updates.current_version()); break;
   }
   lv_label_set_text(update_settings_ctx.status,text);
 }
@@ -81,28 +82,28 @@ static void open_update_screen(lv_event_t *e)
   lv_obj_t *settings_scr=(lv_obj_t*)lv_event_get_user_data(e);
   lv_obj_t *scr=lv_obj_create(nullptr); lv_obj_set_style_bg_color(scr,lv_color_hex(0x1e2030),0);
   lv_obj_set_style_bg_opa(scr,LV_OPA_COVER,0); lv_obj_set_style_pad_all(scr,0,0);
-  make_top_bar(scr,"Software Update",settings_scr,false);
+  make_top_bar(scr,i18n::tr("Software Update"),settings_scr,false);
   lv_obj_t *content=lv_obj_create(scr); lv_obj_set_pos(content,0,44); lv_obj_set_size(content,lv_pct(100),436);
   lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0); lv_obj_set_style_border_width(content,0,0);
   lv_obj_set_scrollbar_mode(content,LV_SCROLLBAR_MODE_OFF);
   lv_obj_set_style_pad_all(content,16,0); lv_obj_set_style_pad_row(content,14,0);
   lv_obj_set_layout(content,LV_LAYOUT_FLEX); lv_obj_set_flex_flow(content,LV_FLEX_FLOW_COLUMN);
-  lv_obj_t *version=lv_label_create(content); char value[80]; std::snprintf(value,sizeof(value),"Installed version\n%s",UpdateService::current_version());
+  lv_obj_t *version=lv_label_create(content); char value[80]; std::snprintf(value,sizeof(value),i18n::tr("Installed version\n%s"),UpdateService::current_version());
   lv_label_set_text(version,value); lv_obj_set_style_text_color(version,lv_color_white(),0);
   lv_obj_t *channel_row=lv_obj_create(content); lv_obj_set_size(channel_row,lv_pct(100),58);
   lv_obj_set_style_bg_color(channel_row,lv_color_hex(0x2a2d42),0); lv_obj_set_style_border_width(channel_row,0,0);
   lv_obj_clear_flag(channel_row,LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_t *channel_label=lv_label_create(channel_row); lv_label_set_text(channel_label,"Include prereleases"); lv_obj_align(channel_label,LV_ALIGN_LEFT_MID,0,0);
+  lv_obj_t *channel_label=lv_label_create(channel_row); lv_label_set_text(channel_label,i18n::tr("Include prereleases")); lv_obj_align(channel_label,LV_ALIGN_LEFT_MID,0,0);
   lv_obj_set_style_text_color(channel_label,lv_color_white(),0);
   lv_obj_t *channel_switch=lv_switch_create(channel_row); lv_obj_align(channel_switch,LV_ALIGN_RIGHT_MID,0,0);
   if (UpdateService::instance().channel()==UpdateService::Channel::Prerelease) lv_obj_add_state(channel_switch,LV_STATE_CHECKED);
   lv_obj_add_event_cb(channel_switch,update_channel_changed,LV_EVENT_VALUE_CHANGED,nullptr);
   lv_obj_t *hint=lv_label_create(content); lv_obj_set_width(hint,lv_pct(100)); lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);
-  lv_label_set_text(hint,"Stable updates are recommended. Prereleases may contain unfinished features.");
+  lv_label_set_text(hint,i18n::tr("Stable updates are recommended. Prereleases may contain unfinished features."));
   lv_obj_set_style_text_color(hint,lv_color_hex(0xb7bdd7),0);
   lv_obj_t *check=lv_button_create(content); lv_obj_set_size(check,lv_pct(100),46); lv_obj_add_event_cb(check,update_check_clicked,LV_EVENT_CLICKED,nullptr);
   if (!UpdateService::supported()) lv_obj_add_state(check,LV_STATE_DISABLED);
-  lv_obj_t *check_label=lv_label_create(check); lv_label_set_text(check_label,"Check for updates");
+  lv_obj_t *check_label=lv_label_create(check); lv_label_set_text(check_label,i18n::tr("Check for updates"));
   lv_obj_set_style_text_color(check_label,lv_color_white(),0); lv_obj_center(check_label);
   update_settings_ctx.status=lv_label_create(content); lv_obj_set_width(update_settings_ctx.status,lv_pct(100));
   lv_label_set_long_mode(update_settings_ctx.status,LV_LABEL_LONG_WRAP); lv_obj_set_style_text_color(update_settings_ctx.status,lv_color_white(),0);
@@ -167,20 +168,20 @@ static void refresh_system_info(lv_timer_t *timer)
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
   format_memory_size(free_size, sizeof(free_size), ESP.getFreeHeap());
   format_memory_size(total_size, sizeof(total_size), ESP.getHeapSize());
-  std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
+  std::snprintf(value, sizeof(value), i18n::tr("%s free / %s total"), free_size, total_size);
   lv_label_set_text(context->internal_heap, value);
 
   format_memory_size(free_size, sizeof(free_size), ESP.getMaxAllocHeap());
   format_memory_size(extra_size, sizeof(extra_size), ESP.getMinFreeHeap());
-  std::snprintf(value, sizeof(value), "%s largest / %s minimum free", free_size, extra_size);
+  std::snprintf(value, sizeof(value), i18n::tr("%s largest / %s minimum free"), free_size, extra_size);
   lv_label_set_text(context->internal_heap_health, value);
 
   if (ESP.getPsramSize() > 0) {
     format_memory_size(free_size, sizeof(free_size), ESP.getFreePsram());
     format_memory_size(total_size, sizeof(total_size), ESP.getPsramSize());
-    std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
+    std::snprintf(value, sizeof(value), i18n::tr("%s free / %s total"), free_size, total_size);
   } else {
-    std::snprintf(value, sizeof(value), "Not available");
+    std::snprintf(value,sizeof(value),"%s",i18n::tr("Not available"));
   }
   lv_label_set_text(context->psram, value);
 #endif
@@ -189,11 +190,11 @@ static void refresh_system_info(lv_timer_t *timer)
   lv_mem_monitor(&memory);
   format_memory_size(free_size, sizeof(free_size), memory.free_size);
   format_memory_size(total_size, sizeof(total_size), memory.total_size);
-  std::snprintf(value, sizeof(value), "%s free / %s total, %u%% used",
+  std::snprintf(value, sizeof(value), i18n::tr("%s free / %s total, %u%% used"),
                 free_size, total_size, (unsigned)memory.used_pct);
   lv_label_set_text(context->lvgl_heap, value);
 
-  std::snprintf(value, sizeof(value), "%lu seconds", (unsigned long)(lv_tick_get() / 1000U));
+  std::snprintf(value, sizeof(value), i18n::tr("%lu seconds"), (unsigned long)(lv_tick_get() / 1000U));
   lv_label_set_text(context->uptime, value);
 }
 
@@ -219,7 +220,7 @@ static void open_system_screen(lv_event_t *e)
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
-  make_top_bar(scr, "System", settings_scr, false);
+  make_top_bar(scr, i18n::tr("System"), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, 44);
@@ -231,46 +232,46 @@ static void open_system_screen(lv_event_t *e)
   lv_obj_set_layout(content, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
-  add_system_info_row(content, "Gadget OS version", GADGET_OS_VERSION);
-  add_system_info_row(content, "Build", __DATE__ " " __TIME__);
+  add_system_info_row(content, i18n::tr("Gadget OS version"), GADGET_OS_VERSION);
+  add_system_info_row(content, i18n::tr("Build"), __DATE__ " " __TIME__);
 
   auto *refresh_context = new SystemInfoRefreshContext();
 
   char value[96] = {0};
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
-  std::snprintf(value, sizeof(value), "%s rev %u, %u cores @ %u MHz",
+  std::snprintf(value, sizeof(value), i18n::tr("%s rev %u, %u cores @ %u MHz"),
                 ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(),
                 (unsigned)ESP.getCpuFreqMHz());
-  add_system_info_row(content, "Hardware", value);
+  add_system_info_row(content, i18n::tr("Hardware"), value);
   add_system_info_row(content, "ESP-IDF", ESP.getSdkVersion());
 
   char free_size[20], total_size[20], extra_size[20];
   format_memory_size(free_size, sizeof(free_size), ESP.getFreeHeap());
   format_memory_size(total_size, sizeof(total_size), ESP.getHeapSize());
-  std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
-  refresh_context->internal_heap = add_system_info_row(content, "Internal heap", value);
+  std::snprintf(value, sizeof(value), i18n::tr("%s free / %s total"), free_size, total_size);
+  refresh_context->internal_heap = add_system_info_row(content, i18n::tr("Internal heap"), value);
 
   format_memory_size(free_size, sizeof(free_size), ESP.getMaxAllocHeap());
   format_memory_size(extra_size, sizeof(extra_size), ESP.getMinFreeHeap());
-  std::snprintf(value, sizeof(value), "%s largest / %s minimum free", free_size, extra_size);
-  refresh_context->internal_heap_health = add_system_info_row(content, "Internal heap health", value);
+  std::snprintf(value, sizeof(value), i18n::tr("%s largest / %s minimum free"), free_size, extra_size);
+  refresh_context->internal_heap_health = add_system_info_row(content, i18n::tr("Internal heap health"), value);
 
   if (ESP.getPsramSize() > 0) {
     format_memory_size(free_size, sizeof(free_size), ESP.getFreePsram());
     format_memory_size(total_size, sizeof(total_size), ESP.getPsramSize());
-    std::snprintf(value, sizeof(value), "%s free / %s total", free_size, total_size);
+    std::snprintf(value, sizeof(value), i18n::tr("%s free / %s total"), free_size, total_size);
   } else {
-    std::snprintf(value, sizeof(value), "Not available");
+    std::snprintf(value,sizeof(value),"%s",i18n::tr("Not available"));
   }
   refresh_context->psram = add_system_info_row(content, "PSRAM", value);
 
   format_memory_size(free_size, sizeof(free_size), ESP.getSketchSize());
   format_memory_size(total_size, sizeof(total_size), ESP.getFlashChipSize());
-  std::snprintf(value, sizeof(value), "%s firmware / %s flash", free_size, total_size);
+  std::snprintf(value, sizeof(value), i18n::tr("%s firmware / %s flash"), free_size, total_size);
   add_system_info_row(content, "Flash", value);
 #else
-  add_system_info_row(content, "Hardware", "Native simulator");
-  add_system_info_row(content, "Framework", "Host build");
+  add_system_info_row(content, i18n::tr("Hardware"), i18n::tr("Native simulator"));
+  add_system_info_row(content, i18n::tr("Framework"), i18n::tr("Host build"));
 #endif
 
   lv_mem_monitor_t memory{};
@@ -278,12 +279,12 @@ static void open_system_screen(lv_event_t *e)
   char lvgl_free[20], lvgl_total[20];
   format_memory_size(lvgl_free, sizeof(lvgl_free), memory.free_size);
   format_memory_size(lvgl_total, sizeof(lvgl_total), memory.total_size);
-  std::snprintf(value, sizeof(value), "%s free / %s total, %u%% used",
+  std::snprintf(value, sizeof(value), i18n::tr("%s free / %s total, %u%% used"),
                 lvgl_free, lvgl_total, (unsigned)memory.used_pct);
-  refresh_context->lvgl_heap = add_system_info_row(content, "LVGL heap", value);
+  refresh_context->lvgl_heap = add_system_info_row(content, i18n::tr("LVGL heap"), value);
 
-  std::snprintf(value, sizeof(value), "%lu seconds", (unsigned long)(lv_tick_get() / 1000U));
-  refresh_context->uptime = add_system_info_row(content, "Uptime", value);
+  std::snprintf(value, sizeof(value), i18n::tr("%lu seconds"), (unsigned long)(lv_tick_get() / 1000U));
+  refresh_context->uptime = add_system_info_row(content, i18n::tr("Uptime"), value);
 
   refresh_context->timer = lv_timer_create(refresh_system_info, 1000, refresh_context);
   lv_obj_add_event_cb(scr, delete_system_info_timer, LV_EVENT_DELETE, refresh_context);
@@ -459,13 +460,13 @@ static bool fetch_ip_location(double &lat, double &lon, std::string &city, std::
   WiFiClient client;
   HTTPClient http;
   if (!http.begin(client, "http://ip-api.com/json")) {
-    error = "HTTP begin failed";
+    error = i18n::tr("HTTP begin failed");
     return false;
   }
 
   int code = http.GET();
   if (code != HTTP_CODE_OK) {
-    error = "HTTP error";
+    error = i18n::tr("HTTP error");
     http.end();
     return false;
   }
@@ -475,7 +476,7 @@ static bool fetch_ip_location(double &lat, double &lon, std::string &city, std::
 #else
   FILE *pipe = popen("curl -s --max-time 8 \"http://ip-api.com/json\"", "r");
   if (!pipe) {
-    error = "Cannot run curl";
+    error = i18n::tr("Cannot run curl");
     return false;
   }
 
@@ -485,21 +486,21 @@ static bool fetch_ip_location(double &lat, double &lon, std::string &city, std::
 
   int rc = pclose(pipe);
   if (rc != 0 || payload.empty()) {
-    error = "Network request failed";
+    error = i18n::tr("Network request failed");
     return false;
   }
 #endif
 
   JsonDocument doc;
   if (deserializeJson(doc, payload.c_str(), payload.size()) != DeserializationError::Ok) {
-    error = "Bad JSON response";
+    error = i18n::tr("Bad JSON response");
     return false;
   }
 
   std::string status = doc["status"].as<std::string>();
   if (status != "success") {
     std::string msg = doc["message"].as<std::string>();
-    error = msg.empty() ? "Lookup failed" : msg;
+    error = msg.empty() ? i18n::tr("Lookup failed") : msg;
     return false;
   }
 
@@ -517,7 +518,7 @@ static void weather_guess_location_event(lv_event_t *e)
 
   if (!weather_ctx.lat_input || !weather_ctx.lon_input || !weather_ctx.guess_result_label) return;
 
-  lv_label_set_text(weather_ctx.guess_result_label, "Guessing location...");
+  lv_label_set_text(weather_ctx.guess_result_label, i18n::tr("Guessing location..."));
   lv_refr_now(nullptr);
 
   double lat = 0.0;
@@ -527,7 +528,7 @@ static void weather_guess_location_event(lv_event_t *e)
   std::string error;
 
   if (!fetch_ip_location(lat, lon, city, region, error)) {
-    std::string label = "Location guess failed";
+    std::string label = i18n::tr("Location guess failed");
     if (!error.empty()) {
       label += ": ";
       label += error;
@@ -548,9 +549,9 @@ static void weather_guess_location_event(lv_event_t *e)
     if (!place.empty()) place += ", ";
     place += region;
   }
-  if (place.empty()) place = "unknown location";
+  if (place.empty()) place = i18n::tr("unknown location");
 
-  std::string label = "Guessed: ";
+  std::string label = i18n::tr("Guessed: ");
   label += place;
   lv_label_set_text(weather_ctx.guess_result_label, label.c_str());
 }
@@ -561,7 +562,7 @@ static void planes_guess_location_event(lv_event_t *e)
 
   if (!planes_ctx.lat_input || !planes_ctx.lon_input || !planes_ctx.guess_result_label) return;
 
-  lv_label_set_text(planes_ctx.guess_result_label, "Guessing location...");
+  lv_label_set_text(planes_ctx.guess_result_label, i18n::tr("Guessing location..."));
   lv_refr_now(nullptr);
 
   double lat = 0.0;
@@ -571,7 +572,7 @@ static void planes_guess_location_event(lv_event_t *e)
   std::string error;
 
   if (!fetch_ip_location(lat, lon, city, region, error)) {
-    std::string label = "Location guess failed";
+    std::string label = i18n::tr("Location guess failed");
     if (!error.empty()) {
       label += ": ";
       label += error;
@@ -592,9 +593,9 @@ static void planes_guess_location_event(lv_event_t *e)
     if (!place.empty()) place += ", ";
     place += region;
   }
-  if (place.empty()) place = "unknown location";
+  if (place.empty()) place = i18n::tr("unknown location");
 
-  std::string label = "Guessed: ";
+  std::string label = i18n::tr("Guessed: ");
   label += place;
   lv_label_set_text(planes_ctx.guess_result_label, label.c_str());
 }
@@ -686,15 +687,15 @@ static void wifi_show_scan_results(const std::vector<std::string> &ssids,
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     char text[96] = {0};
     std::snprintf(text, sizeof(text), "%s   %d dBm%s",
-                  ssids[i].c_str(), signal_strengths[i], secured[i] ? "   secured" : "   open");
+                  ssids[i].c_str(), signal_strengths[i], secured[i] ? i18n::tr("   secured") : i18n::tr("   open"));
     lv_label_set_text(label, text);
     lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
   }
 
   if (ssids.empty())
-    lv_label_set_text(wifi_ctx.scan_status, "No Wi-Fi networks found");
+    lv_label_set_text(wifi_ctx.scan_status, i18n::tr("No Wi-Fi networks found"));
   else
-    lv_label_set_text(wifi_ctx.scan_status, "Tap a network to select it");
+    lv_label_set_text(wifi_ctx.scan_status, i18n::tr("Tap a network to select it"));
 }
 
 static void wifi_finish_scan()
@@ -722,7 +723,7 @@ static void wifi_scan_timer_event(lv_timer_t *timer)
     if (start_result == WIFI_SCAN_FAILED) {
       if (lv_tick_get() - wifi_ctx.scan_started_ms < 2500) return;
       wifi_finish_scan();
-      lv_label_set_text(wifi_ctx.scan_status, "Could not start network scan. Tap Scan to retry.");
+      lv_label_set_text(wifi_ctx.scan_status, i18n::tr("Could not start network scan. Tap Scan to retry."));
       return;
     }
     wifi_ctx.radio_scan_started = true;
@@ -742,7 +743,7 @@ static void wifi_scan_timer_event(lv_timer_t *timer)
              (unsigned long)(lv_tick_get() - wifi_ctx.scan_started_ms));
     WiFi.scanDelete();
     wifi_finish_scan();
-    lv_label_set_text(wifi_ctx.scan_status, "Network scan failed. Tap Scan to retry.");
+    lv_label_set_text(wifi_ctx.scan_status, i18n::tr("Network scan failed. Tap Scan to retry."));
     return;
   }
 
@@ -782,7 +783,7 @@ static void wifi_scan_event(lv_event_t *e)
     lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
   lv_obj_clean(wifi_ctx.scan_results);
-  lv_label_set_text(wifi_ctx.scan_status, "Searching for Wi-Fi networks...");
+  lv_label_set_text(wifi_ctx.scan_status, i18n::tr("Searching for Wi-Fi networks..."));
   lv_obj_clear_flag(wifi_ctx.scan_loading_line, LV_OBJ_FLAG_HIDDEN);
   wifi_ctx.scan_in_progress = true;
   wifi_ctx.radio_scan_started = false;
@@ -830,7 +831,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "WiFi", settings_scr, false);
+  make_top_bar(scr, i18n::tr("WiFi"), settings_scr, false);
 
   lv_obj_t *loading_line = lv_obj_create(scr);
   lv_obj_set_size(loading_line, 76, 3);
@@ -870,7 +871,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_t *ssid_input = lv_textarea_create(content);
   lv_obj_set_width(ssid_input, lv_pct(100));
   lv_textarea_set_one_line(ssid_input, true);
-  lv_textarea_set_placeholder_text(ssid_input, "Enter SSID");
+  lv_textarea_set_placeholder_text(ssid_input, i18n::tr("Enter SSID"));
   lv_obj_add_event_cb(ssid_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(ssid_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
@@ -878,13 +879,13 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_size(scan_btn, lv_pct(100), 42);
   lv_obj_add_event_cb(scan_btn, wifi_scan_event, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *scan_btn_label = lv_label_create(scan_btn);
-  lv_label_set_text(scan_btn_label, LV_SYMBOL_REFRESH "  Scan networks");
+  lv_label_set_text(scan_btn_label, i18n::tr(LV_SYMBOL_REFRESH "  Scan networks"));
   lv_obj_center(scan_btn_label);
 
   lv_obj_t *scan_status = lv_label_create(content);
   lv_obj_set_width(scan_status, lv_pct(100));
   lv_label_set_long_mode(scan_status, LV_LABEL_LONG_WRAP);
-  lv_label_set_text(scan_status, "Scan or enter an SSID manually");
+  lv_label_set_text(scan_status, i18n::tr("Scan or enter an SSID manually"));
   lv_obj_set_style_text_color(scan_status, lv_color_hex(0xb7bdd7), 0);
 
   lv_obj_t *scan_results = lv_obj_create(content);
@@ -898,14 +899,14 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_clear_flag(scan_results, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t *pass_label = lv_label_create(content);
-  lv_label_set_text(pass_label, "Password");
+  lv_label_set_text(pass_label, i18n::tr("Password"));
   lv_obj_set_style_text_color(pass_label, lv_color_white(), 0);
 
   lv_obj_t *pass_input = lv_textarea_create(content);
   lv_obj_set_width(pass_input, lv_pct(100));
   lv_textarea_set_one_line(pass_input, true);
   lv_textarea_set_password_mode(pass_input, false);
-  lv_textarea_set_placeholder_text(pass_input, "Enter password");
+  lv_textarea_set_placeholder_text(pass_input, i18n::tr("Enter password"));
   lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(pass_input, wifi_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
@@ -921,7 +922,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, wifi_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save & Back");
+  lv_label_set_text(save_label, i18n::tr("Save & Back"));
   lv_obj_center(save_label);
 
   /* On-screen keyboard — hidden until a textarea is focused */
@@ -1026,7 +1027,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Time", settings_scr, false);
+  make_top_bar(scr, i18n::tr("Time"), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -1039,23 +1040,24 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *tz_label = lv_label_create(content);
-  lv_label_set_text(tz_label, "Region");
+  lv_label_set_text(tz_label, i18n::tr("Region"));
   lv_obj_set_style_text_color(tz_label, lv_color_white(), 0);
 
   lv_obj_t *region_roller = lv_roller_create(content);
   lv_obj_set_width(region_roller, lv_pct(100));
   lv_obj_set_height(region_roller, 120);
+  time_ctx.region_options_cache.clear();
   if (time_ctx.region_options_cache.empty()) {
     for (int i = 0; i < TimeService::region_count(); ++i) {
       if (i > 0) time_ctx.region_options_cache += "\n";
-      time_ctx.region_options_cache += TimeService::region_name(i);
+      time_ctx.region_options_cache += i18n::tr(TimeService::region_name(i));
     }
   }
   lv_roller_set_options(region_roller, time_ctx.region_options_cache.c_str(), LV_ROLLER_MODE_NORMAL);
   lv_roller_set_visible_row_count(region_roller, 4);
 
   lv_obj_t *tz_label2 = lv_label_create(content);
-  lv_label_set_text(tz_label2, "Timezone");
+  lv_label_set_text(tz_label2, i18n::tr("Timezone"));
   lv_obj_set_style_text_color(tz_label2, lv_color_white(), 0);
 
   lv_obj_t *tz_roller = lv_roller_create(content);
@@ -1084,7 +1086,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_set_style_pad_ver(fmt_row, 0, 0);
 
   lv_obj_t *fmt_label = lv_label_create(fmt_row);
-  lv_label_set_text(fmt_label, "24-hour format");
+  lv_label_set_text(fmt_label, i18n::tr("24-hour format"));
   lv_obj_set_style_text_color(fmt_label, lv_color_white(), 0);
   lv_obj_align(fmt_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1101,7 +1103,7 @@ static void open_time_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, time_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save & Back");
+  lv_label_set_text(save_label, i18n::tr("Save & Back"));
   lv_obj_center(save_label);
 
   time_ctx.settings_scr = settings_scr;
@@ -1235,13 +1237,13 @@ static void weather_add_search_result_event(lv_event_t *e)
   const auto &results = WeatherLocationSearchService::instance().results();
   if (index < 0 || index >= (int)results.size()) return;
   if ((int)weather_ctx.locations.size() >= WeatherLocationStore::MAX_LOCATIONS) {
-    lv_label_set_text(weather_ctx.search_status, "Five-location limit reached");
+    lv_label_set_text(weather_ctx.search_status, i18n::tr("Five-location limit reached"));
     return;
   }
   for (const WeatherLocation &saved : weather_ctx.locations) {
     if (std::fabs(saved.latitude - results[index].latitude) < 0.00001 &&
         std::fabs(saved.longitude - results[index].longitude) < 0.00001) {
-      lv_label_set_text(weather_ctx.search_status, "Location already saved");
+      lv_label_set_text(weather_ctx.search_status, i18n::tr("Location already saved"));
       return;
     }
   }
@@ -1250,7 +1252,7 @@ static void weather_add_search_result_event(lv_event_t *e)
   WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index);
   WeatherService::instance().reload_from_config();
   weather_update_location_rows();
-  lv_label_set_text(weather_ctx.search_status, "Location saved and selected");
+  lv_label_set_text(weather_ctx.search_status, i18n::tr("Location saved and selected"));
 }
 
 static void weather_search_event(lv_event_t *e)
@@ -1259,7 +1261,7 @@ static void weather_search_event(lv_event_t *e)
   lv_obj_t *spinner = (lv_obj_t *)lv_event_get_user_data(e);
   const char *query = lv_textarea_get_text(weather_ctx.search_input);
   if (!query || std::strlen(query) < 2) {
-    lv_label_set_text(weather_ctx.search_status, "Enter at least two characters");
+    lv_label_set_text(weather_ctx.search_status, i18n::tr("Enter at least two characters"));
     return;
   }
   if (weather_ctx.kb && lv_obj_is_valid(weather_ctx.kb)) {
@@ -1268,7 +1270,7 @@ static void weather_search_event(lv_event_t *e)
     lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
   if (WeatherLocationSearchService::instance().search(query)) {
-    lv_label_set_text(weather_ctx.search_status, "Searching...");
+    lv_label_set_text(weather_ctx.search_status, i18n::tr("Searching..."));
     if (spinner && lv_obj_is_valid(spinner)) lv_obj_clear_flag(spinner, LV_OBJ_FLAG_HIDDEN);
   }
 }
@@ -1294,7 +1296,7 @@ static void weather_search_timer_event(lv_timer_t *timer)
     lv_label_set_text(weather_ctx.result_labels[i], label.c_str());
   }
   lv_label_set_text(weather_ctx.search_status,
-                    search.error().empty() ? "Tap a result to save it" : search.error().c_str());
+                    search.error().empty() ? i18n::tr("Tap a result to save it") : search.error().c_str());
 }
 
 static void weather_settings_delete_event(lv_event_t *e)
@@ -1346,7 +1348,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Weather", settings_scr, false);
+  make_top_bar(scr, i18n::tr("Weather"), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -1359,18 +1361,18 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *layout_label = lv_label_create(content);
-  lv_label_set_text(layout_label, "Weather layout");
+  lv_label_set_text(layout_label, i18n::tr("Weather layout"));
   lv_obj_set_style_text_color(layout_label, lv_color_white(), 0);
   lv_obj_t *layout = lv_dropdown_create(content);
   lv_obj_set_width(layout, lv_pct(100));
-  lv_dropdown_set_options(layout, "Detailed\nClassic");
+  lv_dropdown_set_options(layout, i18n::tr("Detailed\nClassic"));
   auto &layout_config = ConfigStoreService::instance();
   const bool classic = !layout_config.load("weather") || layout_config.get("layout", "classic") == "classic";
   lv_dropdown_set_selected(layout, classic ? 1 : 0);
   lv_obj_add_event_cb(layout, weather_layout_changed_event, LV_EVENT_VALUE_CHANGED, nullptr);
 
   lv_obj_t *saved_title = lv_label_create(content);
-  lv_label_set_text(saved_title, "Saved locations (tap to select)");
+  lv_label_set_text(saved_title, i18n::tr("Saved locations (tap to select)"));
   lv_obj_set_style_text_color(saved_title, lv_color_white(), 0);
 
   for (int i = 0; i < WeatherLocationStore::MAX_LOCATIONS; ++i) {
@@ -1402,18 +1404,18 @@ static void open_weather_screen(lv_event_t *e)
   }
 
   lv_obj_t *search_title = lv_label_create(content);
-  lv_label_set_text(search_title, "Add a location");
+  lv_label_set_text(search_title, i18n::tr("Add a location"));
   lv_obj_set_style_text_color(search_title, lv_color_white(), 0);
   lv_obj_t *search_input = lv_textarea_create(content);
   lv_obj_set_width(search_input, lv_pct(100));
   lv_textarea_set_one_line(search_input, true);
-  lv_textarea_set_placeholder_text(search_input, "City or postal code");
+  lv_textarea_set_placeholder_text(search_input, i18n::tr("City or postal code"));
   lv_obj_add_event_cb(search_input, weather_ta_event, LV_EVENT_FOCUSED, nullptr);
   lv_obj_add_event_cb(search_input, weather_ta_event, LV_EVENT_DEFOCUSED, nullptr);
   lv_obj_t *search_btn = lv_button_create(content);
   lv_obj_set_size(search_btn, lv_pct(100), 42);
   lv_obj_t *search_btn_label = lv_label_create(search_btn);
-  lv_label_set_text(search_btn_label, "Search");
+  lv_label_set_text(search_btn_label, i18n::tr("Search"));
   lv_obj_center(search_btn_label);
   lv_obj_t *search_spinner = lv_spinner_create(search_btn);
   lv_obj_set_size(search_spinner, 20, 20);
@@ -1421,7 +1423,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_add_flag(search_spinner, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(search_btn, weather_search_event, LV_EVENT_CLICKED, search_spinner);
   lv_obj_t *search_status = lv_label_create(content);
-  lv_label_set_text(search_status, "Search uses Open-Meteo geocoding");
+  lv_label_set_text(search_status, i18n::tr("Search uses Open-Meteo geocoding"));
   lv_obj_set_width(search_status, lv_pct(100));
   lv_label_set_long_mode(search_status, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_color(search_status, lv_color_hex(0xb7bdd7), 0);
@@ -1451,7 +1453,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_set_style_pad_ver(unit_row, 0, 0);
 
   lv_obj_t *unit_label = lv_label_create(unit_row);
-  lv_label_set_text(unit_label, "Metric (C)");
+  lv_label_set_text(unit_label, i18n::tr("Metric (C)"));
   lv_obj_set_style_text_color(unit_label, lv_color_white(), 0);
   lv_obj_align(unit_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1469,7 +1471,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_add_event_cb(unit_switch, weather_unit_changed_event, LV_EVENT_VALUE_CHANGED, nullptr);
 
   lv_obj_t *autosave_label = lv_label_create(content);
-  lv_label_set_text(autosave_label, "Changes are saved automatically");
+  lv_label_set_text(autosave_label, i18n::tr("Changes are saved automatically"));
   lv_obj_set_style_text_color(autosave_label, lv_color_hex(0xb7bdd7), 0);
 
   lv_obj_t *kb = lv_keyboard_create(scr);
@@ -1581,7 +1583,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Planes", settings_scr, false);
+  make_top_bar(scr, i18n::tr("Planes"), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -1594,7 +1596,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *lat_label = lv_label_create(content);
-  lv_label_set_text(lat_label, "Center Latitude");
+  lv_label_set_text(lat_label, i18n::tr("Center Latitude"));
   lv_obj_set_style_text_color(lat_label, lv_color_white(), 0);
 
   lv_obj_t *lat_input = lv_textarea_create(content);
@@ -1606,7 +1608,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(lat_input, planes_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
   lv_obj_t *lon_label = lv_label_create(content);
-  lv_label_set_text(lon_label, "Center Longitude");
+  lv_label_set_text(lon_label, i18n::tr("Center Longitude"));
   lv_obj_set_style_text_color(lon_label, lv_color_white(), 0);
 
   lv_obj_t *lon_input = lv_textarea_create(content);
@@ -1623,7 +1625,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(guess_btn, planes_guess_location_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *guess_label = lv_label_create(guess_btn);
-  lv_label_set_text(guess_label, "Guess from IP");
+  lv_label_set_text(guess_label, i18n::tr("Guess from IP"));
   lv_obj_center(guess_label);
 
   lv_obj_t *guess_result_label = lv_label_create(content);
@@ -1631,7 +1633,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_text_color(guess_result_label, lv_color_hex(0xb7bdd7), 0);
 
   lv_obj_t *range_label = lv_label_create(content);
-  lv_label_set_text(range_label, "Visibility Range (km)");
+  lv_label_set_text(range_label, i18n::tr("Visibility Range (km)"));
   lv_obj_set_style_text_color(range_label, lv_color_white(), 0);
 
   lv_obj_t *range_input = lv_textarea_create(content);
@@ -1643,7 +1645,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(range_input, planes_ta_event, LV_EVENT_DEFOCUSED, nullptr);
 
   lv_obj_t *status_label = lv_label_create(content);
-  lv_label_set_text(status_label, "Used to compute OpenSky bounding box.");
+  lv_label_set_text(status_label, i18n::tr("Used to compute OpenSky bounding box."));
   lv_obj_set_style_text_color(status_label, lv_color_hex(0xb7bdd7), 0);
 
   // Metric toggle
@@ -1657,7 +1659,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_pad_hor(unit_row, 16, 0);
   lv_obj_set_style_pad_ver(unit_row, 0, 0);
   lv_obj_t *unit_label = lv_label_create(unit_row);
-  lv_label_set_text(unit_label, "Metric units");
+  lv_label_set_text(unit_label, i18n::tr("Metric units"));
   lv_obj_set_style_text_color(unit_label, lv_color_white(), 0);
   lv_obj_align(unit_label, LV_ALIGN_LEFT_MID, 0, 0);
   lv_obj_t *unit_switch = lv_switch_create(unit_row);
@@ -1674,7 +1676,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_pad_hor(hg_row, 16, 0);
   lv_obj_set_style_pad_ver(hg_row, 0, 0);
   lv_obj_t *hg_label = lv_label_create(hg_row);
-  lv_label_set_text(hg_label, "Hide planes on ground");
+  lv_label_set_text(hg_label, i18n::tr("Hide planes on ground"));
   lv_obj_set_style_text_color(hg_label, lv_color_white(), 0);
   lv_obj_align(hg_label, LV_ALIGN_LEFT_MID, 0, 0);
   lv_obj_t *hide_ground_switch = lv_switch_create(hg_row);
@@ -1704,7 +1706,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, planes_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save & Back");
+  lv_label_set_text(save_label, i18n::tr("Save & Back"));
   lv_obj_center(save_label);
 
   lv_obj_t *kb = lv_keyboard_create(scr);
@@ -1786,7 +1788,7 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Display", settings_scr, false);
+  make_top_bar(scr, i18n::tr("Display"), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, 44);
@@ -1799,7 +1801,7 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
   lv_obj_t *brightness_title = lv_label_create(content);
-  lv_label_set_text(brightness_title, "Brightness");
+  lv_label_set_text(brightness_title, i18n::tr("Brightness"));
   lv_obj_set_style_text_color(brightness_title, lv_color_white(), 0);
 
   lv_obj_t *brightness_row = lv_obj_create(content);
@@ -1824,12 +1826,12 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_add_event_cb(brightness_slider, display_brightness_slider_event, LV_EVENT_VALUE_CHANGED, brightness_value_label);
 
   lv_obj_t *rotation_title = lv_label_create(content);
-  lv_label_set_text(rotation_title, "Screen Rotation");
+  lv_label_set_text(rotation_title, i18n::tr("Screen Rotation"));
   lv_obj_set_style_text_color(rotation_title, lv_color_white(), 0);
 
   lv_obj_t *rotation_dropdown = lv_dropdown_create(content);
   lv_obj_set_width(rotation_dropdown, lv_pct(100));
-  lv_dropdown_set_options(rotation_dropdown, "0\xb0 (Portrait)\n90\xb0 (Landscape)\n180\xb0 (Portrait Inverted)\n270\xb0 (Landscape Inverted)");
+  lv_dropdown_set_options(rotation_dropdown, i18n::tr("0° (Portrait)\n90° (Landscape)\n180° (Portrait Inverted)\n270° (Landscape Inverted)"));
 
   lv_obj_t *fps_row = lv_obj_create(content);
   lv_obj_set_size(fps_row, lv_pct(100), 56);
@@ -1841,7 +1843,7 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_set_style_pad_hor(fps_row, 14, 0);
 
   lv_obj_t *fps_label = lv_label_create(fps_row);
-  lv_label_set_text(fps_label, "Show FPS monitor");
+  lv_label_set_text(fps_label, i18n::tr("Show FPS monitor"));
   lv_obj_set_style_text_color(fps_label, lv_color_white(), 0);
   lv_obj_align(fps_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1875,7 +1877,7 @@ static void open_display_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, display_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, "Save & Back");
+  lv_label_set_text(save_label, i18n::tr("Save & Back"));
   lv_obj_center(save_label);
 
   display_ctx.settings_scr = settings_scr;
@@ -1898,7 +1900,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, "Settings", home_scr, true);
+  make_top_bar(scr, i18n::tr("Settings"), home_scr, true);
 
   /* Settings list */
   lv_obj_t *list = lv_obj_create(scr);
@@ -1910,6 +1912,33 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_set_style_pad_row(list, 8, 0);
   lv_obj_set_layout(list, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+
+  // Language changes are applied on the next main-loop iteration so this
+  // callback never destroys the dropdown or button while handling its event.
+  lv_obj_t *language_row=lv_obj_create(list);
+  lv_obj_set_size(language_row,lv_pct(100),120);
+  lv_obj_clear_flag(language_row,LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(language_row,lv_color_hex(0x2a2d42),0);
+  lv_obj_set_style_border_width(language_row,0,0);
+  lv_obj_set_style_pad_all(language_row,10,0);
+  auto *language_title=lv_label_create(language_row);
+  lv_label_set_text(language_title,"Language / Sprache");
+  lv_obj_set_style_text_color(language_title,lv_color_white(),0);
+  auto *language_choice=lv_dropdown_create(language_row);
+  lv_dropdown_set_options(language_choice,"English\nDeutsch");
+  lv_obj_set_pos(language_choice,0,24);lv_obj_set_size(language_choice,lv_pct(100),36);
+  lv_dropdown_set_selected(language_choice,i18n::german()?1:0);
+  auto *language_apply=lv_button_create(language_row);
+  lv_obj_set_pos(language_apply,0,66);lv_obj_set_size(language_apply,lv_pct(100),34);
+  auto *language_caption=lv_label_create(language_apply);
+  lv_label_set_text(language_caption,i18n::tr("Apply language"));lv_obj_center(language_caption);
+  lv_obj_add_event_cb(language_apply,[](lv_event_t *event){
+    auto *choice=static_cast<lv_obj_t*>(lv_event_get_user_data(event));
+    if(!i18n::set_language(lv_dropdown_get_selected(choice)?"de":"en")){
+      auto *button=static_cast<lv_obj_t*>(lv_event_get_target(event));
+      lv_label_set_text(lv_obj_get_child(button,0),i18n::tr("Could not save language"));
+    }
+  },LV_EVENT_CLICKED,language_choice);
 
   /* System row */
   lv_obj_t *system_row = lv_obj_create(list);
@@ -1925,7 +1954,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(system_row, open_system_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *system_label = lv_label_create(system_row);
-  lv_label_set_text(system_label, LV_SYMBOL_SETTINGS "  System");
+  lv_label_set_text(system_label, i18n::tr(LV_SYMBOL_SETTINGS "  System"));
   lv_obj_set_style_text_color(system_label, lv_color_white(), 0);
   lv_obj_align(system_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1948,7 +1977,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(row, open_wifi_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *wifi_label = lv_label_create(row);
-  lv_label_set_text(wifi_label, LV_SYMBOL_WIFI "  WiFi");
+  lv_label_set_text(wifi_label, i18n::tr(LV_SYMBOL_WIFI "  WiFi"));
   lv_obj_set_style_text_color(wifi_label, lv_color_white(), 0);
   lv_obj_align(wifi_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1971,7 +2000,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(time_row, open_time_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *time_label = lv_label_create(time_row);
-  lv_label_set_text(time_label, LV_SYMBOL_BELL "  Time");
+  lv_label_set_text(time_label, i18n::tr(LV_SYMBOL_BELL "  Time"));
   lv_obj_set_style_text_color(time_label, lv_color_white(), 0);
   lv_obj_align(time_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -1994,7 +2023,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(weather_row, open_weather_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *weather_label = lv_label_create(weather_row);
-  lv_label_set_text(weather_label, LV_SYMBOL_EYE_OPEN "  Weather");
+  lv_label_set_text(weather_label, i18n::tr(LV_SYMBOL_EYE_OPEN "  Weather"));
   lv_obj_set_style_text_color(weather_label, lv_color_white(), 0);
   lv_obj_align(weather_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -2017,7 +2046,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(display_row, open_display_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *display_label = lv_label_create(display_row);
-  lv_label_set_text(display_label, LV_SYMBOL_IMAGE "  Display");
+  lv_label_set_text(display_label, i18n::tr(LV_SYMBOL_IMAGE "  Display"));
   lv_obj_set_style_text_color(display_label, lv_color_white(), 0);
   lv_obj_align(display_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -2040,7 +2069,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_event_cb(planes_row, open_planes_screen, LV_EVENT_CLICKED, scr);
 
   lv_obj_t *planes_label = lv_label_create(planes_row);
-  lv_label_set_text(planes_label, LV_SYMBOL_GPS "  Planes");
+  lv_label_set_text(planes_label, i18n::tr(LV_SYMBOL_GPS "  Planes"));
   lv_obj_set_style_text_color(planes_label, lv_color_white(), 0);
   lv_obj_align(planes_label, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -2061,7 +2090,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_add_flag(update_row, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(update_row, open_update_screen, LV_EVENT_CLICKED, scr);
   lv_obj_t *update_label = lv_label_create(update_row);
-  lv_label_set_text(update_label, LV_SYMBOL_DOWNLOAD "  Software Update");
+  lv_label_set_text(update_label, i18n::tr(LV_SYMBOL_DOWNLOAD "  Software Update"));
   lv_obj_set_style_text_color(update_label, lv_color_white(), 0);
   lv_obj_align(update_label, LV_ALIGN_LEFT_MID, 0, 0);
   lv_obj_t *update_chevron = lv_label_create(update_row);
