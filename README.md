@@ -4,7 +4,7 @@
 
 Gadget OS is an LVGL-based application shell for ThingPulse Color Kit devices. It provides a touch-oriented home screen, persistent settings, background network services, and a native SDL simulator for developing the UI without flashing hardware.
 
-The project is under active development. The main launcher shows Weather, Planes and Calculator on the first row, with Settings on the second row. Experimental apps remain on the Labs page.
+The project is under active development. The main launcher includes Weather, Planes, Transit, Stocks, Calculator, and Settings. Experimental apps remain on the Labs page.
 
 For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 
@@ -22,7 +22,8 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 - Weather for multiple saved locations, hourly and daily forecasts, cached results, and pull-to-refresh
 - Nearby-aircraft radar, plain-language spotting cards, flight-details dialog, and route enrichment
 - Calculator
-- Experimental stock watchlist and daily charts on the Labs page, using Yahoo without an API key
+- Stock watchlist and daily charts, using Yahoo without an API key
+- Public transport departures, realtime predictions, favourite stops, and trip details using Transitous
 - Wi-Fi, time zone, display, weather, and application settings
 - System information page with live heap, PSRAM, LVGL memory, and uptime values
 - User-approved, dual-partition OTA updates with stable and prerelease channels
@@ -31,6 +32,14 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 - Native SDL build for faster UI development
 
 Network data currently comes from services including Open-Meteo, adsb.lol, and adsbdb. These integrations do not currently require users to enter subscription API keys, but they remain subject to the respective providers' availability and usage policies.
+
+Screenshots from the native simulator, using illustrative data. Select an image to view it at full size.
+
+| Launcher | Weather | Planes |
+| :---: | :---: | :---: |
+| <a href="documents/user-guide/screenshots/home.png"><img src="documents/user-guide/screenshots/home.png" alt="Gadget OS Launcher screen" width="200"></a> | <a href="documents/user-guide/screenshots/weather.png"><img src="documents/user-guide/screenshots/weather.png" alt="Gadget OS Weather screen" width="200"></a> | <a href="documents/user-guide/screenshots/planes.png"><img src="documents/user-guide/screenshots/planes.png" alt="Gadget OS Planes screen" width="200"></a> |
+| **Transit**<br><a href="documents/user-guide/screenshots/transit.png"><img src="documents/user-guide/screenshots/transit.png" alt="Gadget OS Transit screen" width="200"></a> | **Stocks**<br><a href="documents/user-guide/screenshots/stocks.png"><img src="documents/user-guide/screenshots/stocks.png" alt="Gadget OS Stocks screen" width="200"></a> | **Calculator**<br><a href="documents/user-guide/screenshots/calculator.png"><img src="documents/user-guide/screenshots/calculator.png" alt="Gadget OS Calculator screen" width="200"></a> |
+| **Settings**<br><a href="documents/user-guide/screenshots/settings.png"><img src="documents/user-guide/screenshots/settings.png" alt="Gadget OS Settings screen" width="200"></a> | **Dice Score (Labs)**<br><a href="documents/user-guide/screenshots/dice-score.png"><img src="documents/user-guide/screenshots/dice-score.png" alt="Gadget OS Dice Score (Labs) screen" width="200"></a> | **Weather Icons (Labs)**<br><a href="documents/user-guide/screenshots/weather-icons.png"><img src="documents/user-guide/screenshots/weather-icons.png" alt="Gadget OS Weather Icons (Labs) screen" width="200"></a> |
 
 ## Prerequisites
 
