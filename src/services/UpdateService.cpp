@@ -67,7 +67,8 @@ bool https_get(const std::string &url, std::string &body, int *status_code=nullp
     HTTPClient http; http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.setConnectTimeout(7000); http.setTimeout(12000);
     if (!http.begin(client,url.c_str())) return false;
-    http.addHeader(i18n::tr("Accept"),"application/json"); http.addHeader("User-Agent","gadget-os/" GADGET_OS_VERSION);
+    // HTTP header names are protocol tokens, never translated UI text.
+    http.addHeader("Accept","application/json"); http.addHeader("User-Agent","gadget-os/" GADGET_OS_VERSION);
     int code=http.GET();
     if (status_code) *status_code=code;
     if (code!=HTTP_CODE_OK) { http.end(); return false; }

@@ -10,7 +10,7 @@ root = Path(__file__).resolve().parent.parent
 os.chdir(root)
 build = root / '.pio/build/native'
 objects = [p for p in (build / 'src').rglob('*.o')
-           if p.name not in {'SettingsApp.o', 'SettingsApp.cpp.o', 'sdl_main.o', 'sdl_main.cpp.o'}]
+           if p.name not in {'SettingsApp.o', 'SettingsApp.cpp.o', 'CalculatorApp.o', 'CalculatorApp.cpp.o', 'sdl_main.o', 'sdl_main.cpp.o'}]
 for library in build.glob('lib*'):
     archives = list(library.glob('*.a'))
     objects.extend(archives or list(library.rglob('*.o')))

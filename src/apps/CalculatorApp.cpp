@@ -39,8 +39,6 @@ static void nav_back_event(lv_event_t *e)
 
 static std::string format_value(double value)
 {
-  if (std::isnan(value) || std::isinf(value)) return i18n::tr("Error");
-
   char buf[64] = {0};
   std::snprintf(buf, sizeof(buf), "%.10g", value);
   return std::string(buf);
@@ -49,7 +47,7 @@ static std::string format_value(double value)
 static void update_display()
 {
   if (!calc_ctx.display_label || !lv_obj_is_valid(calc_ctx.display_label)) return;
-  lv_label_set_text(calc_ctx.display_label, calc_ctx.input.c_str());
+  lv_label_set_text(calc_ctx.display_label, calc_ctx.has_error ? i18n::tr("Error") : calc_ctx.input.c_str());
 }
 
 static double current_value()
@@ -60,7 +58,7 @@ static double current_value()
 static void set_error_state()
 {
   calc_ctx.has_error = true;
-  calc_ctx.input = i18n::tr("Error");
+  calc_ctx.input = "0";
   calc_ctx.accumulator = 0.0;
   calc_ctx.pending_op = 0;
   calc_ctx.entering_new = true;
@@ -69,11 +67,11 @@ static void set_error_state()
 
 static void set_input_from_double(double value)
 {
-  calc_ctx.input = format_value(value);
-  if (calc_ctx.input == i18n::tr("Error")) {
+  if (!std::isfinite(value)) {
     set_error_state();
     return;
   }
+  calc_ctx.input = format_value(value);
   update_display();
 }
 
@@ -182,9 +180,8 @@ static void handle_sign_toggle()
 
   double value = current_value();
   value = -value;
-  calc_ctx.input = format_value(value);
   calc_ctx.entering_new = false;
-  update_display();
+  set_input_from_double(value);
 }
 
 static void handle_percent()
@@ -192,9 +189,8 @@ static void handle_percent()
   if (calc_ctx.has_error) return;
 
   double value = current_value() / 100.0;
-  calc_ctx.input = format_value(value);
   calc_ctx.entering_new = false;
-  update_display();
+  set_input_from_double(value);
 }
 
 static void on_calc_button(lv_event_t *e)

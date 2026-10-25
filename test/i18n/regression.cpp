@@ -4,6 +4,14 @@
 #include "ui/I18n.h"
 #include "ui/AsciiFold.h"
 #include "../../src/apps/SettingsApp.cpp"
+// Both app implementations share this test translation unit.
+#pragma push_macro("APP_REGISTER_COLOR_RANK")
+#undef APP_REGISTER_COLOR_RANK
+#define APP_REGISTER_COLOR_RANK(name, symbol, fn, color, rank) \
+ static bool calculator_test_registration = AppRegistry::instance().registerApp(App{name, symbol, fn, color, rank})
+#include "../../src/apps/CalculatorApp.cpp"
+#pragma pop_macro("APP_REGISTER_COLOR_RANK")
+#include <limits>
 struct Message {const char *en,*de;};
 #include "../../src/ui/GermanMessages.inc"
 static lv_obj_t *find(lv_obj_t *root,const lv_obj_class_t *type,const char *text=nullptr){
@@ -29,6 +37,20 @@ int main(int argc,char**){
  for(auto *font:{i18n::font14(),i18n::font24()})for(uint32_t code:{0xC4,0xD6,0xDC,0xE4,0xF6,0xFC,0xDF,0x2013}){
   lv_font_glyph_dsc_t glyph{};assert(lv_font_get_glyph_dsc(font,&glyph,code,0));assert(glyph.adv_w>0);
  }
+ // Calculator errors must be numeric state, not translated sentinel strings.
+ calc_ctx.display_label=lv_label_create(lv_screen_active());
+ for(const char *language:{"en","de"}){
+  assert(i18n::set_language(language));
+  reset_calculator();handle_digit("4");handle_operator('/');handle_digit("0");handle_equals();
+  assert(calc_ctx.has_error);assert(calc_ctx.input=="0");
+  assert(!std::strcmp(lv_label_get_text(calc_ctx.display_label),i18n::tr("Error")));
+  handle_digit("7");assert(!calc_ctx.has_error&&current_value()==7);
+  set_input_from_double(std::numeric_limits<double>::infinity());assert(calc_ctx.has_error);
+  handle_digit("2");handle_operator('*');handle_digit("3");handle_equals();
+  assert(!calc_ctx.has_error&&current_value()==6);
+ }
+ lv_obj_delete(calc_ctx.display_label);calc_ctx.display_label=nullptr;
+ assert(i18n::set_language("en"));i18n::take_reload_request();
  auto *home=lv_screen_active();settings_launch();auto *settings=lv_screen_active();
  auto *choice=find(settings,&lv_dropdown_class);assert(choice);lv_dropdown_set_selected(choice,1);
  auto *caption=find(settings,&lv_label_class,"Apply language");assert(caption);
