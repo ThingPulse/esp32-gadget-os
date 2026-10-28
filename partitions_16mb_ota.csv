@@ -1,0 +1,9 @@
+# Color Kit Pro N16R2: 16 MiB flash, two 6 MiB firmware slots.
+# Pro OTA remains disabled until its device-specific update feed is supported.
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+ota_0,    app,  ota_0,   0x10000,  0x600000,
+ota_1,    app,  ota_1,   0x610000, 0x600000,
+spiffs,   data, spiffs,  0xc10000, 0x3e0000,
+coredump, data, coredump,0xff0000, 0x10000,

@@ -394,3 +394,66 @@ python3 scripts/create-enclosure-demo.py --sequence transit --language de \
 
 Use `--language en` and `--output documents/user-guide/video/transit-tour-cozy.mp4`
 for the English version.
+
+## Home — Labs (Home Assistant)
+
+Swipe the launcher to **Labs** and open **Home**. This app connects directly to
+an existing Home Assistant installation; no ThingPulse backend or MQTT broker is
+required.
+
+1. Tap **Configure**. Keep the setup screen open and scan its QR code with a phone
+   on the same trusted Wi-Fi network. You can also open the complete displayed
+   address in a browser, including `#` and the pairing code. The address remains
+   complete after opening, so you can copy it from your phone to another browser.
+   If the link expires, paste the new device setup link into the pairing form;
+   edits remain in the current tab. The device listens on port **8080** during setup only.
+2. Enter the Home Assistant base address, for example
+   `http://homeassistant.local:8123`, and a long-lived access token created in the
+   Home Assistant user profile. A dedicated user is recommended. For HTTPS, public
+   certificates are verified; private certificate authorities need their PEM root
+   certificate in the advanced field. TLS verification is never disabled.
+3. Choose **Save connection & find entities**, search by name or entity ID and
+   select up to six entities for the current page. Supported types are lights,
+   switches, sensors, binary sensors, scenes and scripts. For large installations,
+   **Search all entities** searches the whole installation. **Previous results**
+   and **Next results** browse pages of 256 matches. Discovery reads one entity
+   at a time and discards unused attributes, rather than buffering the full
+   response. **Add by entity ID** is also available. Transfer safeguards are
+   16 MiB per discovery response, 1 MiB per individual entity and a 30-second
+   transfer timeout.
+4. Under **Arrange pages**, create up to four pages, rename them, drag tiles into
+   order (or use the arrows), and edit tile names and icons. Pages are custom groups;
+   Home Assistant room assignments are not imported. Export/import saves the layout
+   only, without the server address or credentials.
+5. **Save to device**, then tap **Done** on the device. The dashboard refreshes
+   automatically. Swipe or use the arrows to change pages. Tap a light tile to turn it on or off. Its colour changes immediately and a
+   small spinner remains until Home Assistant confirms the state. Repeat taps on
+   that lamp are ignored while pending; other controls queue normally. If the
+   request fails or is not confirmed within 30 seconds, the tile returns to the
+   last confirmed state and briefly shows an error. Tap its right-hand chevron to open
+   details with power and supported brightness/colour-temperature controls. Switches
+   toggle directly; scenes and scripts activate directly. Sensors open a read-only
+   detail view.
+
+The Labs version polls configured entities in the background every five seconds
+**after the previous poll completes**, while the app is open. Commands trigger a
+refresh after completion. This is polling, not WebSocket push. Unavailable or stale
+connections disable controls; failed commands are never retried automatically.
+Light colour selection, climate, covers, media controls and arbitrary dashboard
+cards are not supported yet. The device interface supports English and German;
+this initial browser setup page is in English.
+
+The setup link contains a random session key. The server closes when you leave
+setup or after ten minutes without authenticated activity. Keep the link private.
+The local setup page uses HTTP, so use trusted Wi-Fi; do not forward port 8080 to
+the internet. The Home Assistant token is stored in the device's configuration
+filesystem (not encrypted), is not returned to the browser and is excluded from
+layout exports. An empty token field preserves the existing token only when the
+server address is unchanged. Revoking that token in Home Assistant disables access.
+
+Configuration is stored in `/config/home-assistant.json`. On the native emulator,
+the setup page binds to `127.0.0.1:8080`, so use a browser on the same computer.
+To regenerate the embedded page after editing its source, run
+`python3 scripts/generate-home-setup.py`. After a native build,
+`python3 scripts/test-home-assistant.py` tests against a local fake Home Assistant;
+it does not use real credentials or operate real devices.

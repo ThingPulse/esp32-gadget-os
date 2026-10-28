@@ -19,6 +19,7 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 ## Features
 
 - Swipeable app launcher with active and experimental apps
+- Home Assistant dashboard in Labs: configurable pages for lights, switches, sensors, scenes and scripts, with local browser setup
 - Weather for multiple saved locations, hourly and daily forecasts, cached results, and pull-to-refresh
 - Nearby-aircraft radar, plain-language spotting cards, flight-details dialog, and route enrichment
 - Calculator
@@ -126,6 +127,17 @@ pio run -e esp32-color-kit
 ```
 
 ## Color Kit Pro
+
+The Pro uses an ESP32-S3 N16R2 with **16 MiB flash and 2 MiB Quad SPI PSRAM**.
+`partitions_16mb_ota.csv` allocates two 6 MiB firmware slots and a 3.875 MiB
+filesystem, plus NVS, OTA metadata and a core-dump partition. The second slot
+reserves space for future Pro OTA support; the current OTA feed is Grande-only,
+so automatic OTA remains disabled on the Pro.
+
+**Migration from the old 4 MiB layout requires a USB upload**, including the
+partition table. The filesystem moves, so existing filesystem-backed settings
+will not carry over automatically: back up any exportable configuration and
+expect to configure the device again. No device is erased or flashed by a build.
 
 Build and upload:
 
