@@ -1,6 +1,6 @@
 #include "services/HomeAssistantService.h"
 #include "services/HomeAssistantHttp.h"
-#include "services/HomeAssistantEntityStream.h"
+#include "services/HomeAssistantDiscovery.h"
 #include "services/ConfigStoreService.h"
 #include "services/TransitService.h"
 #include "services/UpdateService.h"
@@ -25,11 +25,11 @@ const ha::Entity*HomeAssistantService::entity(const std::string&id)const{for(aut
 bool HomeAssistantService::configure(const std::string&raw,std::string&error){
  if(_running){error="Please wait for the current request";return false;}ha::Config c;if(!ha::parse_config(raw,c,error,&_config))return false;
  auto&cfg=ConfigStoreService::instance();if(!cfg.load("home-assistant")){error="Cannot open settings";return false;}cfg.set("configuration",ha::config_json(c,true));if(!cfg.save()){error="Cannot save settings";return false;}
- _actions.clear();_config=std::move(c);_entities.clear();_online=false;_notice.clear();_next=0;++_generation;++_revision;return true;
+ _actions.clear();_config=std::move(c);_entities.clear();_discovery.clear();_discovery_total=0;_online=false;_notice.clear();_next=0;++_generation;++_revision;return true;
 }
-bool HomeAssistantService::discover(size_t offset,const std::string&query,const std::string&kind){
+bool HomeAssistantService::discover(size_t offset,const std::string&query,const std::string&kind,bool hide_unavailable){
  if(_running||offset>100000||query.size()>80||(!kind.empty()&&!ha::valid_entity(kind+".example")))return false;
- _job_offset=offset;return start(1,query,kind);
+ _discovery_error.clear();_job_offset=offset;_job_hide_unavailable=hide_unavailable;return start(1,query,kind);
 }
 bool HomeAssistantService::pending(const std::string&id)const{for(auto&a:_actions)if(a.id==id)return true;return false;}
 const char*HomeAssistantService::expected_state(const std::string&id)const{for(auto&a:_actions)if(a.id==id&&!a.expected.empty())return a.expected.c_str();return nullptr;}
@@ -63,7 +63,12 @@ void HomeAssistantService::worker(void*ptr){
  { // Destroy response buffers before publishing completion and deleting the task.
  std::string raw;
  if(s._job==2){ha::request(s._job_config,s._job_path,s._job_body,raw,s._result_error);}
- else if(s._job==1){ha::EntityStream reader(s._job_offset,s._job_path,s._job_body);if(ha::request(s._job_config,"/api/states","",raw,s._result_error,&reader)){s._result=std::move(reader.items);s._result_total=reader.matches;}}
+ else if(s._job==1){
+  int status=0;
+  if(ha::request(s._job_config,"/api/template",ha::discovery_request(s._job_offset,s._job_path,s._job_body,s._job_hide_unavailable),raw,s._result_error,nullptr,&status))
+   ha::parse_discovery(raw,s._job_offset,s._result,s._result_total,s._result_error);
+  else if(status==403)s._result_error="Entity search requires a Home Assistant administrator token. You can still add entities by ID.";
+ }
  else {
   // Poll only configured entities, never the entire installation during normal use.
   for(auto&p:s._job_config.pages)for(auto&t:p.tiles){
@@ -86,9 +91,10 @@ void HomeAssistantService::loop(){
  if(_running&&_finished.load(std::memory_order_acquire)){
   _running=false;
   if(_job_generation==_generation){
+   if(_job==1)_discovery_error=_result_error;
    if(!_result_error.empty()){_notice=_result_error;_notice_until=now()+5000;}else if(!_notice_until)_notice.clear();
    _online=_result_error.empty();
-   if(_online){_seen=now();if(_job!=2)_entities=std::move(_result);if(_job==1){_discovery_total=_result_total;_discovery_offset=_job_offset;}}
+   if(_online){_seen=now();if(_job==0)_entities=std::move(_result);if(_job==1){_discovery=std::move(_result);_discovery_total=_result_total;_discovery_offset=_job_offset;_discovery_query=_job_path;_discovery_kind=_job_body;_discovery_hide_unavailable=_job_hide_unavailable;}}
    for(auto i=_actions.begin();i!=_actions.end();){
     bool remove=false;
     if(_job==2&&i->serial==_job_action){i->accepted=_online;remove=!_online||i->expected.empty();}
@@ -132,13 +138,13 @@ std::string HomeAssistantService::setup_request(const std::string&method,const s
  _setup_until=now()+600000;
  if(method=="GET"&&path=="/api/config")return ha::config_json(_config);
  if(method=="GET"&&path=="/api/status"){
-  d["total"]=_discovery_total;d["offset"]=_discovery_offset;d["page_size"]=ha::MaxEntities;d["busy"]=_running;d["error"]=_notice;d["connected"]=connected();auto a=d["entities"].to<JsonArray>();for(auto&e:_entities){auto o=a.add<JsonObject>();o["id"]=e.id;o["name"]=e.name;o["state"]=e.state;o["unit"]=e.unit;}
+  d["total"]=_discovery_total;d["offset"]=_discovery_offset;d["page_size"]=ha::DiscoveryPageSize;d["query"]=_discovery_query;d["kind"]=_discovery_kind;d["hide_unavailable"]=_discovery_hide_unavailable;d["busy"]=_running;d["error"]=_discovery_error;d["connected"]=connected();auto a=d["entities"].to<JsonArray>();for(auto&e:_discovery){auto o=a.add<JsonObject>();o["id"]=e.id;o["name"]=e.name;o["available"]=e.available();}
  }else if(method=="POST"&&path=="/api/config"){
   std::string error;if(!configure(body,error)){status=400;d["error"]=error;}else d["ok"]=true;
  }else if(method=="POST"&&path=="/api/discover"){
   JsonDocument args;auto invalid=deserializeJson(args,body);
   if(invalid||!args.is<JsonObject>()||(args["offset"]|0)<0){status=400;d["error"]="Invalid discovery request";}
-  else if(!discover(args["offset"]|0,args["query"]|"",args["kind"]|"")){status=409;d["error"]="Cannot connect yet; check configuration or wait";}else d["ok"]=true;
+  else if(!discover(args["offset"]|0,args["query"]|"",args["kind"]|"",args["hide_unavailable"]|true)){status=409;d["error"]="Cannot connect yet; check configuration or wait";}else d["ok"]=true;
  }else{status=404;d["error"]="Not found";}
  std::string out;serializeJson(d,out);return out;
 }

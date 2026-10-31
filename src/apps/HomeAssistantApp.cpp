@@ -11,7 +11,7 @@ APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Home",LV_SYMBOL_HOME,home_assistant_app_la
 namespace {
 constexpr uint32_t Bg=0x182131,Card=0x253449,Mint=0x69efca,Muted=0xaab8d2;
 struct TileWidgets{lv_obj_t*button=nullptr,*symbol=nullptr,*value=nullptr,*spinner=nullptr;};
-struct Context{lv_obj_t*screen=nullptr,*home=nullptr,*body=nullptr,*title=nullptr,*spinner=nullptr;lv_timer_t*timer=nullptr;size_t page=0;int view=0;uint32_t revision=0;bool connected=false,detail_pending=false;std::string detail,detail_notice;uint32_t layout=0;ha::Entity detail_entity;lv_obj_t*status=nullptr,*notice=nullptr;TileWidgets tiles[ha::MaxTiles];}ctx;
+struct Context{lv_obj_t*screen=nullptr,*home=nullptr,*body=nullptr,*title=nullptr,*spinner=nullptr;lv_timer_t*timer=nullptr;size_t page=0;int view=0;uint32_t revision=0;bool connected=false,detail_pending=false;std::string detail,detail_notice;uint32_t layout=0;ha::Entity detail_entity;lv_obj_t*status=nullptr;TileWidgets tiles[ha::MaxTiles];}ctx;
 void render();
 void refresh();
 lv_obj_t*label(lv_obj_t*p,const char*t,int x,int y,int w,uint32_t color=0xffffff,bool big=false){auto*l=lv_label_create(p);lv_label_set_text(l,t);lv_obj_set_pos(l,x,y);lv_obj_set_width(l,w);lv_label_set_long_mode(l,LV_LABEL_LONG_WRAP);lv_obj_set_style_text_color(l,lv_color_hex(color),0);lv_obj_set_style_text_font(l,big?i18n::font24():i18n::font14(),0);return l;}
@@ -30,7 +30,7 @@ const char*icon(const ha::Tile&t){auto kind=t.icon=="auto"||t.icon.empty()?ha::d
 std::string value(const ha::Entity*e){if(!e)return i18n::tr("Unavailable");const char*expected=HomeAssistantService::instance().expected_state(e->id);if(expected)return i18n::tr(std::string(expected)=="on"?"On":"Off");if(!e->available())return i18n::tr("Unavailable");auto d=ha::domain(e->id);if(d=="scene"||d=="script")return i18n::tr("Activate");if(e->state=="on")return i18n::tr("On");if(e->state=="off")return i18n::tr("Off");return e->state+(e->unit.empty()?"":" "+e->unit);}
 auto entity_fields(const ha::Entity&e){return std::tie(e.id,e.state,e.unit,e.brightness,e.kelvin,e.min_kelvin,e.max_kelvin,e.dimmable,e.warmth,e.color);}
 void render(){
- auto&s=HomeAssistantService::instance();ctx.revision=s.revision();ctx.connected=s.connected();ctx.status=nullptr;ctx.notice=nullptr;for(auto&t:ctx.tiles)t={};ctx.layout=s.layout_revision();lv_obj_clean(ctx.body);lv_obj_scroll_to_y(ctx.body,0,LV_ANIM_OFF);if(ctx.view==1)lv_obj_add_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);else lv_obj_remove_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);int w=lv_obj_get_width(ctx.body);lv_label_set_text(ctx.title,i18n::tr(ctx.view==2?"Configure Home":ctx.view==1?"Details":"Home"));
+ auto&s=HomeAssistantService::instance();ctx.revision=s.revision();ctx.connected=s.connected();ctx.status=nullptr;for(auto&t:ctx.tiles)t={};ctx.layout=s.layout_revision();lv_obj_clean(ctx.body);lv_obj_scroll_to_y(ctx.body,0,LV_ANIM_OFF);if(ctx.view==1)lv_obj_add_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);else lv_obj_remove_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);int w=lv_obj_get_width(ctx.body);lv_label_set_text(ctx.title,i18n::tr(ctx.view==2?"Configure Home":ctx.view==1?"Details":"Home"));
  if(ctx.view==2){
   label(ctx.body,i18n::tr("Scan with your phone"),12,12,w-24,Mint,true);
   if(!s.setup_open()){label(ctx.body,i18n::tr("Setup expired. Open it again."),12,60,w-24);button(ctx.body,i18n::tr("Configure"),12,120,w-24,44,setup);return;}
@@ -74,9 +74,9 @@ void render(){
   label(ctx.body,LV_SYMBOL_HOME,12,40,w-24,Mint,true);label(ctx.body,i18n::tr("Your home at a touch"),12,90,w-24,0xffffff,true);label(ctx.body,i18n::tr("Connect Home Assistant, choose your favourite entities and arrange them from your phone."),12,142,w-24,Muted);button(ctx.body,i18n::tr("Configure"),12,245,w-24,48,setup);if(!s.notice().empty())label(ctx.body,i18n::tr(s.notice().c_str()),12,308,w-24,0xffc66d);return;
  }
  ctx.page=std::min(ctx.page,pages.size()-1);auto&p=pages[ctx.page];auto*heading=label(ctx.body,p.name,12,8,w-72,0xffffff,true);lv_label_set_long_mode(heading,LV_LABEL_LONG_DOT);button(ctx.body,LV_SYMBOL_SETTINGS,w-54,2,44,44,setup);
- ctx.status=label(ctx.body,i18n::tr(ctx.connected?"Connected - refreshes every 5s":s.busy()?"Connecting...":"Disconnected"),12,47,w-24,ctx.connected?Mint:Muted);
+ ctx.status=label(ctx.body,i18n::tr(ctx.connected?"Connected - refreshes every 5s":s.busy()?"Connecting...":"Disconnected"),12,47,w-24,ctx.connected?Mint:Muted);lv_label_set_long_mode(ctx.status,LV_LABEL_LONG_DOT);
  int tw=w-24;
- for(size_t i=0;i<p.tiles.size();++i){auto&t=p.tiles[i];auto*b=button(ctx.body,"",12,66+i*47,tw,44,tap,i);
+ for(size_t i=0;i<p.tiles.size();++i){auto&t=p.tiles[i];auto*b=button(ctx.body,"",12,66+i*46,tw,44,tap,i);
   bool light=ha::domain(t.id)=="light";int content=tw-(light?44:0);
   if(light){auto*more=button(b,LV_SYMBOL_RIGHT,tw-44,0,44,44,tap,i+ha::MaxTiles);lv_obj_set_style_bg_opa(more,LV_OPA_TRANSP,0);lv_obj_remove_flag(more,LV_OBJ_FLAG_EVENT_BUBBLE);}
   auto*symbol=label(b,icon(t),10,14,18,Muted);lv_obj_clear_flag(symbol,LV_OBJ_FLAG_CLICKABLE);
@@ -86,8 +86,13 @@ void render(){
   ctx.tiles[i]={b,symbol,v,pending};
  }
  if(p.tiles.empty())label(ctx.body,i18n::tr("This page is empty. Add tiles in setup."),12,100,w-24,Muted);
- button(ctx.body,LV_SYMBOL_LEFT,12,354,44,40,navigate,-1);auto*pg=label(ctx.body,std::to_string(ctx.page+1)+" / "+std::to_string(pages.size()),66,366,w-132,Muted);lv_obj_set_style_text_align(pg,LV_TEXT_ALIGN_CENTER,0);button(ctx.body,LV_SYMBOL_RIGHT,w-56,354,44,40,navigate,1);
- ctx.notice=label(ctx.body,i18n::tr(s.notice().c_str()),12,403,w-24,0xffc66d);lv_label_set_long_mode(ctx.notice,LV_LABEL_LONG_DOT);
+ if(pages.size()>1){
+  int y=lv_obj_get_height(ctx.body)-44;
+  button(ctx.body,LV_SYMBOL_LEFT,12,y,44,40,navigate,-1);
+  auto*pg=label(ctx.body,std::to_string(ctx.page+1)+" / "+std::to_string(pages.size()),66,y+12,w-132,Muted);
+  lv_obj_set_style_text_align(pg,LV_TEXT_ALIGN_CENTER,0);
+  button(ctx.body,LV_SYMBOL_RIGHT,w-56,y,44,40,navigate,1);
+ }
  refresh();
 }
 // Keep tile objects stable during polling: no disabled-state flash or lost focus.
@@ -98,9 +103,9 @@ void refresh(){
  if(ctx.view!=0||!ctx.status||ctx.layout!=s.layout_revision()){int scroll=lv_obj_get_scroll_y(ctx.body);bool detailView=ctx.view==1;render();if(detailView)lv_obj_scroll_to_y(ctx.body,scroll,LV_ANIM_OFF);return;}
  ctx.revision=s.revision();ctx.connected=s.connected();
  auto text=[](lv_obj_t*l,const std::string&v){if(v!=lv_label_get_text(l))lv_label_set_text(l,v.c_str());};
- text(ctx.status,i18n::tr(ctx.connected?"Connected - refreshes every 5s":s.busy()?"Connecting...":"Disconnected"));
- lv_obj_set_style_text_color(ctx.status,lv_color_hex(ctx.connected?Mint:Muted),0);
- text(ctx.notice,i18n::tr(s.notice().c_str()));
+ // Notices share the connection-status line so the footer stays clear.
+ text(ctx.status,i18n::tr(!s.notice().empty()?s.notice().c_str():ctx.connected?"Connected - refreshes every 5s":s.busy()?"Connecting...":"Disconnected"));
+ lv_obj_set_style_text_color(ctx.status,lv_color_hex(!s.notice().empty()?0xffc66d:ctx.connected?Mint:Muted),0);
  auto&p=s.config().pages[ctx.page];
  for(size_t i=0;i<p.tiles.size();++i){auto&t=p.tiles[i];auto*e=s.entity(t.id);auto&ui=ctx.tiles[i];
   const char*expected=s.expected_state(t.id);bool on=e&&(expected?std::string(expected)=="on":e->state=="on")&&ctx.connected;
@@ -121,7 +126,7 @@ void home_assistant_app_launch(){
  button(bar,LV_SYMBOL_LEFT,4,0,44,44,back);ctx.title=label(bar,i18n::tr("Home"),54,12,w-112);lv_obj_set_style_text_align(ctx.title,LV_TEXT_ALIGN_CENTER,0);create_wifi_status_icon(bar,-8);
  ctx.spinner=lv_spinner_create(bar);lv_obj_set_size(ctx.spinner,18,18);lv_obj_set_pos(ctx.spinner,w-56,12);lv_spinner_set_anim_params(ctx.spinner,900,180);lv_obj_set_style_arc_width(ctx.spinner,3,LV_PART_MAIN);lv_obj_set_style_arc_width(ctx.spinner,3,LV_PART_INDICATOR);lv_obj_add_flag(ctx.spinner,LV_OBJ_FLAG_HIDDEN);
  ctx.body=lv_obj_create(ctx.screen);lv_obj_set_pos(ctx.body,0,44);lv_obj_set_size(ctx.body,w,h-44);lv_obj_set_style_bg_opa(ctx.body,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(ctx.body,0,0);lv_obj_set_style_pad_all(ctx.body,0,0);lv_obj_clear_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);
- lv_obj_add_event_cb(ctx.body,[](lv_event_t*){if(ctx.view||!lv_indev_active())return;auto d=lv_indev_get_gesture_dir(lv_indev_active());auto n=HomeAssistantService::instance().config().pages.size();if(n&&(d==LV_DIR_LEFT||d==LV_DIR_RIGHT)){ctx.page=(ctx.page+n+(d==LV_DIR_LEFT?1:-1))%n;render();}},LV_EVENT_GESTURE,nullptr);
+ lv_obj_add_event_cb(ctx.body,[](lv_event_t*){if(ctx.view||!lv_indev_active())return;auto d=lv_indev_get_gesture_dir(lv_indev_active());auto n=HomeAssistantService::instance().config().pages.size();if(n>1&&(d==LV_DIR_LEFT||d==LV_DIR_RIGHT)){ctx.page=(ctx.page+n+(d==LV_DIR_LEFT?1:-1))%n;render();}},LV_EVENT_GESTURE,nullptr);
  lv_obj_add_event_cb(ctx.screen,cleanup,LV_EVENT_DELETE,nullptr);ui_load_screen(ctx.screen,false);lv_obj_update_layout(ctx.screen);UiSessionState::set_route("home_assistant");HomeAssistantService::instance().resume();render();
  ctx.timer=lv_timer_create([](lv_timer_t*){auto&s=HomeAssistantService::instance();if(s.busy())lv_obj_remove_flag(ctx.spinner,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(ctx.spinner,LV_OBJ_FLAG_HIDDEN);for(auto*i=lv_indev_get_next(nullptr);i;i=lv_indev_get_next(i))if(lv_indev_get_state(i)==LV_INDEV_STATE_PRESSED)return;if(ctx.revision!=s.revision()||ctx.connected!=s.connected())refresh();},250,nullptr);
 }

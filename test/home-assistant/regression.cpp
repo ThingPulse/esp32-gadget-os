@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <atomic>
 #include "services/HomeAssistantModel.h"
+#include "services/HomeAssistantDiscovery.h"
 #include "services/HomeAssistantHttp.h"
 #include "services/HomeAssistantEntityStream.h"
 #include "services/TransitService.h"
@@ -23,6 +24,9 @@ int main(int argc,char**argv){
  auto raw=config_json(c,true);Config parsed;if(!parse_config(raw,parsed,error)){std::fprintf(stderr,"Config error: %s; %s\n",error.c_str(),raw.c_str());std::abort();}assert(parsed.pages.size()==2&&parsed.pages[0].tiles.size()==6);
  assert(config_json(c).find("test-token")==std::string::npos);assert(parse_config(config_json(c),parsed,error,&c)&&parsed.token==c.token);
  auto bad=c;bad.url="http://other";assert(!parse_config(config_json(bad),parsed,error,&c));bad=c;bad.pages[0].tiles.push_back(bad.pages[0].tiles[0]);assert(!parse_config(config_json(bad,true),parsed,error));bad=c;bad.pages[0].tiles[0].id="lock.front";assert(!parse_config(config_json(bad,true),parsed,error));
+ Config seven=c;seven.pages[0].tiles.push_back({"sensor.solar","Solar","energy"});
+ assert(parse_config(config_json(seven,true),parsed,error)&&parsed.pages[0].tiles.size()==7);
+ seven.pages[0].tiles.push_back({"sensor.eighth","Eighth","auto"});assert(!parse_config(config_json(seven,true),parsed,error));
  Entity e;e.id="light.sofa";e.state="on";e.dimmable=true;e.warmth=true;std::string path,body;
  assert(command(c,e,"toggle",0,path,body)&&path=="/api/services/light/turn_off");assert(command(c,e,"brightness",65,path,body)&&body.find("65")!=std::string::npos);assert(!command(c,e,"brightness",101,path,body));assert(!command(c,e,"warmth",10,path,body));assert(!command(c,e,"delete",0,path,body));e.state="unavailable";assert(!command(c,e,"toggle",0,path,body));e.state="on";e.id="light.unselected";assert(!command(c,e,"toggle",0,path,body));
  // Only color-capable lights accept RGB commands, including HA-converted modes.
@@ -32,16 +36,21 @@ int main(int argc,char**argv){
   assert(light.color==supported);assert(command(c,light,"color",0xff0080,path,body)==supported);
   if(supported){assert(path=="/api/services/light/turn_on"&&body.find("\"rgb_color\":[255,0,128]")!=std::string::npos);assert(!command(c,light,"color",-1,path,body));assert(!command(c,light,"color",0x1000000,path,body));light.state="unavailable";assert(!command(c,light,"color",0xff0000,path,body));}
  }
+ std::vector<Entity> discovered;size_t total=0;
+ assert(parse_discovery(R"({"entities":[{"id":"light.sofa","name":"Sofa","available":true}],"total":1,"offset":0})",0,discovered,total,error)&&total==1);
+ assert(!parse_discovery(R"({"entities":[],"total":1,"offset":0})",0,discovered,total,error));
+ assert(!parse_discovery(R"({"entities":[],"total":0,"offset":25})",0,discovered,total,error));
+ assert(!parse_discovery("[]",0,discovered,total,error));
  Entity invalidEntity;assert(!parse_entity("[]",invalidEntity,error));assert(!parse_entity(std::string(1048577,'x'),invalidEntity,error));
  // Frame across arbitrary chunk boundaries, including escaped quotes/braces.
  const std::string framed=R"([{"entity_id":"sensor.test","state":"ok","attributes":{"friendly_name":"Test \" { [","ignored":{"x":[1,2]}}},{"entity_id":"lock.door","state":"locked"}])";
  for(size_t chunk:{size_t(1),size_t(7),size_t(512)}){EntityStream stream;for(size_t i=0;i<framed.size();i+=chunk)assert(stream.feed(framed.data()+i,std::min(chunk,framed.size()-i)));assert(stream.finish()&&stream.items.size()==1&&stream.matches==1);}
  for(const std::string malformed:{"[{", "[{},]", "[]x", "{}", "[true]"}){EntityStream stream;bool fed=stream.feed(malformed.data(),malformed.size());assert(!fed||!stream.finish());}
- std::string largeResponse;EntityStream first;assert(request(c,"/api/states?large","",largeResponse,error,&first));assert(first.matches==607&&first.items.size()==256);
- EntityStream chunked;assert(request(c,"/api/states?chunked","",largeResponse,error,&chunked));assert(chunked.matches==607&&chunked.items.size()==256);
- EntityStream next(256);assert(request(c,"/api/states?large","",largeResponse,error,&next));assert(next.matches==607&&next.items.size()==256&&next.items[0].id!=first.items[0].id);
+ std::string largeResponse;EntityStream first;assert(request(c,"/api/states?large","",largeResponse,error,&first));assert(first.matches==1507&&first.items.size()==256);
+ EntityStream chunked;assert(request(c,"/api/states?chunked","",largeResponse,error,&chunked));assert(chunked.matches==1507&&chunked.items.size()==256);
+ EntityStream next(256);assert(request(c,"/api/states?large","",largeResponse,error,&next));assert(next.matches==1507&&next.items.size()==256&&next.items[0].id!=first.items[0].id);
  EntityStream search(0,"extra_599","sensor");assert(request(c,"/api/states?large","",largeResponse,error,&search));assert(search.matches==1&&search.items[0].id=="sensor.extra_599");
- auto&s=HomeAssistantService::instance();assert(s.begin());assert(s.configure(raw,error));assert(s.begin());assert(s.config().pages[0].tiles.size()==6&&s.config().token=="test-token");assert(s.discover());finish(s);assert(s.connected()&&s.entities().size()==7);assert(s.entity("light.sofa")->dimmable&&s.entity("light.sofa")->warmth);
+ auto&s=HomeAssistantService::instance();assert(s.begin());assert(s.configure(raw,error));assert(s.begin());assert(s.config().pages[0].tiles.size()==6&&s.config().token=="test-token");assert(s.start(0));finish(s);assert(s.connected()&&s.entities().size()==7);assert(s.entity("light.sofa")->dimmable&&s.entity("light.sofa")->warmth);assert(s.discover(0,"","light"));finish(s);assert(s._discovery.size()==1&&s.entity("light.sofa")->dimmable);
  assert(s.act("light.sofa","brightness",65));finish(s);assert(s.notice().empty());s._result=s._entities;s._job=0;s._running=true;s._finished=true;s.loop();assert(!s.pending("light.sofa"));assert(s.act("light.sofa","color",0xff0080));finish(s);assert(!s.act("sensor.temperature","toggle"));
  assert(s.open_setup());auto setupUrl=s.setup_url();auto key=setupUrl.substr(setupUrl.find('#')+1);int status;
  assert(s.setup_request("GET","/api/config","bad","",status).find("error")!=std::string::npos&&status==403);
@@ -55,6 +64,21 @@ int main(int argc,char**argv){
  lv_display_set_flush_cb(display,[](lv_display_t*d,const lv_area_t*a,uint8_t*p){for(int y=a->y1;y<=a->y2;++y)for(int x=a->x1;x<=a->x2;++x){int src=((y-a->y1)*(a->x2-a->x1+1)+x-a->x1)*4,dst=(y*320+x)*3;frame[dst]=p[src+2];frame[dst+1]=p[src+1];frame[dst+2]=p[src];}lv_display_flush_ready(d);});
  for(auto language:{"en","de"}){
   i18n::set_language(language);i18n::apply_fonts(display);home_assistant_app_launch();capture((std::string("home-")+language).c_str());assert(ctx.page==0);
+  // Seven rows fit above the bottom pager; single-page layouts have no pager.
+  auto originalPages=s._config.pages;s._config.pages[0].tiles.push_back({"sensor.solar","Solar","energy"});render();
+  capture((std::string("home-seven-")+language).c_str());
+  auto*previousPage=lv_obj_get_child(ctx.body,-3);auto*nextPage=lv_obj_get_child(ctx.body,-1);
+  assert(lv_obj_get_y(previousPage)==lv_obj_get_height(ctx.body)-44);
+  assert(lv_obj_get_y(ctx.tiles[6].button)+lv_obj_get_height(ctx.tiles[6].button)<lv_obj_get_y(previousPage));
+  auto withPager=lv_obj_get_child_count(ctx.body);
+  lv_obj_send_event(nextPage,LV_EVENT_CLICKED,nullptr);assert(ctx.page==1);
+  previousPage=lv_obj_get_child(ctx.body,-3);lv_obj_send_event(previousPage,LV_EVENT_CLICKED,nullptr);assert(ctx.page==0);
+  s._config.pages.resize(1);render();capture((std::string("home-single-")+language).c_str());
+  assert(lv_obj_get_child_count(ctx.body)==withPager-3);
+  assert(lv_obj_get_y(ctx.tiles[6].button)+lv_obj_get_height(ctx.tiles[6].button)<=lv_obj_get_height(ctx.body));
+  s._notice="Home action not confirmed";refresh();assert(std::string(lv_label_get_text(ctx.status))==i18n::tr(s._notice.c_str()));s._notice.clear();refresh();
+  lv_obj_send_event(ctx.tiles[6].button,LV_EVENT_CLICKED,nullptr);assert(ctx.view==1&&ctx.detail=="sensor.solar");back(nullptr);
+  s._config.pages=originalPages;render();
   auto*originalTile=ctx.tiles[0].button;auto*originalValue=ctx.tiles[0].value;
   s._running=true;++s._revision;refresh();assert(ctx.tiles[0].button==originalTile&&!lv_obj_has_state(originalTile,LV_STATE_DISABLED));
   s._running=false;++s._revision;refresh();assert(ctx.tiles[0].button==originalTile&&ctx.tiles[0].value==originalValue);

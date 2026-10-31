@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 namespace ha {
-constexpr size_t MaxPages=4, MaxTiles=6, MaxEntities=256;
+constexpr size_t MaxPages=4, MaxTiles=7, MaxEntities=256;
 struct Tile { std::string id,name,icon; };
 struct Page { std::string name; std::vector<Tile> tiles; };
 struct Config { std::string url,token,ca; std::vector<Page> pages; };

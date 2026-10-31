@@ -19,7 +19,7 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 ## Features
 
 - Swipeable app launcher with active and experimental apps
-- Home Assistant dashboard in Labs: configurable pages for lights, switches, sensors, scenes and scripts, with local browser setup
+- Home Assistant dashboard in Labs: configurable pages for lights, switches, sensors, scenes and scripts, with local browser setup and on-demand, filtered entity search
 - Weather for multiple saved locations, hourly and daily forecasts, cached results, and pull-to-refresh
 - Nearby-aircraft radar, plain-language spotting cards, flight-details dialog, and route enrichment
 - Calculator

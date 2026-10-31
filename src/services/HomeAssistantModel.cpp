@@ -27,7 +27,7 @@ bool parse_config(const std::string&raw,Config&out,std::string&error,const Confi
  if(!d["pages"].is<JsonArray>()||d["pages"].size()>MaxPages)return fail("Maximum 4 pages");
  for(JsonObjectConst p:d["pages"].as<JsonArrayConst>()){
   Page page;page.name=p["name"]|"";
-  if(page.name.empty()||page.name.size()>48||!p["tiles"].is<JsonArrayConst>()||p["tiles"].size()>MaxTiles)return fail("Each page needs a name and at most 6 tiles");
+  if(page.name.empty()||page.name.size()>48||!p["tiles"].is<JsonArrayConst>()||p["tiles"].size()>MaxTiles)return fail("Each page needs a name and at most 7 tiles");
   for(JsonObjectConst t:p["tiles"].as<JsonArrayConst>()){
    Tile tile{t["id"]|"",t["name"]|"",t["icon"]|"auto"};
    if(!valid_entity(tile.id)||tile.name.size()>64||std::any_of(page.tiles.begin(),page.tiles.end(),[&](const Tile&v){return v.id==tile.id;}))return fail("Invalid or duplicate tile");

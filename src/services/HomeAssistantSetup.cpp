@@ -47,7 +47,7 @@ bool server_start(){if(active)return true;
 #if defined(ARDUINO)
  if(WiFi.status()!=WL_CONNECTED)return false;server.begin();
 #else
- server=socket(AF_INET,SOCK_STREAM,0);if(server<0)return false;int yes=1;setsockopt(server,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof yes);sockaddr_in a{};a.sin_family=AF_INET;a.sin_port=htons(8080);a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
+ server=socket(AF_INET,SOCK_STREAM,0);if(server<0)return false;int yes=1;setsockopt(server,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof yes);sockaddr_in a{};a.sin_family=AF_INET;const char*ephemeral=std::getenv("GADGET_OS_SETUP_EPHEMERAL_PORT");a.sin_port=htons(ephemeral&&std::string(ephemeral)=="1"?0:8080);a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
  if(bind(server,reinterpret_cast<sockaddr*>(&a),sizeof a)||listen(server,2)){close(server);server=-1;return false;}fcntl(server,F_SETFL,O_NONBLOCK);
 #endif
  active=true;return true;
@@ -64,7 +64,9 @@ std::string server_address(){
 #if defined(ARDUINO)
  return "http://"+std::string(WiFi.localIP().toString().c_str())+":8080";
 #else
- return "http://127.0.0.1:8080";
+ sockaddr_in address{};socklen_t size=sizeof address;
+ int port=getsockname(server,reinterpret_cast<sockaddr*>(&address),&size)==0?ntohs(address.sin_port):8080;
+ return "http://127.0.0.1:"+std::to_string(port);
 #endif
 }
 void server_loop(){if(!active)return;uint32_t now=TransitService::now_ms();

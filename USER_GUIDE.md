@@ -412,21 +412,26 @@ required.
    Home Assistant user profile. A dedicated user is recommended. For HTTPS, public
    certificates are verified; private certificate authorities need their PEM root
    certificate in the advanced field. TLS verification is never disabled.
-3. Choose **Save connection & find entities**, search by name or entity ID and
-   select up to six entities for the current page. Supported types are lights,
-   switches, sensors, binary sensors, scenes and scripts. For large installations,
-   **Search all entities** searches the whole installation. **Previous results**
-   and **Next results** browse pages of 256 matches. Discovery reads one entity
-   at a time and discards unused attributes, rather than buffering the full
-   response. **Add by entity ID** is also available. Transfer safeguards are
-   16 MiB per discovery response, 1 MiB per individual entity and a 30-second
-   transfer timeout.
+3. Choose **Save connection & continue**. The entity picker starts with **Lights**
+   selected and does not load anything until you tap **Search**. Choose a type and,
+   optionally, enter a name or entity ID. **All supported types** is an explicit
+   option. Results arrive in batches of 25; use **Load more** for the next batch.
+   Tap **Add** to include an entity on the chosen page. **Added** marks existing
+   selections, and the slot count shows the seven-entity page limit. **Hide unavailable entities** is on by default and excludes unavailable and unknown states before loading results. Uncheck it to find those entities; existing layout selections are preserved. Remove selections
+   under **Pages**. Search and page navigation preserve your selections.
+   Results are cached in this browser tab (up to 40 batches); use **Refresh results**
+   to update them. Home Assistant filters the search and returns only IDs, names,
+   and availability, so large state payloads never need to cross the device.
+   This discovery uses Home Assistant's template API, which requires an administrator
+   token. With a non-administrator account, use **Add by entity ID** instead; regular
+   polling and controls still use the account's existing entity permissions. The app
+   does not fall back to downloading all states when discovery is denied.
 4. Under **Arrange pages**, create up to four pages, rename them, drag tiles into
    order (or use the arrows), and edit tile names and icons. Pages are custom groups;
    Home Assistant room assignments are not imported. Export/import saves the layout
    only, without the server address or credentials.
 5. **Save to device**, then tap **Done** on the device. The dashboard refreshes
-   automatically. Swipe or use the arrows to change pages. Tap a light tile to turn it on or off. Its colour changes immediately and a
+   automatically. Each page holds up to seven entities. Swipe or use the arrows at the bottom to change pages; the arrows and page count are hidden when there is only one page. Tap a light tile to turn it on or off. Its colour changes immediately and a
    small spinner remains until Home Assistant confirms the state. Repeat taps on
    that lamp are ignored while pending; other controls queue normally. If the
    request fails or is not confirmed within 30 seconds, the tile returns to the
@@ -455,5 +460,5 @@ Configuration is stored in `/config/home-assistant.json`. On the native emulator
 the setup page binds to `127.0.0.1:8080`, so use a browser on the same computer.
 To regenerate the embedded page after editing its source, run
 `python3 scripts/generate-home-setup.py`. After a native build,
-`python3 scripts/test-home-assistant.py` tests against a local fake Home Assistant;
+`python3 scripts/test-home-assistant.py` (with Jinja2 from `requirements-build.txt` installed in that Python environment) tests against a local fake Home Assistant;
 it does not use real credentials or operate real devices.

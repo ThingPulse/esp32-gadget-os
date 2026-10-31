@@ -8,7 +8,7 @@ public:
  const char*name()const override{return "HomeAssistant";}
  bool begin()override;void loop()override;
  void resume();void pause();
- bool configure(const std::string&,std::string&);bool discover(size_t offset=0,const std::string&query="",const std::string&kind="");
+ bool configure(const std::string&,std::string&);bool discover(size_t offset=0,const std::string&query="",const std::string&kind="",bool hide_unavailable=true);
  bool act(const std::string&id,const std::string&action,int value=0);
  const ha::Config&config()const{return _config;}
  const std::vector<ha::Entity>&entities()const{return _entities;}
@@ -33,8 +33,10 @@ private:
  uint32_t _notice_until=0;
  void dispatch();
  ha::Config _config,_job_config;
- std::vector<ha::Entity> _entities,_result;
+ std::vector<ha::Entity> _entities,_result,_discovery;
+ std::string _discovery_query,_discovery_kind,_discovery_error;
  std::string _notice,_result_error,_job_path,_job_body,_setup_key;
+ bool _job_hide_unavailable=true,_discovery_hide_unavailable=true;
  bool _active=false,_running=false,_online=false;int _job=0;
  uint32_t _revision=0,_generation=0,_job_generation=0,_next=0,_seen=0,_setup_until=0;
  size_t _discovery_total=0,_discovery_offset=0,_result_total=0,_job_offset=0;

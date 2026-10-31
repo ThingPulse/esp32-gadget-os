@@ -11,11 +11,22 @@ import tempfile
 import threading
 import urllib.request
 import urllib.error
+from types import SimpleNamespace
+from jinja2.sandbox import ImmutableSandboxedEnvironment
 root = Path(__file__).resolve().parent.parent
 os.chdir(root)
 subprocess.run(['node','test/home-assistant/setup-browser.test.cjs'],check=True)
 commands = []
 large_mode = False
+template_forbidden = False
+ha_requests = []
+template_sizes = []
+templates = ImmutableSandboxedEnvironment()
+templates.filters["to_json"] = json.dumps
+class States(list):
+ def __getitem__(self, key):
+  if isinstance(key, str): return [s for s in self if s.entity_id.startswith(key+".")]
+  return super().__getitem__(key)
 entities = [
  {'entity_id':'light.sofa','state':'on','attributes':{'friendly_name':'Sofa light','brightness':166,'color_temp_kelvin':2700,'min_color_temp_kelvin':2000,'max_color_temp_kelvin':6500,'supported_color_modes':['color_temp','rgb']}},
  {'entity_id':'switch.ceiling','state':'off','attributes':{'friendly_name':'Ceiling'}},
@@ -24,17 +35,27 @@ entities = [
  {'entity_id':'scene.movie','state':'2026-10-28T10:00:00Z','attributes':{'friendly_name':'Movie night'}},
  {'entity_id':'script.all_off','state':'off','attributes':{'friendly_name':'All off'}},
  {'entity_id':'sensor.solar','state':'2.4','attributes':{'friendly_name':'Solar','unit_of_measurement':'kW'}}]
-large_entities = entities + [{'entity_id':f'sensor.extra_{i}','state':'1','attributes':{'friendly_name':f'Extra {i}','ignored_payload':'x' * (300000 if i==0 else 1800)}} for i in range(600)]
+large_entities = entities + [{'entity_id':f'sensor.extra_{i}','state':'1','attributes':{'friendly_name':f'Extra {i}','ignored_payload':'x' * (300000 if i==0 else 1800)}} for i in range(1500)]
 assert len(json.dumps(large_entities)) > 1048576
 class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*args): pass
  def do_GET(self): self.handle_request()
  def do_POST(self): self.handle_request()
  def handle_request(self):
+  ha_requests.append(self.path)
   code=200;data=large_entities if large_mode or self.path.endswith(("?large","?chunked")) else entities
   if self.headers.get('Authorization')!='Bearer test-token': code=401;data={}
   elif self.command=='POST':
-   body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))));commands.append((self.path,body));data=[]
+   body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
+   if self.path=='/api/template':
+    assert body['variables']['limit']==25
+    if template_forbidden: code=403;data={}
+    else:
+     states=States(SimpleNamespace(entity_id=e['entity_id'],name=e['attributes'].get('friendly_name',e['entity_id']),state=e['state']) for e in data)
+     rendered=templates.from_string(body['template']).render(states=states,**body['variables'])
+     template_sizes.append(len(rendered));data=json.loads(rendered)
+     assert len(data['entities'])<=25 and 'ignored_payload' not in rendered
+   else: commands.append((self.path,body));data=[]
   elif self.path.startswith('/api/states/'):
    data=next((e for e in entities if e['entity_id']==self.path.split('/')[-1]),None)
    if data is None: code=404;data={}
@@ -57,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix='home-test-') as temporary:
  binary=Path(temporary)/'regression'
  flags=shlex.split(subprocess.check_output(['sdl2-config','--libs'],text=True))
  subprocess.run(['c++','-std=c++14','-fsanitize=address','-pthread','-DLV_CONF_SKIP','-DLV_USE_QRCODE=1','-DLV_FONT_MONTSERRAT_24=1','-Iinclude','-I.pio/libdeps/native/lvgl','test/home-assistant/regression.cpp',*map(str,objects),*flags,'-o',str(binary)],check=True)
- env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0',GADGET_OS_DATA_DIR=temporary)
+ env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0',GADGET_OS_DATA_DIR=temporary,GADGET_OS_SETUP_EPHEMERAL_PORT='1')
  subprocess.run([str(binary),url],env=env,check=True,timeout=45)
  assert ('/api/services/light/turn_on',{'entity_id':'light.sofa','brightness_pct':65}) in commands
  assert ('/api/services/light/turn_on',{'entity_id':'light.sofa','rgb_color':[255,0,128]}) in commands
@@ -65,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix='home-test-') as temporary:
  proc=subprocess.Popen([str(binary),url,'--serve'],env=env,stdout=subprocess.PIPE,text=True)
  try:
   line=proc.stdout.readline().strip()
-  while not line.startswith('http://127.0.0.1:8080/'):
+  while not line.startswith('http://127.0.0.1:'):
    if proc.poll() is not None: raise RuntimeError('Setup server failed')
    line=proc.stdout.readline().strip()
   origin,key=line.split('/#');headers={'X-Setup-Key':key,'Content-Type':'application/json'}
@@ -89,10 +110,31 @@ with tempfile.TemporaryDirectory(prefix='home-test-') as temporary:
      return state
     time.sleep(.05)
    raise AssertionError('Discovery timed out')
-  state=discover({});assert state['total']==607 and len(state['entities'])==256
-  state=discover({'offset':512});assert state['offset']==512 and len(state['entities'])==95
-  state=discover({'query':'extra_599','kind':'sensor'});assert state['total']==1 and state['entities'][0]['id']=='sensor.extra_599'
-  print('HTTP pairing, persistence and streamed discovery >1 MiB with pagination/search passed', flush=True)
+  before=len(ha_requests)
+  state=discover({'kind':'light'});assert state['total']==1 and len(state['entities'])==1
+  state=discover({});assert state['total']==1507 and len(state['entities'])==25 and state['page_size']==25
+  state=discover({'offset':1500});assert state['offset']==1500 and len(state['entities'])==7
+  state=discover({'query':'extra_1499','kind':'sensor'});assert state['total']==1 and state['entities'][0]['id']=='sensor.extra_1499'
+  # Filtering happens before counting and pagination, including unknown states.
+  large_entities[7]['state']='unavailable';large_entities[8]['state']='unknown'
+  state=discover({});assert state['hide_unavailable'] and state['total']==1505 and all(e['available'] for e in state['entities'])
+  state=discover({'offset':1500});assert len(state['entities'])==5
+  state=discover({'query':'extra_0'});assert state['total']==0
+  state=discover({'hide_unavailable':False,'query':'extra_0'});assert not state['hide_unavailable'] and state['total']==1 and not state['entities'][0]['available']
+  state=discover({'hide_unavailable':False});assert state['total']==1507
+  # User input is a variable, never executable template text.
+  state=discover({'query':"' }}{{ 7*7 }}{%",'kind':'sensor'});assert state['total']==0
+  assert set(ha_requests[before:])=={'/api/template'} and max(template_sizes)<10000
+  template_forbidden=True
+  json.load(urllib.request.urlopen(urllib.request.Request(origin+'/api/discover',data=b'{"kind":"light"}',headers=headers)))
+  import time
+  for _ in range(100):
+   state=json.load(urllib.request.urlopen(urllib.request.Request(origin+'/api/status',headers=headers)))
+   if not state['busy']: break
+   time.sleep(.05)
+  assert 'administrator token' in state['error'] and set(ha_requests[before:])=={'/api/template'}
+  template_forbidden=False
+  print('HTTP pairing, persistence, template filtering of 1507 entities, bounded payloads and permission recovery passed', flush=True)
   if os.environ.get('HOME_SETUP_URL_PATH'):
    import time
    Path(os.environ['HOME_SETUP_URL_PATH']).write_text(line)
