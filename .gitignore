@@ -7,3 +7,4 @@
 .vscode/extensions.json
 data/*
 documents/user-guide/video/.build/
+.DS_Store
