@@ -42,7 +42,7 @@ int main(int argc,char**argv){
  EntityStream next(256);assert(request(c,"/api/states?large","",largeResponse,error,&next));assert(next.matches==607&&next.items.size()==256&&next.items[0].id!=first.items[0].id);
  EntityStream search(0,"extra_599","sensor");assert(request(c,"/api/states?large","",largeResponse,error,&search));assert(search.matches==1&&search.items[0].id=="sensor.extra_599");
  auto&s=HomeAssistantService::instance();assert(s.begin());assert(s.configure(raw,error));assert(s.begin());assert(s.config().pages[0].tiles.size()==6&&s.config().token=="test-token");assert(s.discover());finish(s);assert(s.connected()&&s.entities().size()==7);assert(s.entity("light.sofa")->dimmable&&s.entity("light.sofa")->warmth);
- assert(s.act("light.sofa","brightness",65));finish(s);assert(s.notice().empty());assert(s.act("light.sofa","color",0xff0080));finish(s);assert(!s.act("sensor.temperature","toggle"));
+ assert(s.act("light.sofa","brightness",65));finish(s);assert(s.notice().empty());s._result=s._entities;s._job=0;s._running=true;s._finished=true;s.loop();assert(!s.pending("light.sofa"));assert(s.act("light.sofa","color",0xff0080));finish(s);assert(!s.act("sensor.temperature","toggle"));
  assert(s.open_setup());auto setupUrl=s.setup_url();auto key=setupUrl.substr(setupUrl.find('#')+1);int status;
  assert(s.setup_request("GET","/api/config","bad","",status).find("error")!=std::string::npos&&status==403);
  auto publicConfig=s.setup_request("GET","/api/config",key,"",status);assert(status==200&&publicConfig.find("test-token")==std::string::npos);
@@ -69,8 +69,29 @@ int main(int argc,char**argv){
   s._result=s._entities;s._result[0].state=oldState;s._job=0;s._running=true;s._finished=true;s.loop();assert(!s.pending("light.sofa"));
   auto*chevron=lv_obj_get_child(originalTile,0);assert(lv_obj_get_width(chevron)==44&&!lv_obj_has_flag(chevron,LV_OBJ_FLAG_EVENT_BUBBLE));
   lv_obj_send_event(chevron,LV_EVENT_CLICKED,nullptr);assert(ctx.view==1&&ctx.detail=="light.sofa"&&!s.busy());capture((std::string("home-light-")+language).c_str());
-  lv_obj_scroll_to_y(ctx.body,1000,LV_ANIM_OFF);capture((std::string("home-color-")+language).c_str());
+  // All light controls and Done must fit at the physical 320x480 resolution.
+  lv_obj_update_layout(ctx.body);auto*done=lv_obj_get_child(ctx.body,-1);
+  assert(lv_obj_get_y(done)+lv_obj_get_height(done)<=lv_obj_get_height(ctx.body));
+  lv_obj_scroll_to_y(ctx.body,1000,LV_ANIM_OFF);assert(lv_obj_get_scroll_y(ctx.body)==0);capture((std::string("home-color-")+language).c_str());
   auto*swatch=lv_obj_get_child(ctx.body,-11);lv_obj_send_event(swatch,LV_EVENT_CLICKED,nullptr);assert(s.busy()&&s._job_body.find("rgb_color")!=std::string::npos);finish(s);refresh();
+  s._entities[0].brightness=166;s._entities[0].kelvin=2700;render();
+  // Slider selections survive request acknowledgement and stale/intermediate polls.
+  for(bool warmth:{false,true}){
+   auto getSlider=[&](){return lv_obj_get_child(ctx.body,warmth?6:3);};
+   auto*sl=getSlider();int target=warmth?4000:80;
+   lv_slider_set_value(sl,target,LV_ANIM_OFF);lv_obj_send_event(sl,LV_EVENT_VALUE_CHANGED,nullptr);
+   lv_obj_send_event(sl,LV_EVENT_RELEASED,nullptr);finish(s);refresh();
+   assert(s.pending("light.sofa")&&lv_slider_get_value(getSlider())==target);
+   s._result=s._entities;s._job=0;s._running=true;s._finished=true;s.loop();refresh();
+   assert(s.pending("light.sofa")&&lv_slider_get_value(getSlider())==target);
+   s._result=s._entities;if(warmth)s._result[0].kelvin=3990;else s._result[0].brightness=204;
+   s._job=0;s._running=true;s._finished=true;s.loop();refresh();assert(!s.pending("light.sofa"));
+   // A command that never confirms must stop displaying an optimistic value.
+   sl=getSlider();lv_slider_set_value(sl,warmth?5000:30,LV_ANIM_OFF);lv_obj_send_event(sl,LV_EVENT_RELEASED,nullptr);finish(s);refresh();
+   s._actions[0].deadline=TransitService::now_ms();s.loop();refresh();
+   assert(!s.pending("light.sofa")&&lv_slider_get_value(getSlider())==(warmth?3990:80));
+   assert(s.notice()=="Home action not confirmed");s._notice_until=TransitService::now_ms();s.loop();refresh();
+  }
   auto*detailChild=lv_obj_get_child(ctx.body,0);s._running=true;++s._revision;refresh();assert(lv_obj_get_child(ctx.body,0)==detailChild);s._running=false;
   setup(nullptr);assert(ctx.view==2);capture((std::string("home-setup-")+language).c_str());
   auto*screen=ctx.screen;ctx.view=0;back(nullptr);lv_obj_delete(screen);assert(!s._active&&!s.setup_open()&&!ctx.timer);

@@ -15,6 +15,7 @@ public:
  const ha::Entity*entity(const std::string&id)const;
  bool pending(const std::string&id)const;
  const char* expected_state(const std::string&id)const;
+ int expected_value(const std::string&id,const std::string&action,int fallback)const;
  bool busy()const{return _running;}
  bool connected()const;
  uint32_t revision()const{return _revision;}
@@ -26,7 +27,7 @@ public:
  std::string setup_request(const std::string&method,const std::string&path,const std::string&key,const std::string&body,int&status);
 private:
  static void worker(void*);bool start(int kind,const std::string&path="",const std::string&body="");
- struct Action{std::string id,path,body,expected;uint32_t deadline,serial;bool sent=false,accepted=false;};
+ struct Action{std::string id,path,body,expected;uint32_t deadline,serial;bool sent=false,accepted=false;std::string control;int value=0;};
  std::vector<Action> _actions;
  uint32_t _action_serial=0,_job_action=0;
  uint32_t _notice_until=0;

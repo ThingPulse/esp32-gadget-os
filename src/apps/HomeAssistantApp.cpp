@@ -44,16 +44,19 @@ void render(){
   ctx.detail_notice=s.notice();ctx.detail_pending=s.pending(ctx.detail);
   ctx.detail_entity=s.entity(ctx.detail)?*s.entity(ctx.detail):ha::Entity{};
   auto*t=tile();auto*e=s.entity(ctx.detail);if(!t){ctx.view=0;render();return;}
-  auto*l=label(ctx.body,t->name.empty()?ctx.detail:t->name,12,14,w-24,0xffffff,true);lv_obj_update_layout(l);int titleBottom=14+lv_obj_get_height(l);
-  label(ctx.body,value(e),12,titleBottom+10,w-24,ctx.connected?Mint:Muted,true);
   bool enabled=ctx.connected&&e&&e->available()&&!s.pending(ctx.detail);auto domain=ha::domain(ctx.detail);
-  int footer=std::max(382,titleBottom+90);
+  int footer=382;
   if(domain=="light"){
-   auto*b=button(ctx.body,i18n::tr((s.expected_state(ctx.detail)?std::string(s.expected_state(ctx.detail))=="on":e&&e->state=="on")?"Turn off":"Turn on"),12,titleBottom+50,w-24,44,toggle);if(!enabled)lv_obj_add_state(b,LV_STATE_DISABLED);
-   int y=titleBottom+112;
-   auto add_slider=[&](const char*name,const char*action,int min,int max,int current,const std::string&v){label(ctx.body,i18n::tr(name),18,y,w-36);auto*l=label(ctx.body,v,w-100,y,82,Mint);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);auto*sl=lv_slider_create(ctx.body);lv_obj_set_pos(sl,28,y+38);lv_obj_set_size(sl,w-56,12);lv_slider_set_range(sl,min,max);lv_slider_set_value(sl,std::max(min,std::min(max,current)),LV_ANIM_OFF);lv_obj_set_style_bg_color(sl,lv_color_hex(Mint),LV_PART_INDICATOR);lv_obj_set_style_bg_color(sl,lv_color_white(),LV_PART_KNOB);lv_obj_add_event_cb(sl,slider,LV_EVENT_RELEASED,const_cast<char*>(action));if(!enabled)lv_obj_add_state(sl,LV_STATE_DISABLED);y+=80;};
-   if(e&&e->dimmable)add_slider("Brightness","brightness",0,100,e->brightness<0?0:(e->brightness*100+127)/255,std::to_string(e->brightness<0?0:(e->brightness*100+127)/255)+"%");
-   if(e&&e->warmth)add_slider("Warmth","warmth",e->min_kelvin,e->max_kelvin,e->kelvin,std::to_string(e->kelvin)+" K");
+   bool on=s.expected_state(ctx.detail)?std::string(s.expected_state(ctx.detail))=="on":e&&e->state=="on";
+   auto*b=button(ctx.body,"",12,12,w-24,60,toggle,0,on&&ctx.connected?0x267968:Card);
+   auto*name=label(b,t->name.empty()?ctx.detail:t->name,14,10,w-52);
+   lv_label_set_long_mode(name,LV_LABEL_LONG_SCROLL_CIRCULAR);
+   label(b,value(e),14,34,w-52,on&&ctx.connected?Mint:Muted);
+   if(!enabled)lv_obj_add_state(b,LV_STATE_DISABLED);
+   int y=90;
+   auto add_slider=[&](const char*name,const char*action,int min,int max,int current,const std::string&v){label(ctx.body,i18n::tr(name),18,y,w-36);auto*l=label(ctx.body,v,w-100,y,82,Mint);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);auto*sl=lv_slider_create(ctx.body);lv_obj_set_pos(sl,28,y+38);lv_obj_set_size(sl,w-56,12);lv_slider_set_range(sl,min,max);lv_slider_set_value(sl,std::max(min,std::min(max,current)),LV_ANIM_OFF);lv_obj_set_style_bg_color(sl,lv_color_hex(Mint),LV_PART_INDICATOR);lv_obj_set_style_bg_color(sl,lv_color_white(),LV_PART_KNOB);lv_obj_add_event_cb(sl,[](lv_event_t*event){auto*slider=static_cast<lv_obj_t*>(lv_event_get_target(event));auto*valueLabel=static_cast<lv_obj_t*>(lv_event_get_user_data(event));std::string text=std::to_string(lv_slider_get_value(slider))+(lv_slider_get_max_value(slider)==100?"%":" K");lv_label_set_text(valueLabel,text.c_str());},LV_EVENT_VALUE_CHANGED,l);lv_obj_add_event_cb(sl,slider,LV_EVENT_RELEASED,const_cast<char*>(action));if(!enabled)lv_obj_add_state(sl,LV_STATE_DISABLED);y+=80;};
+   if(e&&e->dimmable){int brightness=s.expected_value(ctx.detail,"brightness",e->brightness<0?0:(e->brightness*100+127)/255);add_slider("Brightness","brightness",0,100,brightness,std::to_string(brightness)+"%");}
+   if(e&&e->warmth){int kelvin=s.expected_value(ctx.detail,"warmth",e->kelvin);add_slider("Warmth","warmth",e->min_kelvin,e->max_kelvin,kelvin,std::to_string(kelvin)+" K");}
    if(e&&e->color){
     label(ctx.body,i18n::tr("Color"),18,y,w-36);y+=26;
     const uint32_t colors[]={0xff0000,0xff8000,0xffff00,0x00ff00,0x00ffff,0x0000ff,0x8000ff,0xff0080,0xffffff,0xffc080};
@@ -62,7 +65,7 @@ void render(){
     y+=108;
    }
    footer=std::max(footer,y);
-  }else label(ctx.body,ctx.detail,12,titleBottom+70,w-24,Muted);
+  }else {auto*l=label(ctx.body,t->name.empty()?ctx.detail:t->name,12,14,w-24,0xffffff,true);lv_obj_update_layout(l);int titleBottom=14+lv_obj_get_height(l);footer=std::max(footer,titleBottom+90);label(ctx.body,value(e),12,titleBottom+10,w-24,ctx.connected?Mint:Muted,true);label(ctx.body,ctx.detail,12,titleBottom+70,w-24,Muted);}
   if(!s.notice().empty()){auto*n=label(ctx.body,i18n::tr(s.notice().c_str()),12,footer,w-24,0xffc66d);lv_obj_update_layout(n);footer+=lv_obj_get_height(n)+12;}
   button(ctx.body,i18n::tr("Done"),12,footer,w-24,44,back);return;
  }

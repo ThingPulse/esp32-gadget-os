@@ -7,6 +7,7 @@
 #include "services/WifiService.h"
 #include <ArduinoJson.h>
 #include <algorithm>
+#include <cstdlib>
 #if defined(ARDUINO)
 #include <Arduino.h>
 #include <esp_system.h>
@@ -32,10 +33,12 @@ bool HomeAssistantService::discover(size_t offset,const std::string&query,const 
 }
 bool HomeAssistantService::pending(const std::string&id)const{for(auto&a:_actions)if(a.id==id)return true;return false;}
 const char*HomeAssistantService::expected_state(const std::string&id)const{for(auto&a:_actions)if(a.id==id&&!a.expected.empty())return a.expected.c_str();return nullptr;}
+int HomeAssistantService::expected_value(const std::string&id,const std::string&action,int fallback)const{for(auto&a:_actions)if(a.id==id&&a.control==action)return a.value;return fallback;}
 bool HomeAssistantService::act(const std::string&id,const std::string&action,int value){
  const auto*e=entity(id);std::string path,body;if(pending(id)||_actions.size()>=ha::MaxPages*ha::MaxTiles||!connected()||!e||!ha::command(_config,*e,action,value,path,body))return false;
  std::string expected;if(ha::domain(id)=="light"&&action=="toggle")expected=e->state=="on"?"off":"on";
- _actions.push_back({id,path,body,expected,now()+30000,++_action_serial,false,false});++_revision;dispatch();return true;
+ if(action=="brightness"||action=="warmth")expected=action=="brightness"&&value==0?"off":"on";
+ _actions.push_back({id,path,body,expected,now()+30000,++_action_serial,false,false,action,value});++_revision;dispatch();return true;
 }
 void HomeAssistantService::dispatch(){
  if(_running)return;
@@ -89,7 +92,13 @@ void HomeAssistantService::loop(){
    for(auto i=_actions.begin();i!=_actions.end();){
     bool remove=false;
     if(_job==2&&i->serial==_job_action){i->accepted=_online;remove=!_online||i->expected.empty();}
-    if(_job==0&&i->accepted){auto*e=entity(i->id);remove=!_online||(e&&e->state==i->expected);}
+    if(_job==0&&i->accepted){
+     auto*e=entity(i->id);bool confirmed=e&&e->state==i->expected;
+     // Ignore stale polls and intermediate transition values. Allow device rounding.
+     if(confirmed&&i->control=="brightness"&&i->value>0)confirmed=e->brightness>=0&&std::abs((e->brightness*100+127)/255-i->value)<=1;
+     if(confirmed&&i->control=="warmth")confirmed=e->kelvin>0&&std::abs(e->kelvin-i->value)<=50;
+     remove=!_online||confirmed;
+    }
     if(remove)i=_actions.erase(i);else ++i;
    }
    _next=now()+(_job==2&&_online?250:_online?(_actions.empty()?5000:1000):15000);++_revision;
