@@ -19,12 +19,19 @@ int main(int argc,char**argv){
  using namespace ha;assert(argc>=2);std::string url=argv[1],error;
  assert(valid_entity("light.sofa"));assert(!valid_entity("lock.front_door"));assert(!valid_entity("light.sofa/../../"));assert(!valid_entity("light.sofa.x"));assert(!valid_entity("sensor."));
  assert(valid_url(url));assert(!valid_url("https://user:pass@host"));assert(!valid_url("file:///tmp/x"));assert(!valid_url("https://host/path"));assert(!valid_url("http://host\r\nHeader:x"));
- Config c;c.url=url;c.token="test-token";c.pages={{"Living room",{{"light.sofa","Sofa light","light"},{"switch.ceiling","Ceiling","power"},{"sensor.temperature","Temperature","temperature"},{"sensor.humidity","Humidity","water"},{"scene.movie","Movie night","play"},{"script.all_off","All off","power"}}},{"Energy",{{"sensor.solar","Solar","energy"}}}};
+ Config c;c.url=url;c.token="test-token";c.pages={{"Living room",{{"light.sofa","Dining Table Pendant","light"},{"switch.ceiling","Ceiling","power"},{"sensor.temperature","Temperature","temperature"},{"sensor.humidity","Humidity","water"},{"scene.movie","Movie night","play"},{"script.all_off","All off","power"}}},{"Energy",{{"sensor.solar","Solar","energy"}}}};
  auto raw=config_json(c,true);Config parsed;if(!parse_config(raw,parsed,error)){std::fprintf(stderr,"Config error: %s; %s\n",error.c_str(),raw.c_str());std::abort();}assert(parsed.pages.size()==2&&parsed.pages[0].tiles.size()==6);
  assert(config_json(c).find("test-token")==std::string::npos);assert(parse_config(config_json(c),parsed,error,&c)&&parsed.token==c.token);
  auto bad=c;bad.url="http://other";assert(!parse_config(config_json(bad),parsed,error,&c));bad=c;bad.pages[0].tiles.push_back(bad.pages[0].tiles[0]);assert(!parse_config(config_json(bad,true),parsed,error));bad=c;bad.pages[0].tiles[0].id="lock.front";assert(!parse_config(config_json(bad,true),parsed,error));
  Entity e;e.id="light.sofa";e.state="on";e.dimmable=true;e.warmth=true;std::string path,body;
  assert(command(c,e,"toggle",0,path,body)&&path=="/api/services/light/turn_off");assert(command(c,e,"brightness",65,path,body)&&body.find("65")!=std::string::npos);assert(!command(c,e,"brightness",101,path,body));assert(!command(c,e,"warmth",10,path,body));assert(!command(c,e,"delete",0,path,body));e.state="unavailable";assert(!command(c,e,"toggle",0,path,body));e.state="on";e.id="light.unselected";assert(!command(c,e,"toggle",0,path,body));
+ // Only color-capable lights accept RGB commands, including HA-converted modes.
+ for(const char*mode:{"hs","xy","rgb","rgbw","rgbww","color_temp","brightness","onoff"}){
+  Entity light;assert(parse_entity(std::string(R"({"entity_id":"light.sofa","state":"on","attributes":{"supported_color_modes":[")")+mode+R"("]}})",light,error));
+  bool supported=std::string(mode)!="color_temp"&&std::string(mode)!="brightness"&&std::string(mode)!="onoff";
+  assert(light.color==supported);assert(command(c,light,"color",0xff0080,path,body)==supported);
+  if(supported){assert(path=="/api/services/light/turn_on"&&body.find("\"rgb_color\":[255,0,128]")!=std::string::npos);assert(!command(c,light,"color",-1,path,body));assert(!command(c,light,"color",0x1000000,path,body));light.state="unavailable";assert(!command(c,light,"color",0xff0000,path,body));}
+ }
  Entity invalidEntity;assert(!parse_entity("[]",invalidEntity,error));assert(!parse_entity(std::string(1048577,'x'),invalidEntity,error));
  // Frame across arbitrary chunk boundaries, including escaped quotes/braces.
  const std::string framed=R"([{"entity_id":"sensor.test","state":"ok","attributes":{"friendly_name":"Test \" { [","ignored":{"x":[1,2]}}},{"entity_id":"lock.door","state":"locked"}])";
@@ -35,7 +42,7 @@ int main(int argc,char**argv){
  EntityStream next(256);assert(request(c,"/api/states?large","",largeResponse,error,&next));assert(next.matches==607&&next.items.size()==256&&next.items[0].id!=first.items[0].id);
  EntityStream search(0,"extra_599","sensor");assert(request(c,"/api/states?large","",largeResponse,error,&search));assert(search.matches==1&&search.items[0].id=="sensor.extra_599");
  auto&s=HomeAssistantService::instance();assert(s.begin());assert(s.configure(raw,error));assert(s.begin());assert(s.config().pages[0].tiles.size()==6&&s.config().token=="test-token");assert(s.discover());finish(s);assert(s.connected()&&s.entities().size()==7);assert(s.entity("light.sofa")->dimmable&&s.entity("light.sofa")->warmth);
- assert(s.act("light.sofa","brightness",65));finish(s);assert(s.notice().empty());assert(!s.act("sensor.temperature","toggle"));
+ assert(s.act("light.sofa","brightness",65));finish(s);assert(s.notice().empty());assert(s.act("light.sofa","color",0xff0080));finish(s);assert(!s.act("sensor.temperature","toggle"));
  assert(s.open_setup());auto setupUrl=s.setup_url();auto key=setupUrl.substr(setupUrl.find('#')+1);int status;
  assert(s.setup_request("GET","/api/config","bad","",status).find("error")!=std::string::npos&&status==403);
  auto publicConfig=s.setup_request("GET","/api/config",key,"",status);assert(status==200&&publicConfig.find("test-token")==std::string::npos);
@@ -62,6 +69,8 @@ int main(int argc,char**argv){
   s._result=s._entities;s._result[0].state=oldState;s._job=0;s._running=true;s._finished=true;s.loop();assert(!s.pending("light.sofa"));
   auto*chevron=lv_obj_get_child(originalTile,0);assert(lv_obj_get_width(chevron)==44&&!lv_obj_has_flag(chevron,LV_OBJ_FLAG_EVENT_BUBBLE));
   lv_obj_send_event(chevron,LV_EVENT_CLICKED,nullptr);assert(ctx.view==1&&ctx.detail=="light.sofa"&&!s.busy());capture((std::string("home-light-")+language).c_str());
+  lv_obj_scroll_to_y(ctx.body,1000,LV_ANIM_OFF);capture((std::string("home-color-")+language).c_str());
+  auto*swatch=lv_obj_get_child(ctx.body,-11);lv_obj_send_event(swatch,LV_EVENT_CLICKED,nullptr);assert(s.busy()&&s._job_body.find("rgb_color")!=std::string::npos);finish(s);refresh();
   auto*detailChild=lv_obj_get_child(ctx.body,0);s._running=true;++s._revision;refresh();assert(lv_obj_get_child(ctx.body,0)==detailChild);s._running=false;
   setup(nullptr);assert(ctx.view==2);capture((std::string("home-setup-")+language).c_str());
   auto*screen=ctx.screen;ctx.view=0;back(nullptr);lv_obj_delete(screen);assert(!s._active&&!s.setup_open()&&!ctx.timer);

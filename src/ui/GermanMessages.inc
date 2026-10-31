@@ -86,6 +86,7 @@ static const Message messages[] = {
  {"Clear sky", "Klarer Himmel"},
  {"Close", "Schließen"},
  {"Cloudy", "Bewölkt"},
+ {"Color", "Farbe"},
  {"Config store unavailable", "Konfigurationsspeicher nicht verfügbar"},
  {"Configure", "Einrichten"},
  {"Configure Home", "Zuhause einrichten"},

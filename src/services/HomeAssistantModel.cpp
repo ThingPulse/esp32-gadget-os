@@ -45,7 +45,7 @@ Entity decode_entity(JsonObjectConst o){
  if(e.name.size()>128)e.name.resize(128);if(e.state.size()>128)e.state.resize(128);if(e.unit.size()>24)e.unit.resize(24);
  e.brightness=a["brightness"]|-1;e.kelvin=a["color_temp_kelvin"]|0;e.min_kelvin=a["min_color_temp_kelvin"]|2000;e.max_kelvin=a["max_color_temp_kelvin"]|6500;
  e.min_kelvin=std::max(1000,std::min(10000,e.min_kelvin));e.max_kelvin=std::max(e.min_kelvin,std::min(10000,e.max_kelvin));
- for(JsonVariantConst m:a["supported_color_modes"].as<JsonArrayConst>()){std::string mode=m|"";if(mode!="onoff"&&mode!="unknown"&&!mode.empty())e.dimmable=true;if(mode=="color_temp")e.warmth=true;}
+ for(JsonVariantConst m:a["supported_color_modes"].as<JsonArrayConst>()){std::string mode=m|"";if(mode!="onoff"&&mode!="unknown"&&!mode.empty())e.dimmable=true;if(mode=="color_temp")e.warmth=true;if(mode=="hs"||mode=="xy"||mode=="rgb"||mode=="rgbw"||mode=="rgbww")e.color=true;}
  return e;
 }
 }
@@ -62,6 +62,7 @@ bool command(const Config&c,const Entity&e,const std::string&action,int value,st
  else if((kind=="scene"||kind=="script")&&action=="activate")service="turn_on";
  else if(kind=="light"&&action=="brightness"&&e.dimmable&&value>=0&&value<=100){service="turn_on";d["brightness_pct"]=value;}
  else if(kind=="light"&&action=="warmth"&&e.warmth&&value>=e.min_kelvin&&value<=e.max_kelvin){service="turn_on";d["color_temp_kelvin"]=value;}
+ else if(kind=="light"&&action=="color"&&e.color&&value>=0&&value<=0xffffff){service="turn_on";auto rgb=d["rgb_color"].to<JsonArray>();rgb.add((value>>16)&255);rgb.add((value>>8)&255);rgb.add(value&255);}
  else return false;
  path="/api/services/"+kind+"/"+service;body.clear();serializeJson(d,body);return true;
 }

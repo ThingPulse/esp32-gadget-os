@@ -9,7 +9,7 @@ struct Config { std::string url,token,ca; std::vector<Page> pages; };
 struct Entity {
  std::string id,name,state,unit;
  int brightness=-1,kelvin=0,min_kelvin=2000,max_kelvin=6500;
- bool dimmable=false,warmth=false;
+ bool dimmable=false,warmth=false,color=false;
  bool available()const{return !state.empty()&&state!="unknown"&&state!="unavailable";}
 };
 std::string domain(const std::string&);

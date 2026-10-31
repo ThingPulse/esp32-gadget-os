@@ -17,7 +17,7 @@ subprocess.run(['node','test/home-assistant/setup-browser.test.cjs'],check=True)
 commands = []
 large_mode = False
 entities = [
- {'entity_id':'light.sofa','state':'on','attributes':{'friendly_name':'Sofa light','brightness':166,'color_temp_kelvin':2700,'min_color_temp_kelvin':2000,'max_color_temp_kelvin':6500,'supported_color_modes':['color_temp']}},
+ {'entity_id':'light.sofa','state':'on','attributes':{'friendly_name':'Sofa light','brightness':166,'color_temp_kelvin':2700,'min_color_temp_kelvin':2000,'max_color_temp_kelvin':6500,'supported_color_modes':['color_temp','rgb']}},
  {'entity_id':'switch.ceiling','state':'off','attributes':{'friendly_name':'Ceiling'}},
  {'entity_id':'sensor.temperature','state':'22.5','attributes':{'friendly_name':'Temperature','unit_of_measurement':'°C'}},
  {'entity_id':'sensor.humidity','state':'48','attributes':{'friendly_name':'Humidity','unit_of_measurement':'%'}},
@@ -60,6 +60,7 @@ with tempfile.TemporaryDirectory(prefix='home-test-') as temporary:
  env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0',GADGET_OS_DATA_DIR=temporary)
  subprocess.run([str(binary),url],env=env,check=True,timeout=45)
  assert ('/api/services/light/turn_on',{'entity_id':'light.sofa','brightness_pct':65}) in commands
+ assert ('/api/services/light/turn_on',{'entity_id':'light.sofa','rgb_color':[255,0,128]}) in commands
  # Exercise the actual bounded HTTP listener and pairing authentication.
  proc=subprocess.Popen([str(binary),url,'--serve'],env=env,stdout=subprocess.PIPE,text=True)
  try:

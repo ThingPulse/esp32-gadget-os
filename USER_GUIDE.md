@@ -431,7 +431,7 @@ required.
    that lamp are ignored while pending; other controls queue normally. If the
    request fails or is not confirmed within 30 seconds, the tile returns to the
    last confirmed state and briefly shows an error. Tap its right-hand chevron to open
-   details with power and supported brightness/colour-temperature controls. Switches
+   details with power, supported brightness/colour-temperature controls, and colour swatches for colour-capable lights. Scroll the details to reach all controls. Device rows use small icons and scroll long names so the full name can be read. Switches
    toggle directly; scenes and scripts activate directly. Sensors open a read-only
    detail view.
 
