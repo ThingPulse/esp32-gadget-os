@@ -15,6 +15,8 @@
 #include "ui/StatusIcons.h"
 #include "ui/UiTrace.h"
 #include "ui/DisplayPreferences.h"
+#include "ui/TouchKeyboard.h"
+#include <cstdlib>
 #include <ArduinoJson.h>
 #include <lvgl.h>
 
@@ -38,8 +40,70 @@ APP_REGISTER_COLOR_RANK("Settings", LV_SYMBOL_SETTINGS, settings_launch, 0x49505
 static lv_obj_t *route_restore_settings_screen = nullptr;
 
 static void configure_settings_keyboard(lv_obj_t *keyboard);
-static void settings_keyboard_value_event(lv_event_t *e);
 static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target, bool back_to_home);
+
+// Preference changes persist immediately; text forms keep a draft until submitted.
+static void settings_feedback(bool saved,const char *error="Could not save settings")
+{
+  auto *label=lv_label_create(lv_screen_active());
+  lv_label_set_text(label,i18n::tr(saved?"Saved":error));lv_obj_set_style_text_font(label,i18n::font14(),0);
+  lv_obj_set_width(label,lv_pct(92));lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
+  lv_obj_set_style_bg_color(label,lv_color_hex(saved?0x237a70:0x8b3434),0);
+  lv_obj_set_style_bg_opa(label,LV_OPA_COVER,0);lv_obj_set_style_text_color(label,lv_color_white(),0);
+  lv_obj_set_style_pad_all(label,8,0);lv_obj_align(label,LV_ALIGN_TOP_MID,0,46);
+  lv_obj_delete_delayed(label,saved?1500:5000);
+}
+static void autosave_hint(lv_obj_t *parent)
+{
+  auto *label=lv_label_create(parent);lv_obj_set_width(label,lv_pct(100));
+  lv_label_set_text(label,i18n::tr("Changes are saved automatically"));
+  lv_obj_set_style_text_color(label,lv_color_hex(0xb7bdd7),0);
+}
+struct SettingsForm {
+  lv_obj_t *screen=nullptr,*target=nullptr,*dialog=nullptr;
+  std::vector<lv_obj_t*> fields;std::vector<std::string> original;
+  bool (*save)()=nullptr;const char *route="settings";
+} settings_form;
+static bool form_dirty(){
+  if(settings_form.screen!=lv_screen_active())return false;
+  for(size_t i=0;i<settings_form.fields.size();++i)
+    if(settings_form.original[i]!=lv_textarea_get_text(settings_form.fields[i]))return true;
+  return false;
+}
+static void leave_form(){
+  UiSessionState::set_route(settings_form.route);ui_load_screen(settings_form.target,true);
+}
+static void register_form(lv_obj_t *screen,lv_obj_t *target,std::vector<lv_obj_t*> fields,bool (*save)(),const char *route="settings"){
+  settings_form={};settings_form.screen=screen;settings_form.target=target;
+  settings_form.fields=fields;settings_form.save=save;settings_form.route=route;
+  for(auto *field:fields)settings_form.original.push_back(lv_textarea_get_text(field));
+  lv_obj_add_event_cb(screen,[](lv_event_t *e){
+    if(settings_form.screen==lv_event_get_target(e)){
+      if(settings_form.dialog)lv_msgbox_close(settings_form.dialog);
+      settings_form={};
+    }
+  },LV_EVENT_DELETE,nullptr);
+}
+static bool confirm_form_back(){
+  if(!form_dirty())return false;
+  if(settings_form.dialog)return true;
+  auto *dialog=lv_msgbox_create(nullptr);settings_form.dialog=dialog;
+  lv_obj_set_width(dialog,296);
+  auto *title=lv_msgbox_add_title(dialog,i18n::tr("Unsaved changes"));lv_obj_set_style_text_font(title,i18n::font14(),0);
+  auto *text=lv_msgbox_add_text(dialog,i18n::tr("Save your changes before leaving?"));lv_obj_set_style_text_font(text,i18n::font14(),0);
+  for(int action=0;action<3;++action){
+    auto *button=lv_button_create(lv_msgbox_get_content(dialog));lv_obj_set_size(button,lv_pct(100),44);
+    auto *label=lv_label_create(button);lv_label_set_text(label,i18n::tr(action==0?"Save":action==1?"Discard":"Keep editing"));lv_obj_center(label);
+    lv_obj_add_event_cb(button,[](lv_event_t *e){
+      int action=int(reinterpret_cast<intptr_t>(lv_event_get_user_data(e)));
+      auto *dialog=settings_form.dialog;settings_form.dialog=nullptr;lv_msgbox_close_async(dialog);
+      if(action==1)leave_form();
+      else if(action==0&&settings_form.save())leave_form();
+    },LV_EVENT_CLICKED,reinterpret_cast<void*>(intptr_t(action)));
+  }
+  return true;
+}
 
 struct UpdateSettingsCtx { lv_obj_t *status=nullptr; lv_timer_t *timer=nullptr; };
 static UpdateSettingsCtx update_settings_ctx;
@@ -308,6 +372,8 @@ static void nav_to_home_screen(lv_event_t *e)
 static void nav_to_settings_screen(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    if(confirm_form_back())return;
+    if(settings_form.screen==lv_screen_active()){leave_form();return;}
     UI_TRACE("Settings", "nav_to_settings clicked");
     UiSessionState::set_route("settings");
     lv_obj_t *target_scr = (lv_obj_t *)lv_event_get_user_data(e);
@@ -352,7 +418,7 @@ static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target
 
 // ── WiFi screen ───────────────────────────────────────────────────────────
 
-#define WIFI_KB_HEIGHT 200
+#define WIFI_KB_HEIGHT 240
 #define WIFI_BAR_HEIGHT 44
 #define WIFI_SCREEN_H 480
 
@@ -415,8 +481,6 @@ struct PlanesCtx {
   lv_obj_t *range_input;
   lv_obj_t *status_label;
   lv_obj_t *guess_result_label;
-  lv_obj_t *unit_switch;
-  lv_obj_t *hide_ground_switch;
 };
 static PlanesCtx planes_ctx;
 
@@ -600,25 +664,21 @@ static void planes_guess_location_event(lv_event_t *e)
   lv_label_set_text(planes_ctx.guess_result_label, label.c_str());
 }
 
+static bool save_wifi_form()
+{
+  auto &cfg=ConfigStoreService::instance();
+  std::string ssid=lv_textarea_get_text(wifi_ctx.ssid_input);
+  if(ssid.empty()||ssid.size()>32){settings_feedback(false,"Enter a network name (1-32 bytes)");return false;}
+  if(!cfg.load("wifi")){settings_feedback(false);return false;}
+  auto previous=cfg.get("ssid","");cfg.set("ssid",ssid);
+  std::string password=lv_textarea_get_text(wifi_ctx.pass_input);
+  if(!password.empty()||ssid!=previous)cfg.set("password",password);
+  if(!cfg.save()){settings_feedback(false);return false;}
+  WifiService::instance().reload_from_config();return true;
+}
 static void wifi_save_event(lv_event_t *e)
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-  ConfigStoreService &cfg = ConfigStoreService::instance();
-  if (cfg.load("wifi")) {
-    const std::string previous_ssid = cfg.get("ssid", "");
-    const std::string selected_ssid = lv_textarea_get_text(wifi_ctx.ssid_input);
-    cfg.set("ssid", selected_ssid);
-    const char *password = lv_textarea_get_text(wifi_ctx.pass_input);
-    if (password[0] != '\0' || selected_ssid != previous_ssid)
-      cfg.set("password", std::string(password));
-    cfg.save();
-    WifiService::instance().reload_from_config();
-  }
-
-  UiSessionState::set_route("settings");
-  if (!wifi_ctx.settings_scr || !lv_obj_is_valid(wifi_ctx.settings_scr)) return;
-  ui_load_screen(wifi_ctx.settings_scr, true);
+  if(lv_event_get_code(e)==LV_EVENT_CLICKED&&save_wifi_form()){leave_form();settings_feedback(true);}
 }
 
 static void wifi_ta_event(lv_event_t *e)
@@ -922,7 +982,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_add_event_cb(save_btn, wifi_save_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, i18n::tr("Save & Back"));
+  lv_label_set_text(save_label, i18n::tr("Connect"));
   lv_obj_center(save_label);
 
   /* On-screen keyboard — hidden until a textarea is focused */
@@ -930,7 +990,6 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
   lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
   configure_settings_keyboard(kb);
-  lv_obj_add_event_cb(kb, settings_keyboard_value_event, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(kb, wifi_kb_event, LV_EVENT_READY, nullptr);
   lv_obj_add_event_cb(kb, wifi_kb_event, LV_EVENT_CANCEL, nullptr);
@@ -950,22 +1009,22 @@ static void open_wifi_screen(lv_event_t *e)
   wifi_ctx.scan_timer = lv_timer_create(wifi_scan_timer_event, 100, nullptr);
   lv_obj_add_event_cb(scr, wifi_settings_delete_event, LV_EVENT_DELETE, nullptr);
 
+  register_form(scr,settings_scr,{ssid_input,pass_input},save_wifi_form);
   ui_load_screen(scr, false);
   
   // Set route after screen is loaded
   UiSessionState::set_route("settings_wifi");
 }
 
-static void time_save_event(lv_event_t *e)
+static void rebuild_timezone_roller(int region_index,int selected_local_tz_index);
+static void time_save_event(lv_event_t *)
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-  bool use_24h = lv_obj_has_state(time_ctx.fmt_switch, LV_STATE_CHECKED);
-  TimeService::instance().save_preferences(time_ctx.selected_tz_index, use_24h);
-
-  UiSessionState::set_route("settings");
-  if (!time_ctx.settings_scr || !lv_obj_is_valid(time_ctx.settings_scr)) return;
-  ui_load_screen(time_ctx.settings_scr, true);
+  auto &service=TimeService::instance();bool ok=service.save_preferences(time_ctx.selected_tz_index,lv_obj_has_state(time_ctx.fmt_switch,LV_STATE_CHECKED));
+  if(!ok){
+    if(service.use_24h())lv_obj_add_state(time_ctx.fmt_switch,LV_STATE_CHECKED);else lv_obj_remove_state(time_ctx.fmt_switch,LV_STATE_CHECKED);
+    int region=0,zone=0;TimeService::split_timezone_index(service.timezone_index(),&region,&zone);time_ctx.selected_region_index=region;lv_roller_set_selected(time_ctx.region_roller,region,LV_ANIM_OFF);rebuild_timezone_roller(region,zone);
+  }
+  settings_feedback(ok);
 }
 
 static void timezone_changed_event(lv_event_t *e)
@@ -974,6 +1033,7 @@ static void timezone_changed_event(lv_event_t *e)
   lv_obj_t *roller = (lv_obj_t *)lv_event_get_target(e);
   int local_tz_index = (int)lv_roller_get_selected(roller);
   time_ctx.selected_tz_index = TimeService::timezone_global_index(time_ctx.selected_region_index, local_tz_index);
+  time_save_event(nullptr);
 }
 
 static void rebuild_timezone_roller(int region_index, int selected_local_tz_index)
@@ -1006,6 +1066,7 @@ static void region_changed_event(lv_event_t *e)
   int region_index = (int)lv_roller_get_selected(roller);
   time_ctx.selected_region_index = region_index;
   rebuild_timezone_roller(region_index, 0);
+  time_save_event(nullptr);
 }
 
 static void open_time_screen(lv_event_t *e)
@@ -1097,14 +1158,7 @@ static void open_time_screen(lv_event_t *e)
   else
     lv_obj_clear_state(fmt_switch, LV_STATE_CHECKED);
 
-  lv_obj_t *save_btn = lv_button_create(content);
-  lv_obj_set_width(save_btn, lv_pct(100));
-  lv_obj_set_height(save_btn, 44);
-  lv_obj_add_event_cb(save_btn, time_save_event, LV_EVENT_CLICKED, nullptr);
-
-  lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, i18n::tr("Save & Back"));
-  lv_obj_center(save_label);
+  autosave_hint(content);
 
   time_ctx.settings_scr = settings_scr;
   time_ctx.region_roller = region_roller;
@@ -1113,6 +1167,7 @@ static void open_time_screen(lv_event_t *e)
   time_ctx.selected_region_index = region_index;
   time_ctx.selected_tz_index = time_service.timezone_index();
 
+  lv_obj_add_event_cb(fmt_switch,time_save_event,LV_EVENT_VALUE_CHANGED,nullptr);
   ui_load_screen(scr, false);
   
   // Set route after screen is loaded
@@ -1156,25 +1211,7 @@ static void weather_kb_event(lv_event_t *e)
 
 static void configure_settings_keyboard(lv_obj_t *keyboard)
 {
-  if (!keyboard || !lv_obj_is_valid(keyboard)) return;
-  lv_keyboard_set_popovers(keyboard, true);
-  const char * const *map = lv_buttonmatrix_get_map(keyboard);
-  if (!map) return;
-  uint32_t button_id = 0;
-  for (uint32_t i = 0; map[i] && map[i][0] != '\0'; ++i) {
-    if (std::strcmp(map[i], "\n") == 0) continue;
-    if (std::strcmp(map[i], LV_SYMBOL_BACKSPACE) == 0)
-      lv_buttonmatrix_clear_button_ctrl(keyboard, button_id, LV_BUTTONMATRIX_CTRL_NO_REPEAT);
-    else
-      lv_buttonmatrix_set_button_ctrl(keyboard, button_id, LV_BUTTONMATRIX_CTRL_NO_REPEAT);
-    ++button_id;
-  }
-}
-
-static void settings_keyboard_value_event(lv_event_t *e)
-{
-  // Reapply after a mode change because LVGL replaces the keyboard control map.
-  configure_settings_keyboard((lv_obj_t *)lv_event_get_target(e));
+  configure_touch_keyboard(keyboard);
 }
 
 static std::string weather_location_subtitle(const WeatherLocation &location)
@@ -1210,8 +1247,9 @@ static void weather_select_location_event(lv_event_t *e)
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   const int index = (int)(intptr_t)lv_event_get_user_data(e);
   if (index < 0 || index >= (int)weather_ctx.locations.size()) return;
-  weather_ctx.active_index = index;
-  WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index);
+  int previous=weather_ctx.active_index;weather_ctx.active_index = index;
+  if(!WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index)){weather_ctx.active_index=previous;settings_feedback(false);return;}
+  settings_feedback(true);
   WeatherService::instance().reload_from_config();
   weather_update_location_rows();
 }
@@ -1221,11 +1259,13 @@ static void weather_delete_location_event(lv_event_t *e)
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   const int index = (int)(intptr_t)lv_event_get_user_data(e);
   if (index < 0 || index >= (int)weather_ctx.locations.size()) return;
+  auto previous=weather_ctx.locations;int previous_index=weather_ctx.active_index;
   weather_ctx.locations.erase(weather_ctx.locations.begin() + index);
   if (weather_ctx.active_index > index) --weather_ctx.active_index;
   if (weather_ctx.active_index >= (int)weather_ctx.locations.size())
     weather_ctx.active_index = std::max(0, (int)weather_ctx.locations.size() - 1);
-  WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index);
+  if(!WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index)){weather_ctx.locations=previous;weather_ctx.active_index=previous_index;settings_feedback(false);return;}
+  settings_feedback(true);
   WeatherService::instance().reload_from_config();
   weather_update_location_rows();
 }
@@ -1247,9 +1287,10 @@ static void weather_add_search_result_event(lv_event_t *e)
       return;
     }
   }
+  int previous_index=weather_ctx.active_index;
   weather_ctx.locations.push_back(results[index]);
   weather_ctx.active_index = (int)weather_ctx.locations.size() - 1;
-  WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index);
+  if(!WeatherLocationStore::save(weather_ctx.locations, weather_ctx.active_index)){weather_ctx.locations.pop_back();weather_ctx.active_index=previous_index;settings_feedback(false);return;}
   WeatherService::instance().reload_from_config();
   weather_update_location_rows();
   lv_label_set_text(weather_ctx.search_status, i18n::tr("Location saved and selected"));
@@ -1310,25 +1351,22 @@ static void weather_settings_delete_event(lv_event_t *e)
 
 static void weather_unit_changed_event(lv_event_t *e)
 {
-  if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
-
-  ConfigStoreService &cfg = ConfigStoreService::instance();
-  if (cfg.load("weather")) {
-    cfg.set("metric", lv_obj_has_state(weather_ctx.unit_switch, LV_STATE_CHECKED));
-    cfg.save();
-    WeatherService::instance().reload_from_config();
-  }
-
+  if(lv_event_get_code(e)!=LV_EVENT_VALUE_CHANGED)return;
+  auto &cfg=ConfigStoreService::instance();bool ok=cfg.load("weather");
+  bool previous=cfg.get_bool("metric",true);
+  if(ok){cfg.set("metric",lv_obj_has_state(weather_ctx.unit_switch,LV_STATE_CHECKED));ok=cfg.save();}
+  if(ok)WeatherService::instance().reload_from_config();
+  else if(previous)lv_obj_add_state(weather_ctx.unit_switch,LV_STATE_CHECKED);else lv_obj_remove_state(weather_ctx.unit_switch,LV_STATE_CHECKED);
+  settings_feedback(ok);
 }
-
 static void weather_layout_changed_event(lv_event_t *e)
 {
-  if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
-  auto &cfg = ConfigStoreService::instance();
-  if (!cfg.load("weather")) return;
-  const bool classic = lv_dropdown_get_selected((lv_obj_t *)lv_event_get_target(e)) == 1;
-  cfg.set("layout", std::string(classic ? "classic" : "detailed"));
-  cfg.save();
+  if(lv_event_get_code(e)!=LV_EVENT_VALUE_CHANGED)return;
+  auto *dropdown=static_cast<lv_obj_t*>(lv_event_get_target(e));
+  auto &cfg=ConfigStoreService::instance();bool ok=cfg.load("weather");
+  bool previous=cfg.get("layout","classic")=="classic";
+  if(ok){cfg.set("layout",std::string(lv_dropdown_get_selected(dropdown)==1?"classic":"detailed"));ok=cfg.save();}
+  if(!ok)lv_dropdown_set_selected(dropdown,previous?1:0);settings_feedback(ok);
 }
 
 static void open_weather_screen(lv_event_t *e)
@@ -1479,7 +1517,6 @@ static void open_weather_screen(lv_event_t *e)
   lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_LOWER);
   configure_settings_keyboard(kb);
-  lv_obj_add_event_cb(kb, settings_keyboard_value_event, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_READY, nullptr);
   lv_obj_add_event_cb(kb, weather_kb_event, LV_EVENT_CANCEL, nullptr);
@@ -1540,31 +1577,25 @@ static void planes_kb_event(lv_event_t *e)
   }
 }
 
-static void planes_save_event(lv_event_t *e)
+static bool save_planes_form()
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-  UI_TRACE("Settings", "planes_save_event clicked");
-
-  ConfigStoreService &cfg = ConfigStoreService::instance();
-  if (cfg.load("planes")) {
-    cfg.set("center_latitude", normalize_coord_text(lv_textarea_get_text(planes_ctx.lat_input)));
-    cfg.set("center_longitude", normalize_coord_text(lv_textarea_get_text(planes_ctx.lon_input)));
-    cfg.set("range_km", normalize_coord_text(lv_textarea_get_text(planes_ctx.range_input)));
-    cfg.set("metric", lv_obj_has_state(planes_ctx.unit_switch, LV_STATE_CHECKED));
-    cfg.set("hide_ground", lv_obj_has_state(planes_ctx.hide_ground_switch, LV_STATE_CHECKED));
-    cfg.save();
-    PlanesService::instance().reload_from_config();
+  std::string lat=normalize_coord_text(lv_textarea_get_text(planes_ctx.lat_input));
+  std::string lon=normalize_coord_text(lv_textarea_get_text(planes_ctx.lon_input));
+  std::string range=normalize_coord_text(lv_textarea_get_text(planes_ctx.range_input));
+  auto valid=[](const std::string &text,double low,double high){char *end=nullptr;double value=std::strtod(text.c_str(),&end);return !text.empty()&&end!=text.c_str()&&*end=='\0'&&std::isfinite(value)&&value>=low&&value<=high;};
+  if(!valid(lat,-90,90)||!valid(lon,-180,180)||!valid(range,0.1,20000)){
+    settings_feedback(false,"Enter valid coordinates and a range of 0.1-20000 km");return false;
   }
-
-  UiSessionState::set_route("settings");
-  UI_TRACE("Settings", "planes_save_event return_to_settings valid=%d",
-           (planes_ctx.settings_scr && lv_obj_is_valid(planes_ctx.settings_scr)) ? 1 : 0);
-  if (!planes_ctx.settings_scr || !lv_obj_is_valid(planes_ctx.settings_scr)) return;
-  ui_load_screen(planes_ctx.settings_scr, true);
+  auto &cfg=ConfigStoreService::instance();if(!cfg.load("planes")){settings_feedback(false);return false;}
+  cfg.set("center_latitude",lat);cfg.set("center_longitude",lon);cfg.set("range_km",range);
+  if(!cfg.save()){settings_feedback(false);return false;}
+  PlanesService::instance().reload_from_config();return true;
+}
+static void planes_save_event(lv_event_t *e){
+  if(lv_event_get_code(e)==LV_EVENT_CLICKED&&save_planes_form()){leave_form();settings_feedback(true);}
 }
 
-static void open_planes_screen(lv_event_t *e)
+static void open_planes_location_screen(lv_event_t *e)
 {
   UI_TRACE("Settings", "open_planes_screen begin from_event=%d", e ? 1 : 0);
   lv_obj_t *settings_scr = nullptr;
@@ -1583,7 +1614,7 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, i18n::tr("Planes"), settings_scr, false);
+  make_top_bar(scr, i18n::tr("Edit location"), settings_scr, false);
 
   lv_obj_t *content = lv_obj_create(scr);
   lv_obj_set_pos(content, 0, WIFI_BAR_HEIGHT);
@@ -1648,6 +1679,67 @@ static void open_planes_screen(lv_event_t *e)
   lv_label_set_text(status_label, i18n::tr("Used to compute OpenSky bounding box."));
   lv_obj_set_style_text_color(status_label, lv_color_hex(0xb7bdd7), 0);
 
+  ConfigStoreService &cfg = ConfigStoreService::instance();
+  if (cfg.load("planes")) {
+    std::string lat = cfg.get("center_latitude", "");
+    std::string lon = cfg.get("center_longitude", "");
+    std::string range = cfg.get("range_km", "30");
+    lv_textarea_set_text(lat_input, lat.c_str());
+    lv_textarea_set_text(lon_input, lon.c_str());
+    lv_textarea_set_text(range_input, range.c_str());
+
+  }
+
+  lv_obj_t *save_btn = lv_button_create(content);
+  lv_obj_set_width(save_btn, lv_pct(100));
+  lv_obj_set_height(save_btn, 44);
+  lv_obj_add_event_cb(save_btn, planes_save_event, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t *save_label = lv_label_create(save_btn);
+  lv_label_set_text(save_label, i18n::tr("Save"));
+  lv_obj_center(save_label);
+
+  lv_obj_t *kb = lv_keyboard_create(scr);
+  lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
+  lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_USER_1, weather_coord_kb_map, weather_coord_kb_ctrl);
+  lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_USER_1);
+  configure_settings_keyboard(kb);
+  lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_event_cb(kb, planes_kb_event, LV_EVENT_READY, nullptr);
+  lv_obj_add_event_cb(kb, planes_kb_event, LV_EVENT_CANCEL, nullptr);
+
+  planes_ctx.content = content;
+  planes_ctx.kb = kb;
+  planes_ctx.settings_scr = settings_scr;
+  planes_ctx.lat_input = lat_input;
+  planes_ctx.lon_input = lon_input;
+  planes_ctx.range_input = range_input;
+  planes_ctx.status_label = status_label;
+  planes_ctx.guess_result_label = guess_result_label;
+
+  register_form(scr,settings_scr,{lat_input,lon_input,range_input},save_planes_form,"settings_planes");
+  ui_load_screen(scr, false);
+  UI_TRACE("Settings", "open_planes_screen loaded");
+  
+  // Set route after screen is loaded
+  UiSessionState::set_route("settings_planes");
+}
+
+static void planes_preference_event(lv_event_t *e){
+  auto &cfg=ConfigStoreService::instance();bool ok=cfg.load("planes");
+  auto *toggle=static_cast<lv_obj_t*>(lv_event_get_target(e));auto *key=static_cast<const char*>(lv_event_get_user_data(e));bool previous=cfg.get_bool(key,std::strcmp(key,"metric")==0);
+  if(ok){cfg.set(key,lv_obj_has_state(toggle,LV_STATE_CHECKED));ok=cfg.save();}
+  if(!ok){if(previous)lv_obj_add_state(toggle,LV_STATE_CHECKED);else lv_obj_remove_state(toggle,LV_STATE_CHECKED);}
+  if(ok)PlanesService::instance().reload_from_config();settings_feedback(ok);
+}
+static void open_planes_screen(lv_event_t *e){
+  auto *settings_scr=e?static_cast<lv_obj_t*>(lv_event_get_user_data(e)):route_restore_settings_screen;
+  if(!settings_scr)return;
+  auto *scr=lv_obj_create(nullptr);lv_obj_set_style_bg_color(scr,lv_color_hex(0x1e2030),0);lv_obj_set_style_pad_all(scr,0,0);lv_obj_set_style_border_width(scr,0,0);
+  make_top_bar(scr,i18n::tr("Planes"),settings_scr,false);
+  auto *content=lv_obj_create(scr);lv_obj_set_pos(content,0,44);lv_obj_set_size(content,lv_pct(100),436);
+  lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(content,0,0);lv_obj_set_style_pad_all(content,16,0);lv_obj_set_style_pad_row(content,12,0);lv_obj_set_flex_flow(content,LV_FLEX_FLOW_COLUMN);
   // Metric toggle
   lv_obj_t *unit_row = lv_obj_create(content);
   lv_obj_set_size(unit_row, lv_pct(100), 52);
@@ -1682,60 +1774,17 @@ static void open_planes_screen(lv_event_t *e)
   lv_obj_t *hide_ground_switch = lv_switch_create(hg_row);
   lv_obj_align(hide_ground_switch, LV_ALIGN_RIGHT_MID, 0, 0);
 
-  ConfigStoreService &cfg = ConfigStoreService::instance();
-  if (cfg.load("planes")) {
-    std::string lat = cfg.get("center_latitude", "");
-    std::string lon = cfg.get("center_longitude", "");
-    std::string range = cfg.get("range_km", "30");
-    lv_textarea_set_text(lat_input, lat.c_str());
-    lv_textarea_set_text(lon_input, lon.c_str());
-    lv_textarea_set_text(range_input, range.c_str());
-    if (cfg.get_bool("metric", true))
-      lv_obj_add_state(unit_switch, LV_STATE_CHECKED);
-    else
-      lv_obj_clear_state(unit_switch, LV_STATE_CHECKED);
-    if (cfg.get_bool("hide_ground", false))
-      lv_obj_add_state(hide_ground_switch, LV_STATE_CHECKED);
-    else
-      lv_obj_clear_state(hide_ground_switch, LV_STATE_CHECKED);
+
+  auto &cfg=ConfigStoreService::instance();if(cfg.load("planes")){
+    if(cfg.get_bool("metric",true))lv_obj_add_state(unit_switch,LV_STATE_CHECKED);
+    if(cfg.get_bool("hide_ground",false))lv_obj_add_state(hide_ground_switch,LV_STATE_CHECKED);
   }
-
-  lv_obj_t *save_btn = lv_button_create(content);
-  lv_obj_set_width(save_btn, lv_pct(100));
-  lv_obj_set_height(save_btn, 44);
-  lv_obj_add_event_cb(save_btn, planes_save_event, LV_EVENT_CLICKED, nullptr);
-
-  lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, i18n::tr("Save & Back"));
-  lv_obj_center(save_label);
-
-  lv_obj_t *kb = lv_keyboard_create(scr);
-  lv_obj_set_size(kb, lv_pct(100), WIFI_KB_HEIGHT);
-  lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_USER_1, weather_coord_kb_map, weather_coord_kb_ctrl);
-  lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_USER_1);
-  configure_settings_keyboard(kb);
-  lv_obj_add_event_cb(kb, settings_keyboard_value_event, LV_EVENT_VALUE_CHANGED, nullptr);
-  lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_event_cb(kb, planes_kb_event, LV_EVENT_READY, nullptr);
-  lv_obj_add_event_cb(kb, planes_kb_event, LV_EVENT_CANCEL, nullptr);
-
-  planes_ctx.content = content;
-  planes_ctx.kb = kb;
-  planes_ctx.settings_scr = settings_scr;
-  planes_ctx.lat_input = lat_input;
-  planes_ctx.lon_input = lon_input;
-  planes_ctx.range_input = range_input;
-  planes_ctx.status_label = status_label;
-  planes_ctx.guess_result_label = guess_result_label;
-  planes_ctx.unit_switch = unit_switch;
-  planes_ctx.hide_ground_switch = hide_ground_switch;
-
-  ui_load_screen(scr, false);
-  UI_TRACE("Settings", "open_planes_screen loaded");
-  
-  // Set route after screen is loaded
-  UiSessionState::set_route("settings_planes");
+  lv_obj_add_event_cb(unit_switch,planes_preference_event,LV_EVENT_VALUE_CHANGED,const_cast<char*>("metric"));
+  lv_obj_add_event_cb(hide_ground_switch,planes_preference_event,LV_EVENT_VALUE_CHANGED,const_cast<char*>("hide_ground"));
+  autosave_hint(content);
+  auto *edit=lv_button_create(content);lv_obj_set_size(edit,lv_pct(100),48);auto *label=lv_label_create(edit);lv_label_set_text(label,i18n::tr("Edit location"));lv_obj_center(label);
+  lv_obj_add_event_cb(edit,open_planes_location_screen,LV_EVENT_CLICKED,scr);
+  ui_load_screen(scr,false);UiSessionState::set_route("settings_planes");
 }
 
 static void display_brightness_slider_event(lv_event_t *e)
@@ -1752,7 +1801,7 @@ static void display_brightness_slider_event(lv_event_t *e)
 
 static void display_save_event(lv_event_t *e)
 {
-  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  (void)e;
 
   if (!display_ctx.settings_scr || !lv_obj_is_valid(display_ctx.settings_scr)) return;
   if (!display_ctx.brightness_slider || !lv_obj_is_valid(display_ctx.brightness_slider)) return;
@@ -1764,15 +1813,22 @@ static void display_save_event(lv_event_t *e)
 
   ConfigStoreService &cfg = ConfigStoreService::instance();
   if (cfg.load("display")) {
+    int previous_brightness=cfg.get_int("brightness_percent",100),previous_rotation=cfg.get_int("rotation",0);bool previous_fps=cfg.get_bool("show_fps",false);
     cfg.set("brightness_percent", brightness_percent);
     cfg.set("rotation", (int)selected_rotation);
     cfg.set("show_fps", lv_obj_has_state(display_ctx.fps_switch, LV_STATE_CHECKED));
-    cfg.save("display");
-  }
+    if(!cfg.save("display")){
+      lv_slider_set_value(display_ctx.brightness_slider,previous_brightness,LV_ANIM_OFF);
+      lv_label_set_text(display_ctx.brightness_value_label,(std::to_string(previous_brightness)+"%").c_str());
+      lv_dropdown_set_selected(display_ctx.rotation_dropdown,previous_rotation);
+      if(previous_fps)lv_obj_add_state(display_ctx.fps_switch,LV_STATE_CHECKED);else lv_obj_remove_state(display_ctx.fps_switch,LV_STATE_CHECKED);
+      settings_feedback(false);return;
+    }
+  }else{settings_feedback(false);return;}
 
   apply_display_preferences();
-
-  ui_load_screen(display_ctx.settings_scr, true);
+  lv_obj_set_height(lv_obj_get_child(lv_screen_active(),1),lv_display_get_vertical_resolution(nullptr)-44);
+  settings_feedback(true);
 }
 
 static void open_display_screen(lv_event_t *e)
@@ -1871,14 +1927,7 @@ static void open_display_screen(lv_event_t *e)
   if (show_fps)
     lv_obj_add_state(fps_switch, LV_STATE_CHECKED);
 
-  lv_obj_t *save_btn = lv_button_create(content);
-  lv_obj_set_width(save_btn, lv_pct(100));
-  lv_obj_set_height(save_btn, 44);
-  lv_obj_add_event_cb(save_btn, display_save_event, LV_EVENT_CLICKED, nullptr);
-
-  lv_obj_t *save_label = lv_label_create(save_btn);
-  lv_label_set_text(save_label, i18n::tr("Save & Back"));
-  lv_obj_center(save_label);
+  autosave_hint(content);
 
   display_ctx.settings_scr = settings_scr;
   display_ctx.brightness_slider = brightness_slider;
@@ -1886,6 +1935,9 @@ static void open_display_screen(lv_event_t *e)
   display_ctx.rotation_dropdown = rotation_dropdown;
   display_ctx.fps_switch = fps_switch;
 
+  lv_obj_add_event_cb(brightness_slider,display_save_event,LV_EVENT_RELEASED,nullptr);
+  lv_obj_add_event_cb(rotation_dropdown,display_save_event,LV_EVENT_VALUE_CHANGED,nullptr);
+  lv_obj_add_event_cb(fps_switch,display_save_event,LV_EVENT_VALUE_CHANGED,nullptr);
   ui_load_screen(scr, false);
   UI_TRACE("Settings", "open_display_screen loaded");
 
@@ -1916,7 +1968,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   // Language changes are applied on the next main-loop iteration so this
   // callback never destroys the dropdown or button while handling its event.
   lv_obj_t *language_row=lv_obj_create(list);
-  lv_obj_set_size(language_row,lv_pct(100),120);
+  lv_obj_set_size(language_row,lv_pct(100),76);
   lv_obj_clear_flag(language_row,LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(language_row,lv_color_hex(0x2a2d42),0);
   lv_obj_set_style_border_width(language_row,0,0);
@@ -1928,17 +1980,13 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_dropdown_set_options(language_choice,"English\nDeutsch");
   lv_obj_set_pos(language_choice,0,24);lv_obj_set_size(language_choice,lv_pct(100),36);
   lv_dropdown_set_selected(language_choice,i18n::german()?1:0);
-  auto *language_apply=lv_button_create(language_row);
-  lv_obj_set_pos(language_apply,0,66);lv_obj_set_size(language_apply,lv_pct(100),34);
-  auto *language_caption=lv_label_create(language_apply);
-  lv_label_set_text(language_caption,i18n::tr("Apply language"));lv_obj_center(language_caption);
-  lv_obj_add_event_cb(language_apply,[](lv_event_t *event){
-    auto *choice=static_cast<lv_obj_t*>(lv_event_get_user_data(event));
+  lv_obj_add_event_cb(language_choice,[](lv_event_t *event){
+    auto *choice=static_cast<lv_obj_t*>(lv_event_get_target(event));
     if(!i18n::set_language(lv_dropdown_get_selected(choice)?"de":"en")){
-      auto *button=static_cast<lv_obj_t*>(lv_event_get_target(event));
-      lv_label_set_text(lv_obj_get_child(button,0),i18n::tr("Could not save language"));
+      lv_dropdown_set_selected(choice,i18n::german()?1:0);settings_feedback(false,"Could not save language");
     }
-  },LV_EVENT_CLICKED,language_choice);
+  },LV_EVENT_VALUE_CHANGED,nullptr);
+  autosave_hint(list);
 
   /* System row */
   lv_obj_t *system_row = lv_obj_create(list);

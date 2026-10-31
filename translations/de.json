@@ -433,5 +433,15 @@
   "Cannot start setup server": "Einrichtung konnte nicht gestartet werden",
   "Home configuration invalid - configure again": "Konfiguration ungültig. Erneut einrichten.",
   "Wi-Fi disconnected": "WLAN getrennt",
-  "Connected - refreshes every 5s": "Verbunden - alle 5 Sek. aktualisiert"
+  "Connected - refreshes every 5s": "Verbunden - alle 5 Sek. aktualisiert",
+  "Saved": "Gespeichert",
+  "Could not save settings": "Einstellungen konnten nicht gespeichert werden",
+  "Unsaved changes": "Ungespeicherte Änderungen",
+  "Save your changes before leaving?": "Änderungen vor dem Verlassen speichern?",
+  "Discard": "Verwerfen",
+  "Keep editing": "Weiter bearbeiten",
+  "Connect": "Verbinden",
+  "Edit location": "Standort bearbeiten",
+  "Enter a network name (1-32 bytes)": "Netzwerknamen eingeben (1–32 Bytes)",
+  "Enter valid coordinates and a range of 0.1-20000 km": "Gültige Koordinaten und eine Reichweite von 0,1–20000 km eingeben"
 }

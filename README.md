@@ -155,10 +155,12 @@ pio device monitor -e esp32-color-kit-pro
 
 Configuration is performed on the device under **Settings**:
 
-1. Open **Wi-Fi**, enter the network credentials, and save them.
+1. Open **Wi-Fi**, enter the network credentials, and tap **Connect**.
 2. Open the time settings and select the time zone and clock format.
 3. Open **Weather** to search for and save one or more locations.
 4. Use **Display** to enable the LVGL performance monitor when diagnosing rendering performance.
+
+Preferences save immediately; brightness saves on slider release. Wi-Fi and **Planes → Edit location** use explicit submission. Back on an edited form offers Save, Discard, or Keep editing. The shared keyboard has wider letter keys and release-to-type previews; sliding off a key cancels the press. Settings uses a taller keyboard and a numeric keypad for coordinates.
 
 **Settings → Weather → Weather layout** selects **Detailed** (with hourly forecasts) or **Classic** (the default, a clock-first dashboard with current conditions, four-day forecast, sun times, and a textured moon phase). The choice is saved automatically and applies when opening Weather. Existing explicit choices are preserved after updates; installations without a saved choice use Classic. On first opening Classic, a one-time dialog explains where to find Detailed; dismissing it is remembered. Both layouts support the location carousel. In Classic, tap the daily forecast row (marked **Hourly ›**) to open the upcoming hourly forecast in a scrollable overlay, then tap **Close** to return. The overlay uses the existing hourly data for the selected location, with local times and the configured temperature units. Weather clocks and dates use the selected location’s UTC offset from the forecast response, while retaining the device’s 12/24-hour preference. This offset is cached per location and refreshed with weather data (including seasonal offset changes); offline clocks retain the last known offset. Until the offset is available, the clock shows a placeholder. The device-wide time zone is unchanged. With synchronized time, the moon uses the selected location and current UTC time for its phase and apparent tilt, updating once per minute. The softly shaded icon uses an approximate astronomical model (not a telescope ephemeris); its reference texture does not model lunar libration. Before time synchronization, it falls back to the cached date-based phase without a local tilt. Lunar calculations are adapted from [SunCalc](https://github.com/mourner/suncalc/tree/v1.9.0), under its [BSD license](docs/licenses/SunCalc.txt).
 

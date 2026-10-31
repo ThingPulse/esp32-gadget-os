@@ -317,10 +317,10 @@ bool TimeService::save_preferences(int tz_index, bool use_24h_pref)
     if (!cfg.begin())
         return false;
 
-    cfg.load("time");
+    if(!cfg.load("time"))return false;
     cfg.set("timezone_index", tz_index);
     cfg.set("use_24h", use_24h_pref);
-    cfg.save();
+    if(!cfg.save())return false;
 
     _timezone_index = tz_index;
     _use_24h = use_24h_pref;

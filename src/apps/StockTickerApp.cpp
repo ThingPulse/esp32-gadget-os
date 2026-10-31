@@ -1,3 +1,4 @@
+#include "ui/TouchKeyboard.h"
 #include "ui/I18n.h"
 #include "apps/StockTickerApp.h"
 #include "AppRegistry.h"
@@ -156,7 +157,7 @@ void render() {
         button(ctx.body,i18n::tr("Save"),12,198,(w-36)/2,38,save);
         button(ctx.body,i18n::tr("Cancel"),24+(w-36)/2,198,(w-36)/2,38,back,0,Card);
         auto *keyboard=lv_keyboard_create(ctx.body);lv_obj_align(keyboard,LV_ALIGN_TOP_LEFT,0,244);lv_obj_set_size(keyboard,w,std::max(150,h-244));
-        lv_keyboard_set_textarea(keyboard,ctx.input);return;
+        configure_touch_keyboard(keyboard);lv_keyboard_set_textarea(keyboard,ctx.input);return;
     }
     if(ctx.view==0) {
         label(ctx.body,i18n::tr("Watchlist"),12,10,140,0xffffff,true);

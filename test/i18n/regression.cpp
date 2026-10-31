@@ -53,13 +53,13 @@ int main(int argc,char**){
  assert(i18n::set_language("en"));i18n::take_reload_request();
  auto *home=lv_screen_active();settings_launch();auto *settings=lv_screen_active();
  auto *choice=find(settings,&lv_dropdown_class);assert(choice);lv_dropdown_set_selected(choice,1);
- auto *caption=find(settings,&lv_label_class,"Apply language");assert(caption);
- lv_obj_send_event(lv_obj_get_parent(caption),LV_EVENT_CLICKED,nullptr);
+ assert(!find(settings,&lv_label_class,"Apply language"));
+ lv_obj_send_event(choice,LV_EVENT_VALUE_CHANGED,nullptr);
  assert(i18n::german()&&i18n::take_reload_request());
  lv_screen_load(home);lv_obj_delete(settings);
  settings_launch();settings=lv_screen_active();choice=find(settings,&lv_dropdown_class);assert(lv_dropdown_get_selected(choice)==1);
- caption=find(settings,&lv_label_class,"Sprache übernehmen");assert(caption);
- lv_dropdown_set_selected(choice,0);lv_obj_send_event(lv_obj_get_parent(caption),LV_EVENT_CLICKED,nullptr);
+ assert(!find(settings,&lv_label_class,"Sprache übernehmen"));
+ lv_dropdown_set_selected(choice,0);lv_obj_send_event(choice,LV_EVENT_VALUE_CHANGED,nullptr);
  assert(!i18n::german()&&i18n::take_reload_request());
  lv_screen_load(home);lv_obj_delete(settings);
  assert(i18n::set_language("de"));

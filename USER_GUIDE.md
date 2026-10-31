@@ -20,7 +20,7 @@ Open **Settings** from the home screen. The setup areas are collected on one pag
 
 ### Language
 
-The interface supports English and German. In **Settings → Language / Sprache**, select **Deutsch** and tap **Apply language / Sprache übernehmen**. The app returns to the home screen in the selected language without restarting the device. The selection survives restarts. Use the same control to return to English. Language is independent of timezone, units and the 12/24-hour clock setting. Provider-supplied place names, company names, symbols and release notes are not translated.
+The interface supports English and German. In **Settings → Language / Sprache**, select **Deutsch**. The app returns to the home screen in the selected language without restarting the device. The selection survives restarts. Use the same control to return to English. Language is independent of timezone, units and the 12/24-hour clock setting. Provider-supplied place names, company names, symbols and release notes are not translated.
 
 ### 1. Connect to Wi-Fi
 
@@ -31,11 +31,11 @@ Open **Settings → Wi-Fi**.
 1. Tap **Scan networks**. A moving line under the header indicates that scanning is in progress.
 2. Tap the desired network in the result list. Its SSID is filled in automatically.
 3. Enter the network password.
-4. Tap **Save & Back**.
+4. Tap **Connect**.
 
 Each result shows its signal strength in dBm and whether it is secured or open. Duplicate SSIDs are collapsed into one entry, and up to ten networks are displayed. You can still tap **SSID** and enter a network name manually when a hidden network is not listed.
 
-The on-screen keyboard shows a larger popover for the selected key. Holding a key does not repeat it automatically, which makes typing on the touch display more predictable.
+The on-screen keyboard uses wider letter keys and a taller layout in Settings. A larger key preview appears while you hold a letter; it is entered when you release. If you hit the wrong key, slide off it before lifting your finger to cancel, then tap the intended key. Letters do not repeat while held; Backspace does. Use **Scan networks** to avoid typing the SSID, and the numeric keypad for coordinates.
 
 Connection may take several seconds. If the network is temporarily unavailable, Gadget OS keeps retrying with increasing delays rather than giving up permanently.
 
@@ -48,7 +48,7 @@ Open **Settings → Time**.
 1. Select the geographic region.
 2. Select the matching time zone.
 3. Choose whether to use the 24-hour clock.
-4. Save the settings and return.
+4. Return using Back. Selections are saved automatically.
 
 The clock is synchronized over the internet after Wi-Fi connects. Failed synchronization attempts are retried automatically.
 
@@ -77,7 +77,7 @@ Open **Settings → Display**.
 
 Use this page to adjust brightness and screen rotation. **Show FPS monitor** enables LVGL's performance overlay and related serial performance logging; it is primarily intended for diagnostics.
 
-Tap **Save & Back** after changing display settings.
+Display changes save automatically: brightness saves when you release the slider; rotation and FPS save when selected. Ordinary preferences throughout Settings save immediately and briefly show **Saved**. Wi-Fi and location forms use **Connect** or **Save**. Back on an edited form offers **Save**, **Discard**, or **Keep editing**; invalid input or a failed save keeps the form open.
 
 ## Using Weather
 
@@ -104,7 +104,7 @@ Open **Calculator** from the home screen. Tap the numeric and operation keys as 
 
 ## Planes — experimental
 
-Open **Planes** from the home screen. Set your location and units under **Settings → Planes**. The north-up radar shows airborne aircraft; use the range control to choose 5, 10, 25 or 50 km (shown in nautical miles with imperial units).
+Open **Planes** from the home screen. Under **Settings → Planes**, units and **Hide planes on ground** save immediately. Use **Edit location** to enter coordinates and range, then tap **Save**. The north-up radar shows airborne aircraft; use the range control to choose 5, 10, 25 or 50 km (shown in nautical miles with imperial units).
 
 Tap an aircraft or use the footer arrows to select it. The mint ring marks the selected aircraft, whose recent trail is shown on the radar. Tap the featured card for aircraft, route, registration, altitude, speed and direction details when available.
 
