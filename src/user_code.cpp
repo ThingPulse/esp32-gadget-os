@@ -86,6 +86,7 @@ static LGFX lcd(320, 480, 2);
 #elif defined(ARDUINO) && defined(ESP_PLATFORM)
 #if defined(COLOR_KIT_PRO)
 #include <ColorKitPro.h>
+#include "hal/ProDisplayTransfer.h"
 static ColorKitPro lcd;
 #else
 #include <ColorKitGrande.h>
@@ -102,6 +103,9 @@ static lv_display_t *disp;
 // Keep native smooth while reducing ESP32 DRAM pressure.
 static uint8_t *draw_buf = nullptr;
 static size_t draw_buf_size = 0;
+#if defined(COLOR_KIT_PRO) && defined(ARDUINO)
+static bool pro_bulk_dma = false;
+#endif
 static lv_obj_t *home_screen = nullptr;
 static lv_obj_t *home_pager = nullptr;
 static bool restore_route_pending = true;
@@ -1141,10 +1145,14 @@ static void lvgl_flush(lv_display_t *d, const lv_area_t *area, uint8_t *px_map)
     flush_perf.frame_flushes++;
     flush_perf.frame_pixels += (uint32_t)px_count;
   }
+#if defined(COLOR_KIT_PRO) && defined(ARDUINO)
+  pro_display_write(lcd, *area, px_map, pro_bulk_dma);
+#else
   lcd.startWrite();
   lcd.setAddrWindow(area->x1, area->y1, w, h);
   lcd.writePixels((lgfx::rgb565_t *)px_map, (int32_t)px_count);
   lcd.endWrite();
+#endif
   if (flush_perf_enabled) {
     const uint32_t finished_ms = flush_perf_now_ms();
     flush_perf.frame_io_ms += finished_ms - flush_start_ms;
@@ -1213,6 +1221,26 @@ void setup(void)
       if (draw_buf) draw_buf_memory = "8bit-single-fallback";
     }
   }
+#elif defined(ARDUINO) && defined(ESP_PLATFORM) && defined(GADGET_OS_PRO_DISPLAY_DMA) && GADGET_OS_PRO_DISPLAY_DMA
+  // Hardware A/B measurements favour 64 rows for full-screen redraws.
+  // Try 32 if fragmentation prevents the larger internal allocation.
+  for (size_t rows : {64U, 32U}) {
+    draw_buf_rows = rows;
+    draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
+    draw_buf = static_cast<uint8_t *>(heap_caps_malloc(
+        draw_buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
+    if (draw_buf) break;
+  }
+  pro_bulk_dma = draw_buf != nullptr;
+  if (draw_buf) draw_buf_memory = "internal-bulk-dma";
+  else {
+    // Preserve the known working path if internal RAM is fragmented or exhausted.
+    draw_buf_rows = 8U;
+    draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
+    draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!draw_buf) draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_8BIT));
+    draw_buf_memory = "baseline-fallback";
+  }
 #elif defined(ARDUINO) && defined(ESP_PLATFORM)
   draw_buf_size = static_cast<size_t>(lcd.width()) * draw_buf_rows * 2U;
   draw_buf = static_cast<uint8_t *>(heap_caps_malloc(draw_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -1231,7 +1259,7 @@ void setup(void)
   }
   UI_TRACE("Boot", "draw buffer rows=%u bytes=%u memory=%s",
            (unsigned)draw_buf_rows, (unsigned)draw_buf_size, draw_buf_memory);
-#if defined(ARDUINO) && defined(ESP_PLATFORM) && !defined(COLOR_KIT_PRO)
+#if defined(ARDUINO) && defined(ESP_PLATFORM)
   UI_TRACE("Boot", "internal RAM free=%u largest=%u",
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));

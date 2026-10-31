@@ -151,6 +151,9 @@ Open the serial monitor:
 pio device monitor -e esp32-color-kit-pro
 ```
 
+For the opt-in Pro display driver experiment and repeatable before/after benchmark,
+see [Color Kit Pro display performance](docs/performance/color-kit-pro-display.md).
+
 ## First-time setup
 
 Configuration is performed on the device under **Settings**:
