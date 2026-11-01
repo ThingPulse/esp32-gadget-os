@@ -123,6 +123,32 @@ Colors use the same physical thresholds in imperial mode; changing units does no
 
 Aircraft and route information depend on external providers. Saved positions remain visible if a refresh fails. Coloring itself adds no network requests.
 
+## Where is the ISS?
+
+Open **ISS** to see when the International Space Station will pass your location.
+The app uses your active Weather location, falling back to the Planes location.
+Tap the location name to open Weather location settings.
+
+![Next visible ISS pass](documents/user-guide/screenshots/iss-next.png)
+
+**Next pass** shows the countdown, rise/set compass directions, maximum elevation
+and predicted visible duration. During a pass it switches to a time-progress view
+and counts down the visible window. The compass is north-up; it is not a live
+position measurement. Clear skies and an unobstructed view are still needed.
+
+![ISS pass in progress](documents/user-guide/screenshots/iss-active.png)
+
+Use **Passes** to browse predictions, with **Visible** selected by default.
+**All** also shows passes in daylight or Earth's shadow. Tap a pass for details.
+Times use your device's timezone and clock-format settings.
+
+![Upcoming ISS passes](documents/user-guide/screenshots/iss-passes.png)
+
+Predictions are saved for reopening the app and refreshed every 30 minutes while
+open. Use the refresh button for a manual update; requests have a short cooldown.
+Offline or old predictions are labelled. Data is provided by
+[Pollux Labs ISS Pass API](https://iss-api.polluxlabs.io/).
+
 ## System information
 
 Open **Settings → System** to inspect the software build and current memory usage.

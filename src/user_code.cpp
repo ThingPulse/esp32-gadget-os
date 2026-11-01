@@ -1,5 +1,6 @@
 #include "ui/I18n.h"
 #include "apps/TransitApp.h"
+#include "apps/IssApp.h"
 #include "apps/HomeAssistantApp.h"
 #include "apps/StockTickerApp.h"
 #if __has_include(<LovyanGFX.h>)
@@ -939,6 +940,8 @@ static void launch_route(const std::string &route)
     weather_icon_test_app_launch();
     return;
   }
+
+  if (route == "iss") { iss_app_launch(); return; }
 
   if (route == "planes") {
     UI_TRACE("Route", "launch planes");
