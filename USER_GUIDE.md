@@ -429,6 +429,9 @@ for the English version.
 
 ## Home Assistant
 
+For device and browser screenshots, see the
+[illustrated QR-code setup walkthrough](docs/releases/since-v0.1.3.en.md#set-up-home-assistant-with-your-phone-or-browser).
+
 Open **Home Assistant** on the main launcher page. This app connects directly to
 an existing Home Assistant installation; no ThingPulse backend or MQTT broker is
 required.

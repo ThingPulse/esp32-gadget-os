@@ -3,6 +3,8 @@
 New apps and everyday improvements for **Color Kit Grande**. Control your home,
 watch for the ISS, check departures and follow your stocks—all from the launcher.
 
+Screenshots use example data.
+
 [Deutsch](since-v0.1.3.de.md)
 
 ## Home Assistant
@@ -26,6 +28,59 @@ searches only when requested, and loads 25 results at a time. Unavailable entiti
 are hidden by default; turn off that filter to find them. You can also add a
 device by its entity ID. Controls show pending actions while Home Assistant
 confirms the change.
+
+### Set up Home Assistant with your phone or browser
+
+You need an existing Home Assistant installation and a phone or computer on the
+same trusted Wi-Fi network as your Color Kit Grande. The screenshots below use
+demo devices and credentials.
+
+**1. Open the setup QR code on the device.** Open **Home Assistant**, then tap
+**Configure** (or the gear icon if a dashboard is already configured). Keep this
+screen open while you work in the browser. Setup closes after ten minutes of
+inactivity.
+
+![Device setup screen with QR code](images/home-setup-device.png)
+
+**2. Scan your device's QR code.** Use your phone's camera and open the link. It
+opens the setup page hosted by the device and pairs your browser automatically.
+Scan the code on your own device, not the example above. On a computer, you can
+instead enter the complete address shown on the device, including `#` and the
+pairing code. This setup address is different from your Home Assistant address.
+
+**3. Connect to Home Assistant.** On **1 · Connect**, enter the server address,
+for example `http://homeassistant.local:8123`. In Home Assistant, open your
+profile, go to **Security**, and create a long-lived access token for Gadget OS.
+Copy the token when it appears; Home Assistant cannot show it again later.
+[Home Assistant token instructions](https://contributors.home-assistant.io/core/internals/auth-api/#long-lived-access-tokens).
+Paste it into **Long-lived access token** in the setup page, then choose
+**Save connection & continue**. The token stays masked in the browser and
+is stored on the device; layout exports do not contain it.
+
+![Browser connection form with an example server and masked demo token](images/home-setup-connect.png)
+
+**4. Choose your entities.** Select a target page and entity type, then tap
+**Search**. Lights are selected initially, and **Hide unavailable entities** is on.
+Tap **Add** beside each device you want; **Added** confirms your selection. Results
+load in batches of 25. If your Home Assistant account cannot use discovery, open
+**Add by entity ID** and enter an ID such as `light.living_room` instead. Automatic
+discovery requires an administrator token; manual entry does not grant extra
+permissions to the account.
+
+![Browser entity picker with one light added and another available](images/home-setup-entities.png)
+
+**5. Arrange and save your dashboard.** Open **Arrange pages**. Name your pages,
+drag tiles into order or use their arrow buttons, and choose **Edit** to change a
+tile's name or icon. You can create up to four pages with seven entities each.
+These are your own groups; Home Assistant rooms are not imported automatically.
+Tap **Save to device** and wait for the saved confirmation. Finally, tap **Done**
+on the device to leave setup and use your dashboard.
+
+![Browser layout editor after saving the dashboard](images/home-setup-pages.png)
+
+If pairing expires, reopen Configure and scan the new code. Your browser's edits
+are kept, but you must pair again before saving. Only use the setup page on a
+trusted local network; it uses HTTP and should not be exposed to the internet.
 
 ## ISS
 
@@ -63,7 +118,9 @@ international listings. Open a stock for its price, daily change and **5D**, **1
 or **1Y** chart. Swipe between stocks, or edit the watchlist to add, remove and
 reorder symbols.
 
-![Stock price and history](../../documents/user-guide/screenshots/stocks.png)
+| Watchlist | AAPL price and history |
+| --- | --- |
+| ![Stock watchlist](../../documents/user-guide/screenshots/stocks.png) | ![AAPL detail with price and chart](images/stocks-detail.png) |
 
 Prices retain their quoted currency. Quotes may be delayed; cached or unavailable
 data is identified on screen.
@@ -75,7 +132,9 @@ units. Select a plane to follow its trail and open its aircraft and route detail
 Aircraft and trail segments use altitude colours; older trail segments fade,
 helping you see climbs and descents.
 
-![Aircraft radar and selected flight](../../documents/user-guide/screenshots/planes.png)
+| Radar with the cached ZRH airport marker | Details of a selected flight |
+| --- | --- |
+| ![Aircraft radar with faint ZRH airport marker](images/planes-radar.png) | ![Aircraft and route detail dialog](images/planes-detail.png) |
 
 Nearby airports appear as faint dots and short codes as they are learned from
 flight-route responses. The airport cache survives restarts, so the map can retain
@@ -88,7 +147,11 @@ Swipe horizontally to move between saved locations, or use the location arrows.
 The wind arrow now shows the direction of airflow, and condition readings line
 up more clearly. Imperial pressure can be shown in inches of mercury.
 
-![Weather conditions and forecast](../../documents/user-guide/screenshots/weather.png)
+Tap **Hourly** below the current conditions to open the hourly forecast.
+
+| Current conditions | Hourly forecast |
+| --- | --- |
+| ![Main weather screen](images/weather-main.png) | ![Hourly forecast dialog](images/weather-hourly.png) |
 
 ## Settings and keyboard
 
@@ -101,6 +164,8 @@ Ordinary preferences save immediately and briefly show **Saved**. Forms use
 
 The on-screen keyboard has larger keys and a pressed-key preview. Wi-Fi scanning
 reduces typing, and coordinate fields use a numeric keypad.
+
+![Larger on-screen keyboard while entering a Wi-Fi network name](images/keyboard.png)
 
 ## Launcher and software updates
 
