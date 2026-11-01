@@ -130,9 +130,15 @@ pio run -e esp32-color-kit
 
 The Pro uses an ESP32-S3 N16R2 with **16 MiB flash and 2 MiB Quad SPI PSRAM**.
 `partitions_16mb_ota.csv` allocates two 6 MiB firmware slots and a 3.875 MiB
-filesystem, plus NVS, OTA metadata and a core-dump partition. The second slot
-reserves space for future Pro OTA support; the current OTA feed is Grande-only,
-so automatic OTA remains disabled on the Pro.
+filesystem, plus NVS, OTA metadata and a core-dump partition. OTA is enabled:
+the shared release manifest contains separate Grande and Pro firmware entries,
+and each build selects only its own target. Missing Pro entries in older release
+manifests are rejected rather than falling back to Grande firmware.
+
+Install this OTA-enabled firmware over USB once before using wireless updates.
+Subsequent published releases include the Pro image in the OTA manifest. The
+experimental display-test build inherits OTA support but updates to the standard
+released Pro firmware, not to a separate experimental-driver release channel.
 
 **Migration from the old 4 MiB layout requires a USB upload**, including the
 partition table. The filesystem moves, so existing filesystem-backed settings

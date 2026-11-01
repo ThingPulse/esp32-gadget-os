@@ -74,3 +74,10 @@ jobs:
         run: |
           python scripts/test-nearby-planes.py
           python scripts/test-planes-providers.py
+
+      - name: Test OTA device selection and scheduling
+        if: matrix.env == 'native'
+        run: |
+          python scripts/test-update-target.py
+          python scripts/test-update-schedule.py
+          node scripts/test-update-manifest.mjs

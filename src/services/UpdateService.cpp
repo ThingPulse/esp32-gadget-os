@@ -1,5 +1,6 @@
 #include "ui/I18n.h"
 #include "services/UpdateService.h"
+#include "services/UpdateTarget.h"
 
 #include "EventBus.h"
 #include "SystemVersion.h"
@@ -188,7 +189,7 @@ bool UpdateService::fetch_manifest()
     }
     JsonDocument doc; if (deserializeJson(doc,payload)!=DeserializationError::Ok) { _error=i18n::tr("Invalid update manifest"); return false; }
     std::string version=doc["version"]|"";
-    JsonObject target=doc["targets"]["esp32-color-kit"].as<JsonObject>();
+    JsonObject target=ota::manifest_target(doc);
     if (version.empty() || target.isNull()) { _error=i18n::tr("Update does not support this device"); return false; }
     if (compare_version(version,current_version())<=0) {
         _available_version.clear(); return true;

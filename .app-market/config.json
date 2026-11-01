@@ -48,7 +48,7 @@
     },
     {
       "environment": "esp32-color-kit-pro",
-      "otaEnabled": false,
+      "otaEnabled": true,
       "manifestAsset": "app-market-esp32-color-kit-pro.json",
       "app": {
         "id": "tp-color-kit-grande-ckos-pro",
