@@ -213,7 +213,7 @@ bool ota_tutorial_enabled() {
 bool UpdateService::tutorial_available() {
     if (!ota_tutorial_enabled() || _state != State::Idle) return false;
     _available_version = "1.0.0-demo";
-    _release_notes = i18n::tr("A new version is ready to install.");
+    _release_notes = i18n::tr("Home Assistant, ISS, Transit and Stocks. Easier settings.");
     _available_was_ignored = false; _error.clear(); _progress = 0;
     _state = State::Available; return true;
 }

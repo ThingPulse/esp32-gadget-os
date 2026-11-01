@@ -1,4 +1,5 @@
 #include "ui/I18n.h"
+#include "ui/ReleaseNotes.h"
 #include "apps/TransitApp.h"
 #include "apps/IssApp.h"
 #include "apps/HomeAssistantApp.h"
@@ -168,6 +169,7 @@ static lv_obj_t *update_dialog_buttons = nullptr;
 static lv_obj_t *update_dialog_progress = nullptr;
 static lv_obj_t *update_dialog_progress_value = nullptr;
 static lv_timer_t *update_dialog_timer = nullptr;
+static lv_obj_t *update_notes_dialog = nullptr, *update_notes_button = nullptr;
 
 static void launch_route(const std::string &route);
 static lv_obj_t *create_splash_screen(const char *version);
@@ -177,6 +179,8 @@ static void update_service_event(const SystemEvent &, void *) { update_dialog_pe
 
 static void close_update_dialog()
 {
+  if (update_notes_dialog) { lv_obj_delete(update_notes_dialog); update_notes_dialog=nullptr; }
+  update_notes_button=nullptr;
   if (update_dialog_timer) { lv_timer_delete(update_dialog_timer); update_dialog_timer=nullptr; }
   if (update_dialog && lv_obj_is_valid(update_dialog)) lv_obj_delete(update_dialog);
   update_dialog=nullptr; update_dialog_status=nullptr; update_dialog_notes=nullptr;
@@ -218,14 +222,43 @@ static void update_dialog_timer_cb(lv_timer_t *)
   lv_label_set_text(update_dialog_status,text);
 }
 
+static void show_release_notes_dialog()
+{
+  if (update_notes_dialog) return;
+  auto *panel=lv_obj_create(lv_layer_top()); update_notes_dialog=panel;
+  lv_obj_set_size(panel,300,420); lv_obj_center(panel);
+  lv_obj_set_style_bg_color(panel,lv_color_hex(0x20243a),0);
+  lv_obj_set_style_border_color(panel,lv_color_hex(0x64c8ff),0);
+  lv_obj_set_style_border_width(panel,2,0); lv_obj_set_style_pad_all(panel,14,0);
+  lv_obj_set_style_text_font(panel,i18n::font14(),0);
+  lv_obj_set_style_text_color(panel,lv_color_white(),0);
+  lv_obj_set_flex_flow(panel,LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(panel,LV_FLEX_ALIGN_SPACE_BETWEEN,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+  lv_obj_remove_flag(panel,LV_OBJ_FLAG_SCROLLABLE);
+  auto *title=lv_label_create(panel); lv_label_set_text(title,i18n::tr("What's new"));
+  lv_obj_set_style_text_font(title,i18n::font24(),0);
+  auto *version=lv_label_create(panel);
+  lv_label_set_text(version,UpdateService::instance().available_version().c_str());
+  release_notes::create_qr(panel,UpdateService::instance().available_version());
+  auto *hint=lv_label_create(panel); lv_label_set_text(hint,i18n::tr("Scan for app-by-app changes"));
+  lv_obj_set_width(hint,lv_pct(100)); lv_obj_set_style_text_align(hint,LV_TEXT_ALIGN_CENTER,0);
+  update_dialog_button(panel,i18n::tr("Back"),6);
+}
+
 static void update_dialog_action(lv_event_t *event)
 {
   const intptr_t action=(intptr_t)lv_event_get_user_data(event);
   UpdateService &updates=UpdateService::instance();
+  if (action==5) { show_release_notes_dialog(); return; }
+  if (action==6) {
+    if (update_notes_dialog) lv_obj_delete(update_notes_dialog);
+    update_notes_dialog=nullptr; return;
+  }
   if (action==1) {
     if (updates.install()) {
       lv_obj_remove_flag(update_dialog_status,LV_OBJ_FLAG_HIDDEN);
       if(update_dialog_notes)lv_obj_add_flag(update_dialog_notes,LV_OBJ_FLAG_HIDDEN);
+      if(update_notes_button)lv_obj_add_flag(update_notes_button,LV_OBJ_FLAG_HIDDEN);
       lv_label_set_text(update_dialog_status,i18n::tr("Update in progress\nDownloading and verifying firmware..."));
       if (update_dialog_progress && lv_obj_is_valid(update_dialog_progress)) {
         lv_bar_set_value(update_dialog_progress,0,LV_ANIM_OFF);
@@ -270,7 +303,7 @@ static void show_update_dialog()
 {
   if (update_dialog && lv_obj_is_valid(update_dialog)) return;
   UpdateService &updates=UpdateService::instance();
-  update_dialog=lv_obj_create(lv_layer_top()); lv_obj_set_size(update_dialog,300,300); lv_obj_center(update_dialog);
+  update_dialog=lv_obj_create(lv_layer_top()); lv_obj_set_size(update_dialog,300,350); lv_obj_center(update_dialog);
   lv_obj_set_style_text_font(update_dialog,i18n::font14(),0);
   lv_obj_set_style_bg_color(update_dialog,lv_color_hex(0x20243a),0);
   lv_obj_set_style_border_color(update_dialog,lv_color_hex(0x64c8ff),0);
@@ -287,7 +320,8 @@ static void show_update_dialog()
   lv_label_set_text(versions,version_text); lv_obj_set_style_text_color(versions,lv_color_hex(0xb7bdd7),0);
   lv_obj_t *notes=lv_label_create(update_dialog); update_dialog_notes=notes;
   lv_obj_set_width(notes,lv_pct(100));
-  lv_label_set_long_mode(notes,LV_LABEL_LONG_WRAP);
+  lv_label_set_long_mode(notes,LV_LABEL_LONG_DOT);
+  lv_obj_set_height(notes,48);
   if (updates.available_version_was_ignored())
     lv_label_set_text(notes,i18n::tr("You previously ignored this version. You can install it now or keep ignoring it."));
   else {
@@ -296,7 +330,7 @@ static void show_update_dialog()
     if(releaseNotes==defaultNotes){
       std::string translated=i18n::tr("Release notes on GitHub for version ");
       translated+=updates.available_version();lv_label_set_text(notes,translated.c_str());
-    }else lv_label_set_text(notes,releaseNotes.empty()?i18n::tr("A new version is ready to install."):releaseNotes.c_str());
+    }else lv_label_set_text(notes,releaseNotes.empty()?i18n::tr("A new version is ready to install."):i18n::tr(releaseNotes.c_str()));
   }
   lv_obj_set_flex_grow(notes,1); lv_obj_set_style_text_color(notes,lv_color_white(),0);
   update_dialog_status=lv_label_create(update_dialog); lv_label_set_text(update_dialog_status,"");
@@ -312,6 +346,7 @@ static void show_update_dialog()
   lv_obj_set_style_text_font(update_dialog_progress_value,i18n::font14(),0);
   lv_obj_add_flag(update_dialog_progress_value,LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(update_dialog_progress,LV_OBJ_FLAG_HIDDEN);
+  update_notes_button=update_dialog_button(update_dialog,i18n::tr("What's new"),5);
   lv_obj_t *buttons=lv_obj_create(update_dialog); lv_obj_set_size(buttons,lv_pct(100),50);
   update_dialog_buttons=buttons;
   lv_obj_set_style_bg_opa(buttons,LV_OPA_TRANSP,0); lv_obj_set_style_border_width(buttons,0,0); lv_obj_set_style_pad_all(buttons,0,0);
@@ -332,7 +367,7 @@ static void show_update_installed_dialog()
 {
   UpdateService &updates=UpdateService::instance();
   if (updates.installed_version_notice().empty() || (update_dialog && lv_obj_is_valid(update_dialog))) return;
-  update_dialog=lv_obj_create(lv_layer_top()); lv_obj_set_size(update_dialog,290,190); lv_obj_center(update_dialog);
+  update_dialog=lv_obj_create(lv_layer_top()); lv_obj_set_size(update_dialog,300,440); lv_obj_center(update_dialog);
   lv_obj_set_style_text_font(update_dialog,i18n::font14(),0);
   lv_obj_set_style_bg_color(update_dialog,lv_color_hex(0x20243a),0);
   lv_obj_set_style_border_color(update_dialog,lv_color_hex(0x64c8ff),0);
@@ -348,6 +383,10 @@ static void show_update_installed_dialog()
   lv_obj_t *message=lv_label_create(update_dialog); lv_obj_set_width(message,lv_pct(100));
   lv_label_set_long_mode(message,LV_LABEL_LONG_WRAP); lv_label_set_text(message,text);
   lv_obj_set_style_text_align(message,LV_TEXT_ALIGN_CENTER,0); lv_obj_set_style_text_color(message,lv_color_hex(0xb7bdd7),0);
+  release_notes::create_qr(update_dialog,updates.installed_version_notice());
+  auto *hint=lv_label_create(update_dialog); lv_label_set_text(hint,i18n::tr("Scan for app-by-app changes"));
+  lv_obj_set_width(hint,lv_pct(100)); lv_obj_set_style_text_align(hint,LV_TEXT_ALIGN_CENTER,0);
+  lv_obj_set_style_text_color(hint,lv_color_white(),0);
   update_dialog_buttons=lv_obj_create(update_dialog); lv_obj_set_size(update_dialog_buttons,120,46);
   lv_obj_set_style_bg_opa(update_dialog_buttons,LV_OPA_TRANSP,0); lv_obj_set_style_border_width(update_dialog_buttons,0,0);
   lv_obj_set_style_pad_all(update_dialog_buttons,0,0); lv_obj_set_layout(update_dialog_buttons,LV_LAYOUT_FLEX);

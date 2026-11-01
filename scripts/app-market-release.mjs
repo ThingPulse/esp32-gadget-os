@@ -188,11 +188,22 @@ async function prepare(root, tag) {
     schema_version: 1,
     version,
     channel: version.includes('-') ? 'prerelease' : 'stable',
-    release_notes: `See the Gadget OS ${version} release notes on GitHub.`,
+    release_notes: 'Home Assistant, ISS, Transit and Stocks. Easier settings.',
     release_url: `https://github.com/ThingPulse/esp32-gadget-os/releases/tag/v${version}`,
     targets: otaTargets
   };
   await writeFile(join(staging, 'ota-manifest.json'), `${JSON.stringify(otaManifest, null, 2)}\n`);
+  // Keep the QR destination version-specific and reuse the illustrated pages.
+  // Outside staging: the body is not a firmware asset for download.
+  const notesRoot = `https://github.com/ThingPulse/esp32-gadget-os/blob/v${version}/docs/releases`;
+  const notes = await readFile(join(root, 'docs/releases/since-v0.1.3.en.md'), 'utf8');
+  const body = notes
+    .replace(/^# Gadget OS changes since v0\.1\.3/, `# Gadget OS ${version}\n\nChanges since v0.1.3`)
+    .replace(/\]\(since-v0\.1\.3.de.md\)/g, `](${notesRoot}/since-v0.1.3.de.md)`)
+    .replace(/\]\(images\/([^\)]+)\)/g, `](https://raw.githubusercontent.com/ThingPulse/esp32-gadget-os/v${version}/docs/releases/images/$1)`)
+    .replace(/\]\(\.\.\/\.\.\/documents\/([^\)]+)\)/g, `](https://raw.githubusercontent.com/ThingPulse/esp32-gadget-os/v${version}/documents/$1)`);
+  await writeFile(join(root, '.app-market/release-notes.md'),
+    `[English](${notesRoot}/since-v0.1.3.en.md) · [Deutsch](${notesRoot}/since-v0.1.3.de.md)\n\n${body}`);
   console.log(`Prepared ${relative(root, staging)} for ${manifests.map(item => item.target.app.id).join(', ')} ${version}`);
   for (const filename of [...config.targets.map(item => item.manifestAsset), ...stagedAssets.keys(), 'ota-manifest.json']) {
     console.log(`- ${filename}`);

@@ -45,5 +45,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           prerelease: ${{ contains(github.ref_name, '-') }}
+          body_path: .app-market/release-notes.md
           files: .app-market/release/*
           fail_on_unmatched_files: true

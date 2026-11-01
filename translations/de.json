@@ -489,5 +489,8 @@
   "Predicted times; clear skies needed": "Vorhersage bei klarem Himmel",
   "Connect to Wi-Fi for predictions": "Für Vorhersagen WLAN verbinden",
   "Home Assistant": "Home Assistant",
-  "Configure Home Assistant": "Home Assistant einrichten"
+  "Configure Home Assistant": "Home Assistant einrichten",
+  "What's new": "Was ist neu?",
+  "Scan for app-by-app changes": "Scannen: Neuerungen je App",
+  "Home Assistant, ISS, Transit and Stocks. Easier settings.": "Home Assistant, ISS, ÖPNV und Aktien. Einfachere Einstellungen."
 }
