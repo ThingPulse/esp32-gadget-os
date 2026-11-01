@@ -193,8 +193,8 @@ When a newer version is available, a dialog lets you install it, ignore that exa
 version, or close the dialog. Closing allows it to be offered on a later check;
 ignoring prevents that version from being offered automatically again.
 
-Tap **What's new** before installation to display a QR code for the matching
-GitHub release. Scan it with your phone for illustrated changes grouped by app,
+Tap **What's new** before installation to display a QR code for the illustrated
+changes-since-v0.1.3 page on GitHub. Scan it with your phone for illustrated changes grouped by app,
 with English and German pages. The post-installation confirmation also displays
 the QR code. Older firmware retains its existing pre-installation dialog until
 it has been updated. [Changes since v0.1.3](docs/releases/since-v0.1.3.en.md).

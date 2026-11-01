@@ -174,8 +174,8 @@ Transit, Stocks and ISS are also available directly from the main launcher.
 
 Before installing an update, tap **What's new** and scan the QR code to read the
 illustrated notes on your phone. The confirmation after installation also shows
-the QR code. Each code points to the matching release, so you read the changes
-for that version.
+the QR code. Both codes open this illustrated changes page directly, with a link
+to the German translation.
 
 These new dialogs appear once firmware containing this feature is installed;
 older firmware still uses its existing pre-update dialog. Background update checks

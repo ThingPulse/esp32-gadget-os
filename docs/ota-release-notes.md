@@ -5,10 +5,11 @@ to the same offer without dismissing or ignoring it. Installation hides the note
 button and keeps the progress/cancel flow. The installed confirmation includes
 the QR directly, before the existing Close action.
 
-`release_notes::url(version)` links to the matching GitHub release tag. Both
-`0.1.14` and `v0.1.14` resolve to `/releases/tag/v0.1.14`; development or invalid
-version strings fall back to the release listing. QR generation is local, with a
-black-on-white symbol and a white quiet zone. It adds no device network requests.
+`release_notes::url()` opens the illustrated English notes directly:
+https://github.com/ThingPulse/esp32-gadget-os/blob/master/docs/releases/since-v0.1.3.en.md
+Both OTA dialogs use this destination, regardless of the installed or offered
+version. The page links to the German translation. QR generation is local, with
+a black-on-white symbol and white quiet zone; it adds no device network requests.
 
 ## Publishing
 
@@ -24,14 +25,13 @@ black-on-white symbol and a white quiet zone. It adds no device network requests
   are used in the release body.
 - The release workflow supplies that file as `body_path`. Review both language
   pages and update the cumulative content before tagging a later release.
-- There is no separate website deployment. The links become public when the
-  tagged commit and GitHub release are published. Local development does not
-  publish notes or alter an existing release.
+- There is no separate website deployment. The QR page follows `master`, so
+  note updates become visible when pushed there. The GitHub release body still
+  links to its tagged snapshot. Local edits do not publish either.
 
 Existing firmware cannot acquire the new pre-installation button until updated.
 The new firmware can show its QR in the confirmation after that first update.
-Native OTA fixtures use `1.0.0-demo`; that QR intentionally identifies a demo tag,
-not a published release.
+Native OTA fixtures use `1.0.0-demo` but encode the same notes-page URL as devices.
 
 ## Verification
 

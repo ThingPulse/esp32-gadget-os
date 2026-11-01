@@ -239,7 +239,7 @@ static void show_release_notes_dialog()
   lv_obj_set_style_text_font(title,i18n::font24(),0);
   auto *version=lv_label_create(panel);
   lv_label_set_text(version,UpdateService::instance().available_version().c_str());
-  release_notes::create_qr(panel,UpdateService::instance().available_version());
+  release_notes::create_qr(panel);
   auto *hint=lv_label_create(panel); lv_label_set_text(hint,i18n::tr("Scan for app-by-app changes"));
   lv_obj_set_width(hint,lv_pct(100)); lv_obj_set_style_text_align(hint,LV_TEXT_ALIGN_CENTER,0);
   update_dialog_button(panel,i18n::tr("Back"),6);
@@ -383,7 +383,7 @@ static void show_update_installed_dialog()
   lv_obj_t *message=lv_label_create(update_dialog); lv_obj_set_width(message,lv_pct(100));
   lv_label_set_long_mode(message,LV_LABEL_LONG_WRAP); lv_label_set_text(message,text);
   lv_obj_set_style_text_align(message,LV_TEXT_ALIGN_CENTER,0); lv_obj_set_style_text_color(message,lv_color_hex(0xb7bdd7),0);
-  release_notes::create_qr(update_dialog,updates.installed_version_notice());
+  release_notes::create_qr(update_dialog);
   auto *hint=lv_label_create(update_dialog); lv_label_set_text(hint,i18n::tr("Scan for app-by-app changes"));
   lv_obj_set_width(hint,lv_pct(100)); lv_obj_set_style_text_align(hint,LV_TEXT_ALIGN_CENTER,0);
   lv_obj_set_style_text_color(hint,lv_color_white(),0);

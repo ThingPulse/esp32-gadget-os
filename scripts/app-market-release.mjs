@@ -193,7 +193,7 @@ async function prepare(root, tag) {
     targets: otaTargets
   };
   await writeFile(join(staging, 'ota-manifest.json'), `${JSON.stringify(otaManifest, null, 2)}\n`);
-  // Keep the QR destination version-specific and reuse the illustrated pages.
+  // Keep the release body version-specific and reuse the illustrated pages.
   // Outside staging: the body is not a firmware asset for download.
   const notesRoot = `https://github.com/ThingPulse/esp32-gadget-os/blob/v${version}/docs/releases`;
   const notes = await readFile(join(root, 'docs/releases/since-v0.1.3.en.md'), 'utf8');

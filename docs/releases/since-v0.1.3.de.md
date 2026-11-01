@@ -182,7 +182,8 @@ jetzt zweizeilig angezeigt werden. Auch ÖPNV, Aktien und ISS sind direkt erreic
 
 Vor einem Update öffnet **Was ist neu?** einen QR-Code zu den bebilderten
 Versionshinweisen. Nach der Installation erscheint der Code auch in der
-Bestätigung. Jeder Code führt zur passenden Version mit Links zu beiden Sprachen.
+Bestätigung. Beide Codes öffnen direkt die englische Seite mit den bebilderten
+Neuerungen und einem Link zur deutschen Übersetzung.
 
 Die neuen Dialoge stehen ab der Firmware mit dieser Funktion bereit. Ältere
 Firmware zeigt vor der Installation noch ihren bisherigen Dialog. Nach einer

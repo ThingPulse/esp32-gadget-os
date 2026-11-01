@@ -3,7 +3,7 @@
 #include <string>
 
 namespace release_notes {
-std::string url(const std::string &version);
+std::string url();
 // Includes a white, four-module quiet zone around the QR symbol.
-lv_obj_t *create_qr(lv_obj_t *parent, const std::string &version);
+lv_obj_t *create_qr(lv_obj_t *parent);
 }
