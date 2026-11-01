@@ -487,5 +487,7 @@
   "Refresh queued - please wait": "Aktualisierung vorgemerkt",
   "Visibility depends on clear skies": "Sichtbarkeit bei klarem Himmel",
   "Predicted times; clear skies needed": "Vorhersage bei klarem Himmel",
-  "Connect to Wi-Fi for predictions": "Für Vorhersagen WLAN verbinden"
+  "Connect to Wi-Fi for predictions": "Für Vorhersagen WLAN verbinden",
+  "Home Assistant": "Home Assistant",
+  "Configure Home Assistant": "Home Assistant einrichten"
 }

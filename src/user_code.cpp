@@ -1025,12 +1025,6 @@ static void create_app_tile(lv_obj_t *grid, const App &app, int app_index)
 {
   lv_obj_t *tile = lv_obj_create(grid);
   lv_obj_set_size(tile, 88, 112);
-  // Long translated captions may use the spacing between launcher tiles.
-  lv_obj_add_flag(tile, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-  lv_obj_add_event_cb(tile, [](lv_event_t *event) {
-    lv_event_set_ext_draw_size(event, 16);
-  }, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
-  lv_obj_refresh_ext_draw_size(tile);
   lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(tile, 0, 0);
@@ -1065,8 +1059,16 @@ static void create_app_tile(lv_obj_t *grid, const App &app, int app_index)
 
   lv_obj_t *name_label = lv_label_create(tile);
   lv_label_set_text(name_label, i18n::tr(app.name));
+  // Reserve two lines below every icon so long names do not overlap neighbours.
+  lv_obj_set_style_text_font(name_label, i18n::font14(), 0);
+  lv_obj_set_style_text_align(name_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_size(name_label, lv_pct(100), 2 * i18n::font14()->line_height);
+  lv_label_set_long_mode(name_label, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_color(name_label, lv_color_white(), 0);
-  lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_align(name_label, LV_ALIGN_TOP_MID, 0, 76);
+  lv_obj_add_flag(name_label, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(name_label, app_icon_clicked, LV_EVENT_CLICKED,
+                      (void *)(intptr_t)app_index);
 }
 
 static lv_obj_t *create_app_page(lv_obj_t *pager, const char *title)

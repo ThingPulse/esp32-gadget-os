@@ -7,7 +7,7 @@
 #include "ui/StatusIcons.h"
 #include <algorithm>
 #include <tuple>
-APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Home",LV_SYMBOL_HOME,home_assistant_app_launch,0x26b99a,40);
+APP_REGISTER_COLOR_RANK("Home Assistant",LV_SYMBOL_HOME,home_assistant_app_launch,0x26b99a,40);
 namespace {
 constexpr uint32_t Bg=0x182131,Card=0x253449,Mint=0x69efca,Muted=0xaab8d2;
 struct TileWidgets{lv_obj_t*button=nullptr,*symbol=nullptr,*value=nullptr,*spinner=nullptr;};
@@ -30,7 +30,7 @@ const char*icon(const ha::Tile&t){auto kind=t.icon=="auto"||t.icon.empty()?ha::d
 std::string value(const ha::Entity*e){if(!e)return i18n::tr("Unavailable");const char*expected=HomeAssistantService::instance().expected_state(e->id);if(expected)return i18n::tr(std::string(expected)=="on"?"On":"Off");if(!e->available())return i18n::tr("Unavailable");auto d=ha::domain(e->id);if(d=="scene"||d=="script")return i18n::tr("Activate");if(e->state=="on")return i18n::tr("On");if(e->state=="off")return i18n::tr("Off");return e->state+(e->unit.empty()?"":" "+e->unit);}
 auto entity_fields(const ha::Entity&e){return std::tie(e.id,e.state,e.unit,e.brightness,e.kelvin,e.min_kelvin,e.max_kelvin,e.dimmable,e.warmth,e.color);}
 void render(){
- auto&s=HomeAssistantService::instance();ctx.revision=s.revision();ctx.connected=s.connected();ctx.status=nullptr;for(auto&t:ctx.tiles)t={};ctx.layout=s.layout_revision();lv_obj_clean(ctx.body);lv_obj_scroll_to_y(ctx.body,0,LV_ANIM_OFF);if(ctx.view==1)lv_obj_add_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);else lv_obj_remove_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);int w=lv_obj_get_width(ctx.body);lv_label_set_text(ctx.title,i18n::tr(ctx.view==2?"Configure Home":ctx.view==1?"Details":"Home"));
+ auto&s=HomeAssistantService::instance();ctx.revision=s.revision();ctx.connected=s.connected();ctx.status=nullptr;for(auto&t:ctx.tiles)t={};ctx.layout=s.layout_revision();lv_obj_clean(ctx.body);lv_obj_scroll_to_y(ctx.body,0,LV_ANIM_OFF);if(ctx.view==1)lv_obj_add_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);else lv_obj_remove_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);int w=lv_obj_get_width(ctx.body);lv_label_set_text(ctx.title,i18n::tr(ctx.view==2?"Configure Home Assistant":ctx.view==1?"Details":"Home Assistant"));
  if(ctx.view==2){
   label(ctx.body,i18n::tr("Scan with your phone"),12,12,w-24,Mint,true);
   if(!s.setup_open()){label(ctx.body,i18n::tr("Setup expired. Open it again."),12,60,w-24);button(ctx.body,i18n::tr("Configure"),12,120,w-24,44,setup);return;}
@@ -123,7 +123,7 @@ void home_assistant_app_launch(){
  ctx=Context{};ctx.home=lv_screen_active();ctx.screen=lv_obj_create(nullptr);lv_obj_set_style_bg_color(ctx.screen,lv_color_hex(Bg),0);lv_obj_set_style_text_font(ctx.screen,i18n::font14(),0);lv_obj_set_style_pad_all(ctx.screen,0,0);lv_obj_set_style_border_width(ctx.screen,0,0);lv_obj_clear_flag(ctx.screen,LV_OBJ_FLAG_SCROLLABLE);
  int w=lv_display_get_horizontal_resolution(nullptr),h=lv_display_get_vertical_resolution(nullptr);
  auto*bar=lv_obj_create(ctx.screen);lv_obj_set_pos(bar,0,0);lv_obj_set_size(bar,w,44);lv_obj_set_style_pad_all(bar,0,0);lv_obj_set_style_border_width(bar,0,0);lv_obj_set_style_bg_opa(bar,LV_OPA_TRANSP,0);lv_obj_clear_flag(bar,LV_OBJ_FLAG_SCROLLABLE);
- button(bar,LV_SYMBOL_LEFT,4,0,44,44,back);ctx.title=label(bar,i18n::tr("Home"),54,12,w-112);lv_obj_set_style_text_align(ctx.title,LV_TEXT_ALIGN_CENTER,0);create_wifi_status_icon(bar,-8);
+ button(bar,LV_SYMBOL_LEFT,4,0,44,44,back);ctx.title=label(bar,i18n::tr("Home Assistant"),54,12,w-112);lv_obj_set_style_text_align(ctx.title,LV_TEXT_ALIGN_CENTER,0);create_wifi_status_icon(bar,-8);
  ctx.spinner=lv_spinner_create(bar);lv_obj_set_size(ctx.spinner,18,18);lv_obj_set_pos(ctx.spinner,w-56,12);lv_spinner_set_anim_params(ctx.spinner,900,180);lv_obj_set_style_arc_width(ctx.spinner,3,LV_PART_MAIN);lv_obj_set_style_arc_width(ctx.spinner,3,LV_PART_INDICATOR);lv_obj_add_flag(ctx.spinner,LV_OBJ_FLAG_HIDDEN);
  ctx.body=lv_obj_create(ctx.screen);lv_obj_set_pos(ctx.body,0,44);lv_obj_set_size(ctx.body,w,h-44);lv_obj_set_style_bg_opa(ctx.body,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(ctx.body,0,0);lv_obj_set_style_pad_all(ctx.body,0,0);lv_obj_clear_flag(ctx.body,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_add_event_cb(ctx.body,[](lv_event_t*){if(ctx.view||!lv_indev_active())return;auto d=lv_indev_get_gesture_dir(lv_indev_active());auto n=HomeAssistantService::instance().config().pages.size();if(n>1&&(d==LV_DIR_LEFT||d==LV_DIR_RIGHT)){ctx.page=(ctx.page+n+(d==LV_DIR_LEFT?1:-1))%n;render();}},LV_EVENT_GESTURE,nullptr);

@@ -421,9 +421,9 @@ python3 scripts/create-enclosure-demo.py --sequence transit --language de \
 Use `--language en` and `--output documents/user-guide/video/transit-tour-cozy.mp4`
 for the English version.
 
-## Home — Labs (Home Assistant)
+## Home Assistant
 
-Swipe the launcher to **Labs** and open **Home**. This app connects directly to
+Open **Home Assistant** on the main launcher page. This app connects directly to
 an existing Home Assistant installation; no ThingPulse backend or MQTT broker is
 required.
 
