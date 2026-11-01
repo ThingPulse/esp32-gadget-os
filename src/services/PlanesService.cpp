@@ -74,6 +74,7 @@ static void log_network_heap(const char *provider)
 #endif
 
 struct PlanesFetchResult {
+    std::vector<AirportLocation> airports;
     bool ok = false;
     PlaneState planes[PlanesService::MAX_PLANES]{};
     int count = 0;
@@ -367,12 +368,16 @@ bool PlanesService::reload_from_config()
     _hide_ground = cfg.get_bool("hide_ground", false);
 
     if (lat.empty() || lon.empty() || range.empty()) {
+        if (_configured) _airports.clear();
         _configured = false;
         clear_planes();
         _last_error = "Configure center and range";
         return false;
     }
 
+    if (_configured && (_home_lat != std::strtod(lat.c_str(), nullptr) ||
+                        _home_lon != std::strtod(lon.c_str(), nullptr) ||
+                        _home_range_km != std::strtod(range.c_str(), nullptr))) _airports.clear();
     _home_lat = std::strtod(lat.c_str(), nullptr);
     _home_lon = std::strtod(lon.c_str(), nullptr);
     _home_range_km = std::strtod(range.c_str(), nullptr);
@@ -650,6 +655,7 @@ std::string PlanesService::route_for_callsign(const std::string &callsign_raw, i
     const unsigned long now = now_ms();
     auto it = _route_cache.find(key);
     if (it != _route_cache.end() && it->second.expires_at_ms > now) {
+        _learned_airports.insert(_learned_airports.end(), it->second.airports.begin(), it->second.airports.end());
         out_origin_name = it->second.origin_name;
         out_destination_name = it->second.destination_name;
         if (it->second.route.empty()) return "N/A";
@@ -660,9 +666,11 @@ std::string PlanesService::route_for_callsign(const std::string &callsign_raw, i
     network_budget--;
 
     std::string route;
+    const size_t learned_before = _learned_airports.size();
     if (fetch_route_for_callsign(key, route, out_origin_name, out_destination_name)) {
         _route_cache[key] = RouteCacheEntry{route, out_origin_name, out_destination_name,
                                             now + ROUTE_CACHE_OK_MS};
+        _route_cache[key].airports.assign(_learned_airports.begin() + learned_before, _learned_airports.end());
     } else {
         _route_cache[key] = RouteCacheEntry{"", "", "", now + ROUTE_CACHE_MISS_MS};
         route = "N/A";
@@ -746,6 +754,13 @@ bool PlanesService::fetch_route_for_callsign(const std::string &callsign_key, st
     JsonVariantConst flightroute = doc["response"]["flightroute"];
     if (flightroute.isNull()) return false;
 
+    for (const char *side : {"origin", "destination"}) {
+        auto item = flightroute[side];
+        if (!item["latitude"].is<double>() || !item["longitude"].is<double>()) continue;
+        AirportLocation airport{json_string_or_empty(item["icao_code"]), airport_code_from_obj(item),
+                                item["latitude"].as<double>(), item["longitude"].as<double>()};
+        if (AirportCache::valid(airport)) _learned_airports.push_back(airport);
+    }
     std::string origin = airport_code_from_obj(flightroute["origin"]);
     std::string destination = airport_code_from_obj(flightroute["destination"]);
     if (origin.empty() || destination.empty()) return false;
@@ -761,6 +776,7 @@ bool PlanesService::start_async_fetch()
     if (_fetch_in_progress)
         return true;
     _fetch_routes = _has_data && _plane_count > 0;
+    _learned_airports.clear();
     _fetch_priority_icao = _priority_icao;
 #if defined(ARDUINO)
     if (!planes_result_queue) {
@@ -792,6 +808,7 @@ bool PlanesService::start_async_fetch()
             if (result->ok && _fetch_routes)
                 enrich_routes(result->planes, result->count);
 
+            result->airports.swap(_learned_airports);
             std::lock_guard<std::mutex> lock(planes_result_mutex);
             delete planes_pending_result;
             planes_pending_result = result;
@@ -823,6 +840,7 @@ void PlanesService::fetch_task_entry(void *user_data)
     if (result->ok && self->_fetch_routes)
         self->enrich_routes(result->planes, result->count);
 
+    result->airports.swap(self->_learned_airports);
     if (xQueueSend(planes_result_queue, &result, 0) != pdTRUE) {
         delete result;
         self->_fetch_in_progress = false;
@@ -861,6 +879,7 @@ void PlanesService::process_async_result()
         return;
     }
     if (result->ok) {
+        _airports.merge(result->airports);
         publish_result(result->planes, result->count, result->provider);
     } else {
         _last_error = result->error.empty() ? "All aircraft providers failed" : result->error;

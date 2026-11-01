@@ -87,7 +87,57 @@ static LGFX lcd(320, 480, 2);
 #if defined(COLOR_KIT_PRO)
 #include <ColorKitPro.h>
 #include "hal/ProDisplayTransfer.h"
+#include "hal/PowerSwitch.h"
+#include <driver/rtc_io.h>
+#include <esp_sleep.h>
+#include <esp_wifi.h>
+#include <BLEDevice.h>
 static ColorKitPro lcd;
+static PowerSwitch pro_power_switch;
+
+static void pro_power_begin()
+{
+  // Release output holds left by our previous deep sleep before LCD init.
+  gpio_deep_sleep_hold_dis();
+  for (int pin : {PIN_TFT_LED, PIN_TFT_CS, PIN_TFT_RS, PIN_TFT_RESET, PIN_BUZZER})
+    gpio_hold_dis(static_cast<gpio_num_t>(pin));
+  rtc_gpio_deinit(static_cast<gpio_num_t>(PIN_TACTILE_BUTTON1));
+  pinMode(PIN_TACTILE_BUTTON1, INPUT); // External 10k pulldown; no internal pullup.
+  pro_power_switch.update(digitalRead(PIN_TACTILE_BUTTON1) == HIGH, millis());
+}
+
+static void pro_power_poll()
+{
+  if (!pro_power_switch.update(digitalRead(PIN_TACTILE_BUTTON1) == HIGH, millis())) return;
+  const auto state = UpdateService::instance().state();
+  if (state == UpdateService::State::Downloading || state == UpdateService::State::ReadyToReboot) {
+    UI_TRACE("Power", "Ignoring sleep gesture during firmware installation");
+    return;
+  }
+  const gpio_num_t wake_pin = static_cast<gpio_num_t>(PIN_TACTILE_BUTTON1);
+  const esp_err_t err = esp_sleep_enable_ext1_wakeup_io(
+      1ULL << PIN_TACTILE_BUTTON1, ESP_EXT1_WAKEUP_ANY_HIGH);
+  if (err != ESP_OK) {
+    UI_TRACE("Power", "Cannot configure switch wake-up: %d", int(err));
+    return;
+  }
+  rtc_gpio_pullup_dis(wake_pin);
+  rtc_gpio_pulldown_dis(wake_pin); // The board supplies the pulldown in sleep too.
+  UI_TRACE("Power", "Entering deep sleep; pull down again to wake");
+  lcd.waitDMA();
+  lcd.sleep();
+  // PWM disappears in deep sleep. Drive and hold the backlight transistor off.
+  ledcDetach(PIN_TFT_LED);
+  for (int pin : {PIN_TFT_LED, PIN_TFT_CS, PIN_TFT_RS, PIN_TFT_RESET, PIN_BUZZER}) {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, (pin == PIN_TFT_CS || pin == PIN_TFT_RESET) ? HIGH : LOW);
+    gpio_hold_en(static_cast<gpio_num_t>(pin));
+  }
+  gpio_deep_sleep_hold_en();
+  esp_wifi_stop();
+  BLEDevice::deinit(false);
+  esp_deep_sleep_start();
+}
 #else
 #include <ColorKitGrande.h>
 static ColorKitGrande lcd;
@@ -1176,6 +1226,9 @@ static uint32_t get_tick_ms(void)
 
 void setup(void)
 {
+#if defined(COLOR_KIT_PRO) && defined(ARDUINO) && defined(ESP_PLATFORM)
+  pro_power_begin();
+#endif
   UI_TRACE("Boot", "setup start");
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
   UI_TRACE("Boot", "Arduino-ESP32 %s / ESP-IDF %s", ESP_ARDUINO_VERSION_STR, ESP.getSdkVersion());
@@ -1311,6 +1364,9 @@ void setup(void)
 
 void loop(void)
 {
+#if defined(COLOR_KIT_PRO) && defined(ARDUINO) && defined(ESP_PLATFORM)
+  pro_power_poll();
+#endif
   // Restore persisted route on first loop iteration after home screen is created
   if (restore_route_pending) {
     UI_TRACE("Boot", "restore_route_pending fired");

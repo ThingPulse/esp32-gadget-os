@@ -1,6 +1,7 @@
 #include <string>
 #include <cassert>
 #include <cstring>
+#include "ui/WeatherLoadingIndicator.h"
 #define private public
 #include "services/WeatherService.h"
 #include "services/TimeService.h"
@@ -30,6 +31,27 @@ int main() {
     lv_init();
     auto *display = lv_display_create(320, 480);
     assert(display);
+    // Successful and failed requests both end the loading animation. Reconcile
+    // visibility even if the previous request-state transition was missed.
+    auto *track = lv_obj_create(lv_screen_active());
+    auto *line = lv_obj_create(track);
+    weather_loading_set(line, false);
+    assert(lv_obj_has_flag(line, LV_OBJ_FLAG_HIDDEN));
+    weather_loading_set(line, true);
+    auto *animation = lv_anim_get(line, weather_loading_move);
+    assert(animation && !lv_obj_has_flag(line, LV_OBJ_FLAG_HIDDEN));
+    weather_loading_set(line, true);
+    assert(lv_anim_get(line, weather_loading_move) == animation);
+    weather_loading_set(line, false);
+    assert(!lv_anim_get(line, weather_loading_move));
+    assert(lv_obj_has_flag(line, LV_OBJ_FLAG_HIDDEN));
+    lv_obj_remove_flag(line, LV_OBJ_FLAG_HIDDEN);
+    weather_loading_set(line, false);
+    assert(lv_obj_has_flag(line, LV_OBJ_FLAG_HIDDEN));
+    weather_loading_set(line, true); // Another refresh starts a fresh animation.
+    assert(lv_anim_get(line, weather_loading_move));
+    lv_obj_delete(track);
+    assert(!lv_anim_get(line, weather_loading_move));
     ClassicWeatherView view;
     classic_weather_create(view, lv_screen_active());
     auto &weather = WeatherService::instance();

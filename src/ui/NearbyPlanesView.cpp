@@ -377,6 +377,35 @@ void draw_radar(lv_event_t *e) {
     line(layer,x+RADAR_X-RADAR_RADIUS,y+RADAR_Y,x+RADAR_X+RADAR_RADIUS,y+RADAR_Y,0x35445e);
     line(layer,x+RADAR_X,y+RADAR_Y-RADAR_RADIUS,x+RADAR_X,y+RADAR_Y+RADAR_RADIUS,0x35445e);
     circle(layer,x+RADAR_X,y+RADAR_Y,3,0xe7eaf4,3);
+    // Background landmarks: muted, non-interactive, and below aircraft/trails.
+    const auto &service = PlanesService::instance();
+    std::vector<lv_area_t> airport_labels;
+    for (const auto &airport : service.airports()) {
+        const double km = AirportCache::distance(service.home_latitude(), service.home_longitude(), airport.latitude, airport.longitude);
+        if (km > v.radius_km) continue;
+        const double lat1 = service.home_latitude()*PI/180, lat2 = airport.latitude*PI/180;
+        const double dl = (airport.longitude-service.home_longitude())*PI/180;
+        const double bearing = std::atan2(std::sin(dl)*std::cos(lat2),
+            std::cos(lat1)*std::sin(lat2)-std::sin(lat1)*std::cos(lat2)*std::cos(dl));
+        const int cx=x+RADAR_X+std::lround(km/v.radius_km*RADAR_RADIUS*std::sin(bearing));
+        const int cy=y+RADAR_Y-std::lround(km/v.radius_km*RADAR_RADIUS*std::cos(bearing));
+        circle(layer,cx,cy,2,0x65748a,2);
+        lv_point_t text_size;
+        lv_text_get_size(&text_size, airport.code.c_str(), i18n::font14(), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        const int width = text_size.x + 2;
+        int left=cx+6;
+        if (left+width>x+RADAR_X+RADAR_RADIUS) left=cx-6-width;
+        lv_area_t box{left,cy-text_size.y/2,left+width,cy-text_size.y/2+text_size.y};
+        bool overlap=false;
+        for(const auto &b:airport_labels)
+            if(box.x1<=b.x2+3 && box.x2+3>=b.x1 && box.y1<=b.y2+3 && box.y2+3>=b.y1) overlap=true;
+        if(overlap) continue;
+        airport_labels.push_back(box);
+        lv_draw_label_dsc_t label;lv_draw_label_dsc_init(&label);
+        label.font=i18n::font14();label.color=lv_color_hex(0x65748a);
+        label.text=airport.code.c_str();
+        lv_draw_label(layer,&label,&box);
+    }
     const auto *trail = selected_trail(v);
     if (selected(v) && trail) for (int i = 1; i < trail->count; ++i) {
         auto from = trail->point(i - 1), to = trail->point(i);
@@ -420,6 +449,9 @@ void nearby_planes_tick(NearbyPlanesView &v) {
 }
 void nearby_planes_update(NearbyPlanesView &v) {
     if (!v.root) return;
+    if (PlanesService::instance().is_configured())
+        PlanesService::instance().select_airport_view(PlanesService::instance().home_latitude(),
+            PlanesService::instance().home_longitude(), v.radius_km);
     const auto &s=PlanesService::instance();
     v.count=0;
     const bool home = std::abs(s.center_latitude()-s.home_latitude())<.00001 &&

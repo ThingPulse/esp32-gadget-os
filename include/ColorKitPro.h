@@ -61,12 +61,12 @@ class ColorKitPro : public lgfx::LGFX_Device
   }
 
 public:
-  ColorKitPro(void)
+  explicit ColorKitPro(uint32_t write_frequency = 40000000)
   {
     {
       auto cfg = _bus_instance.config();
 
-      cfg.freq_write = 40000000;
+      cfg.freq_write = write_frequency;
       cfg.pin_wr = PIN_TFT_WR;
       cfg.pin_rd = PIN_TFT_RD;
       cfg.pin_rs = PIN_TFT_RS;

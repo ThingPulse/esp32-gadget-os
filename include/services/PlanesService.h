@@ -2,6 +2,7 @@
 
 #include "EventBus.h"
 #include "ServiceRegistry.h"
+#include "services/AirportCache.h"
 
 #include <string>
 #include <unordered_map>
@@ -63,6 +64,8 @@ public:
     unsigned long data_age_ms() const { return now_ms() - _last_update_ms; }
     int plane_count() const { return _plane_count; }
     const PlaneState *planes() const { return _planes; }
+    void select_airport_view(double lat, double lon, double range) { _airports.select_view(lat, lon, range); }
+    const std::vector<AirportLocation> &airports() const { return _airports.entries(); }
     const std::string &provider_name() const { return _provider_name; }
 
     double center_latitude() const { return _center_lat; }
@@ -99,6 +102,7 @@ private:
     unsigned long now_ms() const;
 
     struct RouteCacheEntry {
+        std::vector<AirportLocation> airports;
         std::string route;
         std::string origin_name;
         std::string destination_name;
@@ -133,6 +137,8 @@ private:
     std::string _provider_name;
     std::string _last_error;
     std::unordered_map<std::string, RouteCacheEntry> _route_cache;
+    AirportCache _airports; // UI thread only, scoped to the visible radar area.
+    std::vector<AirportLocation> _learned_airports; // Worker only; transferred with its result.
 
     SubscriptionId _wifi_connected_sub = 0;
     SubscriptionId _wifi_disconnected_sub = 0;

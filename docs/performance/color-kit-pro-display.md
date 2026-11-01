@@ -129,3 +129,63 @@ Before adopting the change:
 Do not raise the bus clock as the first experiment. If transfer time becomes a
 small fraction of complete redraw time, further gains require profiling rendering
 and main-loop services rather than faster bus writes.
+
+## Synchronization wiring review (2026-10-31)
+
+The user supplied Pro display/MCU and power/peripheral schematic screenshots.
+The title block on the display drawing says Color Kit Grande, but its ESP32-S3
+N16R2 and DB0–DB15 wiring match the Pro configuration. Treat the actual wiring,
+not that reused title, as the identifying evidence.
+
+- No LCD TE signal is routed to an ESP32 pin in the supplied Pro drawing. This
+  rules out enabling a TE GPIO interrupt on the shown wiring without a hardware
+  change. The module's TE pad/pin accessibility is not established by this drawing;
+  do not assign TE to one of the unnamed, unconnected connector pins by guesswork.
+- Pro `TFT_RD` is routed to GPIO48, alongside the bidirectional parallel data bus.
+  This matches the driver's readable-panel configuration and offers a possible
+  synchronization alternative using display-register readback.
+- The Grande connector-board revision 1.0 schematic (2023-01-14), inspected from
+  `thingpulse-devices/color-kit-grande/schematics/connector-board-color-kit-grande.pdf`,
+  shows no TE route and no LCD serial-data return to MCU MISO. The Pro readback
+  approach therefore cannot simply be assumed to work on the stock Grande.
+
+The [ILI9488 datasheet](https://files.waveshare.com/upload/2/2d/ILI9488_Data_Sheet.pdf),
+section 5.2.38, page 206, documents `Read Scan Line (0x45)`: discard a dummy read,
+then read the high and low bytes of the current scan-line number. Line zero is
+at the start of V-sync; total lines include blanking intervals. Read values while
+asleep are undefined. Hardware readback was subsequently tested on this Pro; see the results below.
+
+## Synchronization and hardware revision experiment
+
+The [2026-10-31 follow-up results](results/2026-10-31-pro-display-sync.md) compare
+64-row rendering with complete-frame PSRAM staging at configured 40 and 20 MHz.
+Full staging increased refresh time from 52.679 to 84.130 ms at 40 MHz. Reducing
+the clock to 20 MHz increased strip refresh time by only 6.9%.
+
+Normal register reads, conservative GPIO sampling, and explicit GPIO output
+release all failed to produce plausible scan-line values. The benchmark rejected
+these reads and skipped synchronized presentation. This does not prove a wiring
+fault or lack of controller support; electrical readback remains unresolved.
+
+`esp32-color-kit-pro-display-sync` is a standalone diagnostic, currently configured
+for 20 MHz by `WriteClockHz` in `src/benchmarks/DisplaySyncBenchmark.cpp`. Change
+that constant to repeat the 40 MHz comparison. It uses the same partition layout
+but does not load/save settings or start networking. Build with:
+
+```sh
+.venv-build/bin/pio run -e esp32-color-kit-pro-display-sync
+```
+
+It probes readback before benchmarking. Scan-line polling is bounded and the sync
+profile is skipped if validation fails. Each profile uses 10 warmups and 90 timed
+frames, repeated three times in rotated order. Capture startup through `SYNC_DONE`;
+reset to repeat. USB characters `1`, `2`, and `3` select the subsequent visual demo
+(strips, staged frame, synchronized staged frame); `3` is rejected if readback is
+invalid. Staging alone and synchronization of the first strip do not establish
+tear-free output. The experimental sync path also needs validation against panel
+scan direction, orientation, blanking and burst timing before any production use.
+
+The exact faster full application was backed up before the experiment and restored
+afterward. Only the existing app slot was written. No synchronization workaround
+has been enabled in the normal application. The follow-up report includes hardware
+recommendations for both an S3 revision and a more extensive P4/DSI redesign.

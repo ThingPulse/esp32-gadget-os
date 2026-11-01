@@ -1,0 +1,241 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1510" viewBox="0 0 1800 1510"><rect width="1800" height="1510" fill="white"/><style>text{font-family:Arial,sans-serif;fill:#172b3a}.wire{stroke:#15665c;stroke-width:2.5;fill:none}.sym{stroke:#172b3a;stroke-width:2.5;fill:white}</style>
+<text x="50" y="50" font-size="32">Color Kit Pro • BQ25619 charger and power path</text>
+<text x="50" y="83" font-size="19">Connection schematic / draft for EasyEDA entry • two-wire 4.2 V Li-ion pack • reference designators local to this sheet</text>
+<text x="50" y="112" font-size="18">U_CHG = BQ25619RTWR • JLCPCB C2864534 • RTW WQFN-24, 4 × 4 mm • pin numbers verified against TI Rev. F</text>
+<rect class="sym" x="680" y="165" width="330" height="790"/>
+<text x="745" y="205" font-size="24">U_CHG</text>
+<text x="720" y="235" font-size="24">BQ25619RTWR</text>
+<path class="wire" d="M615 280 L680 280"/>
+<text x="695" y="286" font-size="21">VBUS</text>
+<text x="635" y="270" font-size="15">24</text>
+<path class="wire" d="M615 330 L680 330"/>
+<text x="695" y="336" font-size="21">VAC</text>
+<text x="635" y="320" font-size="15">1</text>
+<path class="wire" d="M615 450 L680 450"/>
+<text x="695" y="456" font-size="21">PMID</text>
+<text x="635" y="440" font-size="15">23</text>
+<path class="wire" d="M615 590 L680 590"/>
+<text x="695" y="596" font-size="21">SDA</text>
+<text x="635" y="580" font-size="15">6</text>
+<path class="wire" d="M615 645 L680 645"/>
+<text x="695" y="651" font-size="21">SCL</text>
+<text x="635" y="635" font-size="15">5</text>
+<path class="wire" d="M615 720 L680 720"/>
+<text x="695" y="726" font-size="21">/CE</text>
+<text x="635" y="710" font-size="15">9</text>
+<path class="wire" d="M615 800 L680 800"/>
+<text x="695" y="806" font-size="21">PSEL</text>
+<text x="635" y="790" font-size="15">2</text>
+<path class="wire" d="M615 875 L680 875"/>
+<text x="695" y="881" font-size="21">GND</text>
+<text x="635" y="865" font-size="15">17,18</text>
+<path class="wire" d="M1010 280 L1075 280"/>
+<text x="900" y="286" font-size="21">SW</text>
+<text x="1030" y="270" font-size="15">19,20</text>
+<path class="wire" d="M1010 400 L1075 400"/>
+<text x="900" y="406" font-size="21">BTST</text>
+<text x="1030" y="390" font-size="15">21</text>
+<path class="wire" d="M1010 500 L1075 500"/>
+<text x="900" y="506" font-size="21">SYS</text>
+<text x="1030" y="490" font-size="15">15,16</text>
+<path class="wire" d="M1010 610 L1075 610"/>
+<text x="900" y="616" font-size="21">BAT</text>
+<text x="1030" y="600" font-size="15">13,14</text>
+<path class="wire" d="M1010 690 L1075 690"/>
+<text x="900" y="696" font-size="21">BATSNS</text>
+<text x="1030" y="680" font-size="15">10</text>
+<path class="wire" d="M1010 780 L1075 780"/>
+<text x="900" y="786" font-size="21">REGN</text>
+<text x="1030" y="770" font-size="15">22</text>
+<path class="wire" d="M1010 875 L1075 875"/>
+<text x="900" y="881" font-size="21">TS</text>
+<text x="1030" y="865" font-size="15">11</text>
+<text x="720" y="920" font-size="20">EP → GND plane</text>
+<path class="wire" d="M80 280 L615 280"/>
+<text x="80" y="250" font-size="22">USB-C VBUS / 5 V</text>
+<path class="wire" d="M560 280 L560 330"/>
+<path class="wire" d="M560 330 L615 330"/>
+<circle cx="560" cy="280" r="4" fill="#15665c"/>
+<path class="wire" d="M210 280 L210 305"/>
+<path class="sym" d="M194 305 L226 305"/>
+<path class="sym" d="M194 314 L226 314"/>
+<path class="wire" d="M210 314 L210 337"/>
+<path class="wire" d="M210 337 L210 349"/>
+<path class="sym" d="M193 349 L227 349"/>
+<path class="sym" d="M199 355 L221 355"/>
+<path class="sym" d="M205 361 L215 361"/>
+<text x="235" y="309" font-size="17">C_IN  1 µF / 16 V</text>
+<text x="235" y="332" font-size="15">C1592 · 0603</text>
+<circle cx="210" cy="280" r="4" fill="#15665c"/>
+<path class="wire" d="M100 450 L615 450"/>
+<path class="wire" d="M140 450 L140 475"/>
+<path class="sym" d="M124 475 L156 475"/>
+<path class="sym" d="M124 484 L156 484"/>
+<path class="wire" d="M140 484 L140 507"/>
+<path class="wire" d="M140 507 L140 519"/>
+<path class="sym" d="M123 519 L157 519"/>
+<path class="sym" d="M129 525 L151 525"/>
+<path class="sym" d="M135 531 L145 531"/>
+<text x="165" y="479" font-size="17">C_PM1  10 µF / 25 V</text>
+<text x="165" y="502" font-size="15">C15850 · 0805</text>
+<path class="wire" d="M420 450 L420 475"/>
+<path class="sym" d="M404 475 L436 475"/>
+<path class="sym" d="M404 484 L436 484"/>
+<path class="wire" d="M420 484 L420 507"/>
+<path class="wire" d="M420 507 L420 519"/>
+<path class="sym" d="M403 519 L437 519"/>
+<path class="sym" d="M409 525 L431 525"/>
+<path class="sym" d="M415 531 L425 531"/>
+<text x="445" y="479" font-size="17">C_PM2  same</text>
+<text x="445" y="502" font-size="15">C15850</text>
+<circle cx="140" cy="450" r="4" fill="#15665c"/>
+<circle cx="420" cy="450" r="4" fill="#15665c"/>
+<text x="65" y="571" font-size="17">PMID: no external accessory / boost load</text>
+<path class="wire" d="M120 590 L615 590"/>
+<text x="120" y="620" font-size="18">ESP32-S3 GPIO40 / existing SDA net</text>
+<path class="wire" d="M120 645 L615 645"/>
+<text x="120" y="675" font-size="18">ESP32-S3 GPIO41 / existing SCL net</text>
+<text x="120" y="700" font-size="17">Reuse existing 10 kΩ pull-ups to 3.3 V.</text>
+<path class="wire" d="M555 720 L615 720"/>
+<path class="wire" d="M555 720 L555 732"/>
+<path class="sym" d="M538 732 L572 732"/>
+<path class="sym" d="M544 738 L566 738"/>
+<path class="sym" d="M550 744 L560 744"/>
+<text x="120" y="751" font-size="18">/CE LOW: autonomous charging enabled</text>
+<path class="wire" d="M615 800 L510 800"/>
+<text x="120" y="806" font-size="19">PSEL_BIAS  →  see bias panel below</text>
+<path class="wire" d="M615 875 L560 875"/>
+<path class="wire" d="M560 875 L560 887"/>
+<path class="sym" d="M543 887 L577 887"/>
+<path class="sym" d="M549 893 L571 893"/>
+<path class="sym" d="M555 899 L565 899"/>
+<path class="wire" d="M1075 280 L1180 280"/>
+<path class="sym" fill="none" d="M1180 280 a12 14 0 0 1 24 0 a12 14 0 0 1 24 0 a12 14 0 0 1 24 0 a12 14 0 0 1 24 0"/>
+<path class="wire" d="M1276 280 L1660 280"/>
+<text x="1170" y="222" font-size="21">L_CHG  1 µH</text>
+<text x="1170" y="249" font-size="17">C435392 · DFE252012F-1R0M=P2</text>
+<text x="1410" y="190" font-size="20">SYS → existing 3.3 V LDO input</text>
+<text x="1410" y="217" font-size="16">Do not connect SYS directly to ESP32.</text>
+<path class="wire" d="M1360 280 L1360 305"/>
+<path class="sym" d="M1344 305 L1376 305"/>
+<path class="sym" d="M1344 314 L1376 314"/>
+<path class="wire" d="M1360 314 L1360 337"/>
+<path class="wire" d="M1360 337 L1360 349"/>
+<path class="sym" d="M1343 349 L1377 349"/>
+<path class="sym" d="M1349 355 L1371 355"/>
+<path class="sym" d="M1355 361 L1365 361"/>
+<text x="1385" y="309" font-size="17">C_SYS1  10 µF</text>
+<text x="1385" y="332" font-size="15">C15850 · 0805</text>
+<path class="wire" d="M1620 280 L1620 305"/>
+<path class="sym" d="M1604 305 L1636 305"/>
+<path class="sym" d="M1604 314 L1636 314"/>
+<path class="wire" d="M1620 314 L1620 337"/>
+<path class="wire" d="M1620 337 L1620 349"/>
+<path class="sym" d="M1603 349 L1637 349"/>
+<path class="sym" d="M1609 355 L1631 355"/>
+<path class="sym" d="M1615 361 L1625 361"/>
+<text x="1645" y="309" font-size="17">C_SYS2  10 µF</text>
+<text x="1645" y="332" font-size="15">C15850 · 25 V</text>
+<circle cx="1360" cy="280" r="4" fill="#15665c"/>
+<circle cx="1620" cy="280" r="4" fill="#15665c"/>
+<path class="wire" d="M1540 280 L1540 500"/>
+<path class="wire" d="M1075 500 L1540 500"/>
+<circle cx="1540" cy="280" r="4" fill="#15665c"/>
+<path class="wire" d="M1120 280 L1120 340"/>
+<circle cx="1120" cy="280" r="4" fill="#15665c"/>
+<path class="sym" d="M1104 340 L1136 340"/>
+<path class="sym" d="M1104 349 L1136 349"/>
+<path class="wire" d="M1120 349 L1120 400"/>
+<path class="wire" d="M1075 400 L1120 400"/>
+<text x="1150" y="380" font-size="18">C_BOOT  47 nF / 50 V</text>
+<text x="1150" y="405" font-size="16">C1622 · 0603 · BTST to SW</text>
+<path class="wire" d="M1075 610 L1690 610"/>
+<text x="1450" y="580" font-size="19">VBAT → battery + and MAX17048</text>
+<path class="wire" d="M1200 610 L1200 635"/>
+<path class="sym" d="M1184 635 L1216 635"/>
+<path class="sym" d="M1184 644 L1216 644"/>
+<path class="wire" d="M1200 644 L1200 667"/>
+<path class="wire" d="M1200 667 L1200 679"/>
+<path class="sym" d="M1183 679 L1217 679"/>
+<path class="sym" d="M1189 685 L1211 685"/>
+<path class="sym" d="M1195 691 L1205 691"/>
+<text x="1225" y="639" font-size="17">C_BAT  10 µF / 25 V</text>
+<text x="1225" y="662" font-size="15">C15850 · 0805</text>
+<circle cx="1200" cy="610" r="4" fill="#15665c"/>
+<path class="wire" d="M1075 690 L1640 690"/>
+<path class="wire" d="M1640 690 L1640 610"/>
+<circle cx="1640" cy="610" r="4" fill="#15665c"/>
+<text x="1390" y="723" font-size="16">Separate Kelvin trace to battery +</text>
+<rect class="sym" x="1660" y="650" width="100" height="90"/>
+<text x="1675" y="679" font-size="18">1-cell</text>
+<text x="1675" y="704" font-size="18">battery</text>
+<path class="wire" d="M1690 610 L1690 650"/>
+<path class="wire" d="M1710 740 L1710 765"/>
+<path class="wire" d="M1710 765 L1710 777"/>
+<path class="sym" d="M1693 777 L1727 777"/>
+<path class="sym" d="M1699 783 L1721 783"/>
+<path class="sym" d="M1705 789 L1715 789"/>
+<path class="wire" d="M1075 780 L1350 780"/>
+<text x="1090" y="755" font-size="19">REGN</text>
+<path class="wire" d="M1190 780 L1190 805"/>
+<path class="sym" d="M1174 805 L1206 805"/>
+<path class="sym" d="M1174 814 L1206 814"/>
+<path class="wire" d="M1190 814 L1190 837"/>
+<path class="wire" d="M1190 837 L1190 849"/>
+<path class="sym" d="M1173 849 L1207 849"/>
+<path class="sym" d="M1179 855 L1201 855"/>
+<path class="sym" d="M1185 861 L1195 861"/>
+<text x="1215" y="809" font-size="17">C_REGN  4.7 µF / 16 V</text>
+<text x="1215" y="832" font-size="15">C19666 · 0603</text>
+<circle cx="1190" cy="780" r="4" fill="#15665c"/>
+<path class="wire" d="M1075 875 L1135 875"/>
+<text x="1148" y="881" font-size="19">TS_BIAS → divider below</text>
+<text x="1390" y="837" font-size="17">SYS follows battery on battery power.</text>
+<text x="1390" y="862" font-size="17">No 3.3 V boost at low battery voltage.</text>
+<path class="sym" d="M50 990 L1750 990"/>
+<text x="50" y="1025" font-size="23">Two-wire battery: TS bias</text>
+<text x="65" y="1060" font-size="19">REGN</text>
+<path class="wire" d="M110 1070 L110 1088"/>
+<rect class="sym" x="103" y="1088" width="14" height="40"/>
+<path class="wire" d="M110 1128 L110 1147"/>
+<text x="130" y="1105" font-size="17">R_TS1  10 kΩ</text>
+<text x="130" y="1128" font-size="15">C25804 · 0603</text>
+<circle cx="110" cy="1147" r="4" fill="#15665c"/>
+<path class="wire" d="M110 1147 L270 1147"/>
+<text x="280" y="1154" font-size="18">TS_BIAS → pin 11</text>
+<path class="wire" d="M110 1147 L110 1165"/>
+<rect class="sym" x="103" y="1165" width="14" height="40"/>
+<path class="wire" d="M110 1205 L110 1224"/>
+<text x="130" y="1182" font-size="17">R_TS2  10 kΩ</text>
+<text x="130" y="1205" font-size="15">C25804 · 0603</text>
+<path class="wire" d="M110 1224 L110 1236"/>
+<path class="sym" d="M93 1236 L127 1236"/>
+<path class="sym" d="M99 1242 L121 1242"/>
+<path class="sym" d="M105 1248 L115 1248"/>
+<text x="55" y="1290" font-size="18" style="fill:#a33b20">No battery-temperature sensing.</text>
+<text x="55" y="1316" font-size="16">A cell-mounted NTC is a possible future option.</text>
+<text x="580" y="1025" font-size="23">Input limit selection</text>
+<text x="610" y="1060" font-size="19">REGN</text>
+<path class="wire" d="M650 1070 L650 1088"/>
+<rect class="sym" x="643" y="1088" width="14" height="40"/>
+<path class="wire" d="M650 1128 L650 1147"/>
+<text x="670" y="1105" font-size="17">R_PSEL  10 kΩ</text>
+<text x="670" y="1128" font-size="15">C25804 · 0603</text>
+<path class="wire" d="M650 1147 L930 1147"/>
+<text x="665" y="1180" font-size="19">PSEL_BIAS → pin 2</text>
+<text x="580" y="1220" font-size="17">HIGH selects 500 mA input limit at reset.</text>
+<text x="580" y="1247" font-size="17">Firmware sets limits to match the USB source</text>
+<text x="580" y="1274" font-size="17">and the battery; fixed HIGH is not USB negotiation.</text>
+<text x="1080" y="1025" font-size="23">Unused pins / integration</text>
+<text x="1080" y="1065" font-size="17">3 PMID_GOOD, 4 STAT, 7 /INT, 8 NC: leave open.</text>
+<text x="1080" y="1097" font-size="17">12 /QON: leave open (internal pull-up); optional test pad.</text>
+<text x="1080" y="1129" font-size="17">Poll charging / USB status over I²C; keep MAX17048.</text>
+<text x="1080" y="1161" font-size="17">Remove old TP4065 + D1/D2/Q2 power-path circuit.</text>
+<text x="1080" y="1193" font-size="17">Keep USB-C CC resistors, USB data and ESD circuit.</text>
+<text x="1080" y="1225" font-size="17">All ground symbols are the same ground plane.</text>
+<path class="sym" d="M50 1350 L1750 1350"/>
+<text x="50" y="1383" font-size="18">Layout: capacitors close to pins; compact SW loop; exposed pad to ground with thermal vias. Connect every listed duplicate power pin.</text>
+<text x="50" y="1413" font-size="17">C_PM2 / C_SYS2: parallel margin for MLCC DC bias; validate effective capacitance. Add a nearby 1 nF PMID HF bypass footprint per TI.</text>
+<text x="50" y="1443" font-size="17">Before production: check battery charge limits, capacitor bias curves, USB current policy and PCB layout. This is not a routed / ERC-checked design.</text>
+<text x="50" y="1480" font-size="16">Source: TI BQ25618/BQ25619 datasheet Rev. F, pin table and application circuit • https://www.ti.com/lit/gpn/BQ25619</text>
+</svg>

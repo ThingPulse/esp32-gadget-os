@@ -1,5 +1,6 @@
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <cassert>
 #include <cstring>
 #include <fstream>
@@ -59,7 +60,9 @@ int main() {
     planes[0].route="ZRH->LHR";
     planes[0].origin_airport_name="Zurich Airport";
     planes[0].destination_airport_name="London Heathrow Airport";
+    s._airports.merge({{"LSZH","ZRH",47.458,8.555}});
     s.publish_result(planes,5,"Test");planes_app_update_ui();capture("nearby");
+    assert(s.airports().size()==1);
     assert(app_ctx.nearby.count==4 && app_ctx.nearby.selected_icao=="a001");
     assert(std::strstr(lv_label_get_text(app_ctx.nearby.look),"northeast"));
     assert(std::strstr(lv_label_get_text(app_ctx.nearby.distance),"Approaching"));

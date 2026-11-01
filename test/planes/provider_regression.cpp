@@ -1,5 +1,6 @@
 #include <string>
 #include <unordered_map>
+#include <vector>
 #define private public
 #include "services/PlanesService.h"
 #undef private
@@ -91,6 +92,9 @@ int main(int argc, char **argv)
     for (int i=0;i<5;++i) { routes[i].icao24="hex"+std::to_string(i); routes[i].callsign="TEST"+std::to_string(i); }
     svc._fetch_priority_icao="hex4";
     svc.enrich_routes(routes,5);
+    assert(!svc._learned_airports.empty());
+    assert(svc._learned_airports[0].icao=="LSZH" && svc._learned_airports[0].code=="ZRH");
+    assert(std::abs(svc._learned_airports[0].latitude-47.458)<0.00001);
     assert(routes[4].route=="ZRH->EGLL" && routes[4].destination_airport_name=="Heathrow Airport");
     assert(routes[0].route=="ZRH->EGLL" && routes[1].route=="ZRH->EGLL");
     assert(routes[2].route.empty() && routes[3].route.empty());

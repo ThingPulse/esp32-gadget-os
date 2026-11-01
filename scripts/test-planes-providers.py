@@ -29,7 +29,7 @@ if "api.adsbdb.com" in url:
     with open(os.environ["PLANES_ROUTE_LOG"], "a") as log:
         log.write(callsign + "\\n")
     body = {"response": {"flightroute": {
-        "origin": {"iata_code": "ZRH", "name": "Zurich Airport"},
+        "origin": {"iata_code": "ZRH", "icao_code": "LSZH", "latitude": 47.458, "longitude": 8.555, "name": "Zurich Airport"},
         "destination": {"iata_code": None, "icao_code": "EGLL", "name": "Heathrow Airport"}}}}
 elif os.getenv("PLANES_TEST_FAIL"):
     body = {"error": "unavailable"}
@@ -49,7 +49,7 @@ print("__COPILOT_HTTP_CODE:" + str(code))
 ''')
     curl.chmod(0o755)
     names = {"ServiceRegistry", "EventBus", "PlanesService", "ConfigStoreService",
-             "FileSystemService", "WifiService"}
+             "FileSystemService", "WifiService", "AirportCache"}
     objects = [p for p in glob.glob(".pio/build/native/src/**/*.o", recursive=True)
                if Path(p).name.removesuffix(".o").removesuffix(".cpp") in names]
     if len(objects) != len(names):
@@ -59,5 +59,10 @@ print("__COPILOT_HTTP_CODE:" + str(code))
                     "test/planes/provider_regression.cpp", *objects,
                     "-o", str(binary)], check=True)
     environment = dict(os.environ, PATH=str(directory) + os.pathsep + os.environ["PATH"],
-                       ASAN_OPTIONS="detect_leaks=0", PLANES_ROUTE_LOG=str(directory / "routes.log"))
+                       ASAN_OPTIONS="detect_leaks=0", GADGET_OS_DATA_DIR=temporary, PLANES_ROUTE_LOG=str(directory / "routes.log"))
     subprocess.run([str(binary), *sys.argv[1:]], env=environment, check=True)
+    cache_binary = directory / "airport-cache-regression"
+    subprocess.run(["c++", "-std=c++14", "-fsanitize=address", "-pthread", "-Iinclude",
+                    "test/planes/airport_cache_regression.cpp", *objects,
+                    "-o", str(cache_binary)], check=True)
+    subprocess.run([str(cache_binary)], env=environment, check=True)

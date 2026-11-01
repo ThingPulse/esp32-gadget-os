@@ -8,6 +8,7 @@
 #include "ui/StatusIcons.h"
 #include "ui/UiSessionState.h"
 #include "ui/UiTrace.h"
+#include "ui/WeatherLoadingIndicator.h"
 #include "ui/WeatherIconSet.h"
 #include "ui/ClassicWeatherView.h"
 #include "services/TimeService.h"
@@ -384,14 +385,9 @@ static void weather_app_timer_cb(lv_timer_t *timer)
   weather_apply_selected_location();
   const bool fetching = WeatherService::instance().is_fetching();
   const unsigned long revision = WeatherService::instance().data_revision();
+  weather_loading_set(app_ctx.loading_line, fetching);
   if (fetching != app_ctx.was_fetching) {
-    if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
-      if (fetching)
-        lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-      else
-        lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-    }
-
+    UI_TRACE("Weather", "loading indicator fetching=%d", fetching);
     // Refresh the data widgets once when the background request completes.
     if (!fetching) {
       weather_app_update_ui();
@@ -418,15 +414,10 @@ static void weather_app_start_refresh(const char *source)
 
   weather.refresh_now();
   app_ctx.was_fetching = weather.is_fetching();
-  if (app_ctx.loading_line && lv_obj_is_valid(app_ctx.loading_line)) {
-    if (app_ctx.was_fetching)
-      lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-    else
-      lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-  }
+  weather_loading_set(app_ctx.loading_line, app_ctx.was_fetching);
 
-  // Native requests complete synchronously, so there is no fetching state for
-  // the timer to observe. Restore either the new or retained weather now.
+  // A request may fail to start (for example while offline). Restore the
+  // retained weather immediately in that case.
   if (!app_ctx.was_fetching) {
     weather_app_update_ui();
     app_ctx.weather_revision = weather.data_revision();
@@ -495,8 +486,7 @@ static void weather_apply_selected_location()
   lv_label_set_text(app_ctx.location_name, app_ctx.locations[index].name.c_str());
   weather.reload_from_config();
   app_ctx.was_fetching = weather.is_fetching();
-  if (app_ctx.was_fetching) lv_obj_clear_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
-  else lv_obj_add_flag(app_ctx.loading_line, LV_OBJ_FLAG_HIDDEN);
+  weather_loading_set(app_ctx.loading_line, app_ctx.was_fetching);
   weather_app_update_ui();
   app_ctx.weather_revision = weather.data_revision();
   UI_TRACE("Weather", "carousel location=%d name=%s", index, app_ctx.locations[index].name.c_str());
@@ -690,17 +680,6 @@ void weather_app_launch(void)
   lv_obj_set_style_radius(loading_line, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_pad_all(loading_line, 0, 0);
   lv_obj_add_flag(loading_line, LV_OBJ_FLAG_HIDDEN);
-
-  lv_anim_t loading_anim;
-  lv_anim_init(&loading_anim);
-  lv_anim_set_var(&loading_anim, loading_line);
-  lv_anim_set_exec_cb(&loading_anim, [](void *obj, int32_t x) {
-    lv_obj_set_x(static_cast<lv_obj_t *>(obj), x);
-  });
-  lv_anim_set_values(&loading_anim, -76, 320);
-  lv_anim_set_duration(&loading_anim, 900);
-  lv_anim_set_repeat_count(&loading_anim, LV_ANIM_REPEAT_INFINITE);
-  lv_anim_start(&loading_anim);
 
   std::vector<WeatherLocation> locations;
   int active_location = 0;
@@ -1180,6 +1159,7 @@ void weather_app_launch(void)
 
   WeatherService::instance().resume();
   app_ctx.was_fetching = WeatherService::instance().is_fetching();
+  weather_loading_set(app_ctx.loading_line, app_ctx.was_fetching);
   app_ctx.weather_revision = WeatherService::instance().data_revision();
   weather_app_update_ui();
   ui_load_screen(scr, false);
