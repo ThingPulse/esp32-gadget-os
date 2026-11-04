@@ -1,0 +1,113 @@
+{
+  "phase_medians": {
+    "launcher-idle": {
+      "internal": 70156,
+      "largest": 49140,
+      "exec": 99148,
+      "exec_largest": 49140,
+      "psram": 4185972,
+      "psram_largest": 4128756,
+      "lvgl_free": 0,
+      "lvgl_largest": 0,
+      "sampled_cycle_min": 70156
+    },
+    "launcher-released": {
+      "internal": 91200,
+      "largest": 49140,
+      "exec": 120116,
+      "exec_largest": 49140,
+      "psram": 4185972,
+      "psram_largest": 4128756,
+      "lvgl_free": 0,
+      "lvgl_largest": 0,
+      "sampled_cycle_min": 70156
+    },
+    "relocated-with-file-buffer": {
+      "internal": 89176,
+      "largest": 49140,
+      "exec": 117512,
+      "exec_largest": 49140,
+      "psram": 4185972,
+      "psram_largest": 4128756,
+      "lvgl_free": 0,
+      "lvgl_largest": 0,
+      "sampled_cycle_min": 70156
+    },
+    "executable-loaded": {
+      "internal": 90972,
+      "largest": 49140,
+      "exec": 119308,
+      "exec_largest": 49140,
+      "psram": 4185972,
+      "psram_largest": 4128756,
+      "lvgl_free": 0,
+      "lvgl_largest": 0,
+      "sampled_cycle_min": 70156
+    },
+    "app-ui-created": {
+      "internal": 88792,
+      "largest": 49140,
+      "exec": 117252,
+      "exec_largest": 49140,
+      "psram": 4185972,
+      "psram_largest": 4128756,
+      "lvgl_free": 0,
+      "lvgl_largest": 0,
+      "sampled_cycle_min": 70156
+    },
+    "activity": {
+      "internal": 89508,
+      "largest": 49140,
+      "exec": 117968,
+      "exec_largest": 49140,
+      "psram": 4185972,
+      "psram_largest": 4128756,
+      "lvgl_free": 0,
+      "lvgl_largest": 0,
+      "sampled_cycle_min": 70156
+    },
+    "shutdown-unloaded": {
+      "internal": 91752,
+      "largest": 49140,
+      "exec": 120652,
+      "exec_largest": 49140,
+      "psram": 4185972,
+      "psram_largest": 4128756,
+      "lvgl_free": 0,
+      "lvgl_largest": 0,
+      "sampled_cycle_min": 70156
+    },
+    "launcher-restored": {
+      "internal": 69444,
+      "largest": 49140,
+      "exec": 98456,
+      "exec_largest": 49140,
+      "psram": 4185972,
+      "psram_largest": 4128756,
+      "lvgl_free": 0,
+      "lvgl_largest": 0,
+      "sampled_cycle_min": 69444
+    }
+  },
+  "timings_us": {
+    "load_us": {
+      "median": 113464,
+      "p95": 114040,
+      "min": 112921,
+      "max": 114122
+    },
+    "unload_us": {
+      "median": 1782,
+      "p95": 1788,
+      "min": 1744,
+      "max": 1956
+    },
+    "unload_restore_us": {
+      "median": 149675,
+      "p95": 150718,
+      "min": 149289,
+      "max": 151013
+    }
+  },
+  "unload_recovered_internal_median": 2260
+}

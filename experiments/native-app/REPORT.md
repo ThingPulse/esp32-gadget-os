@@ -1,12 +1,14 @@
 # Native app loader feasibility report
 
-Date: 2026-11-04. Recommendation: **Inconclusive pending hardware testing**.
+Date: 2026-11-04. Recommendation: **Viable on both chips**, for the tested minimal lifecycle.
 
-The minimal loader has run successfully on a physical Color Kit Pro (ESP32-S3,
-2 MiB PSRAM), including 100 consecutive load/reset/close cycles. Both chip
-builds pass, but no classic ESP32 device was available. Thus the evidence does
-**not** yet establish viability on both chips or an S3-only limitation. Early
-physical taps were also inconsistent and remain an unresolved usability issue.
+Physical Color Kit Grande (classic ESP32-D0WD-V3, 8 MiB flash) and Color Kit
+Pro (ESP32-S3, 2 MiB PSRAM) each completed 100 consecutive load/reset/close
+cycles. Both chip builds pass and the user confirmed Calculator after closure
+on both. This establishes feasibility for the tiny synchronous SDK/demo, not a
+production community-app platform or adequate headroom for much larger apps.
+Initial physical taps on Pro were inconsistent and remain a usability issue;
+the Grande manual checks passed without that reported problem.
 
 ## Implemented
 
@@ -74,14 +76,14 @@ Commands: `python3 scripts/test-native-app.py` and
 
 ## Hardware results
 
-Final S3 run: **100/100 cycles**, 100 Reset and 100 Close acknowledgements,
+Final runs on **each board: 100/100 cycles**, 100 Reset and 100 Close acknowledgements,
 7–8 app callbacks per cycle, no detected crash/reset during the cycles. The
-initial USB connection produced `USB_UART_CHIP_RESET` before cycle 1; the
+Pro’s initial USB connection produced `USB_UART_CHIP_RESET` before cycle 1; the
 analyser excludes this startup event, not resets after testing starts.
 
-The user confirmed Calculator works after closure. Physical Reset and Close
+The user confirmed Calculator works after closure on both boards. Physical Reset and Close
 callbacks were captured; Reset also leaves a visible acknowledgement. However,
-the user reported that initial short taps missed and holding longer helped,
+the user reported on Pro that initial short taps missed and holding longer helped,
 after which response improved. This has **not** been explained or fixed. The
 user also found an OTA notice overlaying the first counter version: the final
 firmware suspends existing update overlays and defers new ones across the whole
@@ -93,17 +95,18 @@ package, with the core firmware unchanged. No app logic is embedded as bytes.
 | Criterion | ESP32 | ESP32-S3 |
 |---|---|---|
 | Build enabled and disabled | Pass | Pass |
-| Filesystem ELF, timer, Reset and Close execute | Not tested | Pass |
-| 100 cycles without reboot or continuing memory decline | Not tested | Pass within stated threshold |
-| Invalid packages recover to launcher | Not tested | Six variants, two attempts each, pass |
-| Existing Calculator after closure | Not tested | User confirmed |
-| Consistently responsive physical taps | Not tested | Initial missed taps unresolved |
+| Filesystem ELF, timer, Reset and Close execute | Pass | Pass |
+| 100 cycles without reboot or continuing memory decline | Pass within stated threshold | Pass within stated threshold |
+| Invalid packages recover to launcher | Six variants, two attempts each, pass | Six variants, two attempts each, pass |
+| Existing Calculator after closure | User confirmed | User confirmed |
+| Consistently responsive physical taps | Manual checks passed | Initial missed taps unresolved |
 
-The six device rejection cases were wrong chip, unsupported API major,
+On each board, the six device rejection cases were wrong chip, unsupported API major,
 malformed manifest, missing manifest, missing ELF and truncated ELF. Each was
 opened and closed twice in one boot, reporting the expected error and returning
 to the launcher through the serial close command without a reset between attempts. A deliberate reflash/reset
-separated different fixtures. [Rejection trace](results/pro-invalid.log).
+separated different fixtures. Rejection traces: [Pro](results/pro-invalid.log),
+[Grande](results/grande-invalid.log).
 
 ### S3 memory and timing
 
@@ -131,8 +134,8 @@ The 840 B recovery includes loader/host resource effects; it is not an isolated
 measurement of the executable allocator's overhead. Freeing the ELF input buffer
 recovered 1,796 B. Launcher deletion recovered 16,444 B (about 16 KiB) of **LVGL pool
 capacity**, not system heap: the Pro's configured 64 KiB pool remains reserved.
-Classic ESP32 uses the libc LVGL allocator, so its runtime behavior must be
-measured separately. Heap capability totals overlap and must not be summed.
+Classic ESP32 uses the libc LVGL allocator; its separate measurements appear
+below. Heap capability totals overlap and must not be summed.
 
 Comparing the first and last ten post-warm-up launcher-return samples: internal
 free and largest block medians changed by **0 B**; executable-capable medians
@@ -155,21 +158,78 @@ settings and full flash images are not committed. The full original 16 MiB
 flash backup was restored after testing, including firmware, filesystem, NVS
 and OTA metadata; esptool verified the written hash and rebooted the Pro.
 
+### Grande measurements and comparison
+
+Grande also passed **100/100 cycles**, including all 100 Reset and Close
+acknowledgements. Its UART discarded an immediate command during startup in the
+first manual attempt; the runner now drains startup output for eight seconds
+before sending the command. The final run uses that fix. The serial monitor
+remained connected throughout the manual counter/Calculator check.
+
+Medians over cycles 6–100:
+
+| Measurement | Grande / ESP32 | Pro / ESP32-S3 |
+|---|---:|---:|
+| Load through UI construction | 113.46 ms | 27.05 ms |
+| Unload alone | 1.78 ms | 1.51 ms |
+| Unload plus launcher recreation | 149.68 ms | 81.64 ms |
+| Launcher-idle internal free | 70,156 B | 142,352 B |
+| Largest executable-capable block at launcher | 49,140 B | 98,292 B |
+| Internal free after launcher release | 91,200 B | 142,352 B |
+| Internal free after executable loading | 90,972 B | 141,512 B |
+| Internal free during activity | 89,508 B | 141,668 B |
+| PSRAM free | 4,185,972 B | 2,069,904 B |
+
+**Timing includes serial logging.** Grande uses 115200-baud UART and Pro uses
+USB Serial/JTAG. Their logging overhead differs, so this is not evidence that
+the actual loader CPU work is four times faster on S3. Each board also retained
+its own settings and background services; this is not a controlled hardware
+benchmark. Grande load p95 was
+114.04 ms, unload p95 1.79 ms and unload/recreate p95 150.72 ms.
+
+Grande’s launcher deletion recovered a paired median **21,020 B of internal
+heap**, unlike Pro’s fixed-pool capacity recovery. Loading the executable after
+freeing the file buffer consumed paired medians of 228 B internal 8-bit memory
+and 808 B executable-capable memory; these capabilities overlap. Code and data
+were internal, with 224 B reported usable data allocation. The input buffer
+release recovered 1,796 B. These phase deltas include host/allocator effects.
+The boot-wide minimum was 43,504 B; the median final per-cycle sampled minimum
+was 69,444 B. Zero LVGL monitor values reflect the libc allocator, not zero usage.
+
+First versus last ten post-warm-up return samples: internal free improved 224 B,
+executable-capable free improved 196 B, both largest blocks were unchanged,
+and PSRAM free/largest were unchanged. No continuing decline exceeded the
+1,024 B threshold. The smaller executable block is a real capacity constraint;
+a 564-byte code example does not establish feasibility for 50 KiB or larger code.
+
+The extra free memory while the app runs comes from **launcher teardown**. The
+same lifecycle strategy could be used by built-ins. Native loading itself adds
+RAM-resident code/data and file-buffer overhead; it is not inherently a RAM saving.
+
+Grande evidence: [cycle trace](results/grande-cycles.log),
+[analysis](results/grande-analysis.txt),
+[phase/timing measurements](results/grande-measurements.json),
+[manual interaction trace](results/grande-manual.log).
+The original 8 MiB flash was backed up in checksum-verified chunks, then verified
+as one complete image. This was necessary after high-speed serial corruption;
+a cable change and slower retries were used. The test image preserved all
+20 original filesystem files. After testing, the entire original 8 MiB flash
+was restored, including firmware, filesystem, NVS and OTA metadata. Esptool
+verified the written hash and rebooted the Grande.
+
 ## Remaining risks and next decision
 
-Classic ESP32's scarce word-access executable RAM remains the main untested
-feasibility risk. S3 also uses internal executable RAM here; upstream PSRAM
-execution/cache synchronization is not enabled or evaluated. Neither a desktop
-ABI test nor a successful cross-build proves classic ESP32 instruction execution.
-
+**Basic feasibility is demonstrated on both chips.** Both use internal executable
+RAM here; optional S3 PSRAM execution/cache synchronization remains untested.
 The native ABI is deliberately narrow and compiler-specific. No sandbox,
 constructor processing, arbitrary tasks, crash containment or signatures exist.
 Malformed-data checks cannot make untrusted machine code safe. Small bounded
 parser allocations and LVGL allocation behavior remain subject to system-wide
 memory exhaustion; executable/file-buffer allocation failures are handled explicitly.
 
-Next: repeat the hardware tests on Grande and investigate the initial missed
-physical taps. Overall recommendation remains **inconclusive pending hardware
-testing**, with basic S3 feasibility demonstrated. Asynchronous HTTP is deferred;
-callback cancellation for pending network requests, core-OTA package preservation
-and ABI compatibility across firmware versions remain untested.
+Next: investigate Pro’s initial missed taps, test larger realistic apps and
+measure timing with logging disabled before making performance claims.
+Asynchronous HTTP is deferred; callback cancellation for pending network
+requests, core-OTA package preservation and ABI compatibility across firmware
+versions remain untested. The recommendation is **viable on both chips** for
+this measured, single-foreground-app experiment, with these limits retained.

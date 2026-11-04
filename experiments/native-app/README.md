@@ -166,9 +166,11 @@ callback is active cannot unload that stack frame. Leave Wi-Fi/network services
 in a consistent state for comparisons. Test with Wi-Fi both enabled and disabled
 if background network allocations obscure the trend. Do not pull the sleep switch.
 
-The runner captures logs without deliberately asserting reset lines, checks
-100 complete cycles, callback activity and 100 reset/close app acknowledgements,
-detects common reset/crash markers,
+The runner drains startup output for eight seconds after opening the serial
+port (`--boot-wait` overrides this), so a classic ESP32 UART reset does not
+discard the test command before `Serial.begin()`. It captures logs without
+deliberately asserting reset lines, checks 100 complete cycles, callback activity
+and 100 reset/close app acknowledgements, detects common reset/crash markers,
 and compares free/largest block medians and regression slopes after five warm-up
 cycles. Default tolerance is 1024 bytes, adjustable with `--tolerance`.
 On the tested macOS/S3 connection, an initial USB reset was observed despite

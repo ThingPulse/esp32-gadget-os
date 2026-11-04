@@ -5,14 +5,20 @@ p=argparse.ArgumentParser()
 p.add_argument('--port', help='Device must already be booted at its launcher')
 p.add_argument('--log', type=pathlib.Path, required=True)
 p.add_argument('--analyse', action='store_true')
+p.add_argument('--boot-wait',type=float,default=8,help='Seconds to drain startup output after opening the port (0–60)')
 p.add_argument('--tolerance', type=int, default=1024, help='Allowed drop in median free bytes after warm-up')
 a=p.parse_args()
+if not 0<=a.boot_wait<=60: p.error('--boot-wait must be between 0 and 60 seconds')
 if not a.analyse:
     if not a.port: p.error('--port is required unless --analyse')
     import serial
     # Opening the serial port must not intentionally reset the device.
     connection=serial.Serial(port=None,baudrate=115200,timeout=1)
     connection.dtr=False; connection.rts=False; connection.port=a.port; connection.open()
+    # Opening a UART can reset the board; Serial.begin() can discard commands
+    # sent before setup reaches it. Drain startup output before issuing the test.
+    ready=time.monotonic()+a.boot_wait
+    while time.monotonic()<ready: connection.readline()
     connection.reset_input_buffer()
     connection.write(b'\nnative test 100\n'); connection.flush()
     deadline=time.monotonic()+360
