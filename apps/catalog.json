@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "apps": [
+    {
+      "id": "native-demo",
+      "name": "Native Counter",
+      "version": "0.1.0",
+      "chip": "esp32",
+      "api_major": 1,
+      "api_minor": 0,
+      "url": "https://thingpulse.github.io/esp32-gadget-os/apps/packages/native-demo/0.1.0/esp32.gapp",
+      "icon": "https://thingpulse.github.io/esp32-gadget-os/apps/icons/native-demo/0.1.0/esp32.png",
+      "bytes": 5224,
+      "sha256": "ae5e05ed62dd28f343bb8b69be8ecd6cf17dc8967f2d4258214c03003e81ef8d"
+    },
+    {
+      "id": "native-demo",
+      "name": "Native Counter",
+      "version": "0.1.0",
+      "chip": "esp32s3",
+      "api_major": 1,
+      "api_minor": 0,
+      "url": "https://thingpulse.github.io/esp32-gadget-os/apps/packages/native-demo/0.1.0/esp32s3.gapp",
+      "icon": "https://thingpulse.github.io/esp32-gadget-os/apps/icons/native-demo/0.1.0/esp32s3.png",
+      "bytes": 5228,
+      "sha256": "3daa7c9195bda2ff2992e9820431baae569fa7e2e31b9ce7b6b9d7a4b2eb968d"
+    },
+    {
+      "id": "native-iss",
+      "name": "ISS Position",
+      "version": "0.2.0",
+      "chip": "esp32",
+      "api_major": 1,
+      "api_minor": 1,
+      "url": "https://thingpulse.github.io/esp32-gadget-os/apps/packages/native-iss/0.2.0/esp32.gapp",
+      "icon": "https://thingpulse.github.io/esp32-gadget-os/apps/icons/native-iss/0.2.0/esp32.png",
+      "bytes": 6984,
+      "sha256": "b35e52c70b0797d2f08fe4250d3b91f75223156c59771e742867c2d98babb78d"
+    },
+    {
+      "id": "native-iss",
+      "name": "ISS Position",
+      "version": "0.2.0",
+      "chip": "esp32s3",
+      "api_major": 1,
+      "api_minor": 1,
+      "url": "https://thingpulse.github.io/esp32-gadget-os/apps/packages/native-iss/0.2.0/esp32s3.gapp",
+      "icon": "https://thingpulse.github.io/esp32-gadget-os/apps/icons/native-iss/0.2.0/esp32s3.png",
+      "bytes": 6996,
+      "sha256": "a2002f609f55bd37cdddcc72f3d2733b5aa27e25d9510b45d5c5160f6a2bc06a"
+    }
+  ]
+}
