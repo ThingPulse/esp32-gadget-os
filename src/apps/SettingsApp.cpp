@@ -1,3 +1,4 @@
+#include "services/AppUsage.h"
 #include "ui/I18n.h"
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"
@@ -350,6 +351,12 @@ static void open_system_screen(lv_event_t *e)
   std::snprintf(value, sizeof(value), i18n::tr("%lu seconds"), (unsigned long)(lv_tick_get() / 1000U));
   refresh_context->uptime = add_system_info_row(content, i18n::tr("Uptime"), value);
 
+  auto *usage=lv_checkbox_create(content);
+  lv_checkbox_set_text(usage,i18n::tr("Share app usage (optional)"));
+  if(AppUsage::enabled())lv_obj_add_state(usage,LV_STATE_CHECKED);
+  lv_obj_add_event_cb(usage,[](lv_event_t *e){AppUsage::set_enabled(lv_obj_has_state((lv_obj_t*)lv_event_get_target(e),LV_STATE_CHECKED));},LV_EVENT_VALUE_CHANGED,nullptr);
+  auto *usage_help=lv_label_create(content);lv_obj_set_width(usage_help,lv_pct(100));
+  lv_label_set_text(usage_help,i18n::tr("Shares app IDs, versions, launches and time. No app content or custom app IDs. Changes save immediately."));
   refresh_context->timer = lv_timer_create(refresh_system_info, 1000, refresh_context);
   lv_obj_add_event_cb(scr, delete_system_info_timer, LV_EVENT_DELETE, refresh_context);
 

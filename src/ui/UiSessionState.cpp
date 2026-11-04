@@ -1,6 +1,7 @@
 #include "ui/UiSessionState.h"
 
 #include "ui/UiTrace.h"
+#include "services/AppUsage.h"
 
 namespace UiSessionState {
 namespace {
@@ -32,6 +33,7 @@ void set_route(const char *route)
 
   if (state.current == route) return;
   UI_TRACE("Route", "set_route from=%s to=%s", state.current.c_str(), route);
+  AppUsage::route(route);
   state.current = route;
 }
 

@@ -4,11 +4,7 @@
 #include <cstring>
 #include <algorithm>
 #include <vector>
-#if defined(ARDUINO)
-#include <mbedtls/sha256.h>
-#else
-#include <CommonCrypto/CommonDigest.h>
-#endif
+#include "experimental/NativeSignature.h"
 namespace native_app {
 static bool fail(std::string &e, const char *s) { e = s; return false; }
 bool valid_app_id(const std::string &id)
@@ -38,24 +34,30 @@ bool parse_manifest(const std::string &json, const char *chip, Manifest &out, st
 }
 static uint16_t u16(const uint8_t *p) { return p[0] | uint16_t(p[1]) << 8; }
 static uint32_t u32(const uint8_t *p) { return u16(p) | uint32_t(u16(p+2)) << 16; }
-bool validate_package(const uint8_t *b,size_t n,const char *chip,Package &out,std::string &e)
+bool validate_package(const uint8_t *b,size_t n,const char *chip,Package &out,std::string &e,const char *trusted_pem)
 {
-    if(!b || n<package_header_bytes || n>max_package_bytes || memcmp(b,"GOSAPP1\0",8)) return fail(e,"Invalid package header");
+    out=Package{};
+    if(!b || n<package_header_bytes || n>max_package_bytes) return fail(e,"Invalid package header");
+    const bool signed_package=!memcmp(b,"GOSAPP2\0",8);
+    if(!signed_package && memcmp(b,"GOSAPP1\0",8))return fail(e,"Invalid package header");
+    const size_t header=signed_package?signed_header_bytes:package_header_bytes;
+    if(n<header)return fail(e,"Truncated signature header");
     uint32_t manifest=u32(b+8),icon=u32(b+12),elf=u32(b+16);
     if(!manifest || manifest>2048 || manifest%4 || icon!=package_icon_bytes || !elf || elf>max_elf_bytes ||
-       n!=package_header_bytes+manifest+icon+elf) return fail(e,"Invalid package lengths");
+       n!=header+manifest+icon+elf) return fail(e,"Invalid package lengths");
     uint8_t digest[32];
-#if defined(ARDUINO)
-    mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha,0);
-    mbedtls_sha256_update(&sha,b,20); mbedtls_sha256_update(&sha,b+52,n-52);
-    mbedtls_sha256_finish(&sha,digest); mbedtls_sha256_free(&sha);
-#else
-    CC_SHA256_CTX sha; CC_SHA256_Init(&sha); CC_SHA256_Update(&sha,b,20);
-    CC_SHA256_Update(&sha,b+52,(CC_LONG)(n-52)); CC_SHA256_Final(digest,&sha);
-#endif
-    if(memcmp(digest,b+20,32)) return fail(e,"Package checksum mismatch");
-    if(!parse_manifest(std::string((const char*)b+52,manifest),chip,out.manifest,e)) return false;
-    out.icon_offset=52+manifest; out.elf_offset=out.icon_offset+icon; out.elf_size=elf;
+    if(!sha256_parts(b,20,b+52,signed_package?8:0,b+header,n-header,digest) || memcmp(digest,b+20,32))
+        return fail(e,"Package checksum mismatch");
+    if(signed_package){
+        if(!trusted_pem || !trusted_pem[0])return fail(e,"No trusted app signing key configured");
+        uint8_t key_digest[32];
+        if(!sha256_parts((const uint8_t*)trusted_pem,strlen(trusted_pem),nullptr,0,nullptr,0,key_digest) ||
+           memcmp(key_digest,b+52,8))return fail(e,"Unknown app signing key");
+        if(!verify_signature(trusted_pem,digest,b+60))return fail(e,"App signature verification failed");
+        out.trusted=true;
+    }
+    if(!parse_manifest(std::string((const char*)b+header,manifest),chip,out.manifest,e)) return false;
+    out.icon_offset=header+manifest; out.elf_offset=out.icon_offset+icon; out.elf_size=elf;
     return validate_elf(b+out.elf_offset,elf,e);
 }
 struct Section { uint32_t name,type,flags,addr,off,size,link,info,align,entsize; const char *label; bool loaded; };

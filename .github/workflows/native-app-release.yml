@@ -1,0 +1,133 @@
+name: Publish signed native apps
+
+on:
+  push:
+    tags: ['apps-v*']
+  workflow_dispatch:
+
+# A dispatch is a build/validation dry run. Only an apps-v* tag publishes.
+# Configure app-signing as a protected environment before adding its secret.
+permissions:
+  contents: read
+concurrency:
+  group: native-app-catalog
+  cancel-in-progress: false
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    environment: app-signing
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check release provenance
+        if: startsWith(github.ref, 'refs/tags/apps-v')
+        run: |
+          git merge-base --is-ancestor HEAD origin/master
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+          python -m pip install -r requirements-build.txt
+          pio pkg install -e esp32-color-kit-native-app
+      - name: Build signed packages
+        env:
+          APP_SIGNING_PRIVATE_KEY: ${{ secrets.APP_SIGNING_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/app-signing.pem"
+          trap 'rm -f "$key"' EXIT
+          umask 077
+          printf '%s\n' "$APP_SIGNING_PRIVATE_KEY" > "$key"
+          unset APP_SIGNING_PRIVATE_KEY
+          python scripts/build-native-apps.py --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin" --signing-key "$key" --output .pio/native-app-packages
+      - name: Validate signatures and package parser
+        run: |
+          python scripts/test-native-app.py
+          python scripts/test-native-install.py
+          python scripts/test-native-signing.py
+          node scripts/test-native-store-page.mjs
+      - name: Load previous immutable catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/app-site"
+          if git ls-remote --exit-code --heads origin app-catalog; then
+            git fetch origin app-catalog:refs/remotes/origin/app-catalog
+            git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/app-site"
+          fi
+      - name: Generate catalog and release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build-native-catalog.py --packages .pio/native-app-packages --site "$RUNNER_TEMP/app-site"
+          mkdir -p .pio/app-release-assets
+          python - <<'PY'
+          import json,os,pathlib,shutil
+          site=pathlib.Path(os.environ['RUNNER_TEMP'])/'app-site'
+          for app in json.loads((site/'apps/catalog.json').read_text())['apps']:
+              path=site/'apps/packages'/app['id']/app['version']/(app['chip']+'.gapp')
+              shutil.copyfile(path,pathlib.Path('.pio/app-release-assets')/(app['id']+'-'+app['version']+'-'+app['chip']+'.gapp'))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-apps
+          path: .pio/app-release-assets/*.gapp
+      # One dedicated release keeps frequent app updates from crowding the
+      # ten-release window used by older OS prerelease-update clients.
+      - name: Publish immutable versioned release assets
+        if: startsWith(github.ref, 'refs/tags/apps-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: native-apps
+          target_commitish: master
+          name: 'Native apps'
+          make_latest: false
+          fail_on_unmatched_files: true
+          body: 'Independently installable Gadget OS apps. Requires the experimental native-app host. These files are also served by the static app catalog; no device-management deployment is required.'
+          files: .pio/app-release-assets/*.gapp
+      - name: Save immutable catalog history
+        if: startsWith(github.ref, 'refs/tags/apps-v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          if git show-ref --verify --quiet refs/remotes/origin/app-catalog; then
+            git worktree add "$RUNNER_TEMP/app-catalog-commit" origin/app-catalog
+          else
+            git worktree add --detach "$RUNNER_TEMP/app-catalog-commit"
+            git -C "$RUNNER_TEMP/app-catalog-commit" checkout --orphan app-catalog
+            git -C "$RUNNER_TEMP/app-catalog-commit" rm -rf .
+          fi
+          cp -R "$RUNNER_TEMP/app-site/." "$RUNNER_TEMP/app-catalog-commit/"
+          git -C "$RUNNER_TEMP/app-catalog-commit" add .
+          if ! git -C "$RUNNER_TEMP/app-catalog-commit" diff --cached --quiet; then
+            git -C "$RUNNER_TEMP/app-catalog-commit" commit -m "Catalog for $GITHUB_REF_NAME"
+          fi
+          git -C "$RUNNER_TEMP/app-catalog-commit" push origin HEAD:app-catalog
+      - uses: actions/upload-pages-artifact@v3
+        if: startsWith(github.ref, 'refs/tags/apps-v')
+        with:
+          path: ${{ runner.temp }}/app-site
+
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/apps-v')
+    needs: packages
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.publish.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: publish

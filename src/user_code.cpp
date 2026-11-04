@@ -43,6 +43,7 @@ class LGFX {
 #endif
 #include <lvgl.h>
 #include "AppRegistry.h"
+#include "services/AppUsage.h"
 #include "apps/DiceGameApp.h"
 #include "EventBus.h"
 #include "ServiceRegistry.h"
@@ -140,6 +141,8 @@ static void pro_power_poll()
   gpio_deep_sleep_hold_en();
   esp_wifi_stop();
   BLEDevice::deinit(false);
+  AppUsage::stop();
+  AppUsage::flush();
   esp_deep_sleep_start();
 }
 #else

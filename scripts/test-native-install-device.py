@@ -3,16 +3,21 @@
 The private pairing URL is read from a file, never printed. Optional command-file
 is an append-only queue consumed by the serial monitor (one command per second).
 """
+import sys
 import argparse,hashlib,json,pathlib,socket,struct,time,urllib.request,urllib.parse,urllib.error
-p=argparse.ArgumentParser();p.add_argument('--pairing-file',type=pathlib.Path,required=True);p.add_argument('--package',type=pathlib.Path,required=True);p.add_argument('--command-file',type=pathlib.Path);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--pairing-file',type=pathlib.Path,required=True);p.add_argument('--package',type=pathlib.Path,required=True);p.add_argument('--command-file',type=pathlib.Path);p.add_argument('--signing-key',type=pathlib.Path);a=p.parse_args()
+ROOT=pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/'experiments/native-app'))
+from package_tools import sign_package
 u=urllib.parse.urlsplit(a.pairing_file.read_text().strip());base=u.scheme+'://'+u.netloc
 assert u.scheme=='http' and u.fragment
-raw=a.package.read_bytes();ml,il,el=struct.unpack_from('<III',raw,8);meta=json.loads(raw[52:52+ml]);icon=raw[52+ml:52+ml+il];elf=raw[-el:]
+raw=a.package.read_bytes();ml,il,el=struct.unpack_from('<III',raw,8);offset=124 if raw[:8]==b'GOSAPP2\0' else 52;meta=json.loads(raw[offset:offset+ml]);icon=raw[offset+ml:offset+ml+il];elf=raw[-el:]
 probe='installer-probe'
 def package(version='0.1.0',**changes):
  m=dict(meta,id=probe,name='Installer Probe',version=version);m.update(changes)
  b=json.dumps(m).encode();b+=b' '*(-len(b)%4);payload=b+icon+elf
- h=b'GOSAPP1\0'+struct.pack('<III',len(b),len(icon),len(elf));return h+hashlib.sha256(h+payload).digest()+payload
+ h=b'GOSAPP1\0'+struct.pack('<III',len(b),len(icon),len(elf));result=h+hashlib.sha256(h+payload).digest()+payload
+ return sign_package(result,a.signing_key,ROOT/'experiments/native-app/signing-public.pem') if a.signing_key else result
 
 def request(route='/api/apps',method='GET',body=None,status=200,headers=None):
  h={'X-App-Key':u.fragment,'Content-Type':'application/octet-stream'};h.update(headers or {})
@@ -31,6 +36,7 @@ def wait_running(value):
   if s and s['running']==value:return
   time.sleep(.25)
  raise AssertionError('App running state did not change')
+if not request()['developerMode'] and not a.signing_key:raise SystemExit('Provide --signing-key, or explicitly enable Developer mode on the device.')
 assert state() is None,'Refusing to replace an existing installer-probe app'
 request(status=403,headers={'X-App-Key':'wrong'})
 request(status=403,headers={'Origin':'http://untrusted.invalid'})

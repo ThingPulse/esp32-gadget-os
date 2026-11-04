@@ -1,6 +1,7 @@
 #include "services/DeviceManagementService.h"
 #include "services/DeviceCheckInPolicy.h"
 #include "ui/UiTrace.h"
+#include "services/AppUsage.h"
 
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
 #include "DeviceManagementBuildConfig.h"
@@ -46,6 +47,7 @@ bool DeviceManagementService::begin()
 void DeviceManagementService::loop()
 {
 #if defined(ARDUINO) && defined(ESP_PLATFORM)
+    AppUsage::poll();
     if (!_enabled) return;
     const uint32_t now = millis();
     if (_running) {
@@ -84,6 +86,8 @@ void DeviceManagementService::loop()
     body["channel"] = UpdateService::instance().channel() == UpdateService::Channel::Prerelease ? "prerelease" : "stable";
     _payload.clear();
     serializeJson(body, _payload);
+    _usage_payload.clear();
+    if(AppUsage::enabled()){AppUsage::snapshot(body["usage"].to<JsonObject>());serializeJson(body,_usage_payload);_usage_generation=AppUsage::report_token();}
     _finished.store(false, std::memory_order_relaxed);
     _running = true;
     if (xTaskCreate(check_in_task, "device_checkin", 8192, this, 1, nullptr) != pdPASS) {
@@ -139,6 +143,19 @@ void DeviceManagementService::check_in_task(void *context)
             String retry = http.header("Retry-After");
             retry.trim();
             server_delay = DeviceCheckInPolicy::retry_after_ms(retry.c_str());
+            http.end();
+        }
+        // Optional reports have an independent endpoint. A missing/older backend
+        // must never turn a successful OS-version check-in into a failure.
+        if(status==200 && !self->_usage_payload.empty() && http.begin(client,"https://devices.thingpulse.com/api/v1/app-usage")){
+            http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+            http.addHeader("Content-Type","application/json");
+            http.addHeader("Authorization","Bearer " GADGET_OS_DEVICE_PRODUCT_KEY);
+            http.addHeader("User-Agent","gadget-os/" GADGET_OS_VERSION);
+            if(AppUsage::report_allowed(self->_usage_generation)){
+                const int usage_status=http.POST(String(self->_usage_payload.c_str()));
+                UI_TRACE("Devices","App usage report status=%d",usage_status);
+            }
             http.end();
         }
     } // Release TLS buffers before reporting completion.

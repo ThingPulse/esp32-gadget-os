@@ -1,0 +1,27 @@
+{
+  "cycles": 100,
+  "reset_acknowledgements": 100,
+  "close_acknowledgements": 100,
+  "strict_callback_threshold_passed": false,
+  "low_callback_cycles": [
+    99
+  ],
+  "metrics": {
+    "internal": {
+      "first_median": 137384.0,
+      "last_median": 137384.0
+    },
+    "exec": {
+      "first_median": 105364.0,
+      "last_median": 105364.0
+    },
+    "psram": {
+      "first_median": 2059224.0,
+      "last_median": 2063356.0
+    },
+    "lvgl_free": {
+      "first_median": 37734.0,
+      "last_median": 37740.0
+    }
+  }
+}

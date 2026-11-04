@@ -1,0 +1,138 @@
+# Signed apps, static catalog and optional reporting
+
+This remains behind `GADGET_OS_NATIVE_APP_LOADER` in the two experimental
+PlatformIO profiles. Normal firmware does not gain a native-app loader.
+
+## Delivery and installation
+
+`Labs → Apps` pairs a browser with the device. The browser loads
+`https://thingpulse.github.io/esp32-gadget-os/apps/catalog.json`, filters by chip
+and host API, and downloads a compatible package directly from the same static
+GitHub Pages site. It uploads that package through the existing paired device
+installer. File uploads remain available when the catalog is offline.
+
+The device verifies package integrity, its ECDSA-P256 signature, chip/API
+compatibility and ELF structure before atomic replacement. It verifies again
+when loading the app. Closing an app releases its resources before unloading;
+installed app icons still appear under Labs. Running-app replacement/removal
+and OTA conflicts remain blocked.
+
+The catalog contains at most 128 chip variants / 64 KiB. Packages remain bounded
+at 70,908 bytes; at most eight packages are installed. Downloads have a 30-second
+limit and send no pairing key, device identity or reporting credential to GitHub.
+URLs must stay within the configured HTTPS catalog origin and directory. Native
+apps have full firmware privileges: signing authenticates their publisher, not
+a sandbox or a guarantee of safety. Installation is explicit; no silent updates
+or automatic launch are introduced.
+
+GitHub Releases also holds the identical versioned files in one dedicated
+`native-apps` release, marked **not latest**. Using one release avoids crowding
+the release list queried by older OS prerelease clients. GitHub Pages mirrors
+those files to support browser downloads without a backend proxy or release-asset
+redirect/CORS issues. Neither delivery path involves devices.thingpulse.com.
+
+## Signing and Developer mode
+
+The firmware trusts `signing-public.pem`. The private key is **not in this
+repository**, any firmware image, or any published artifact. For this initial
+setup it was generated locally at
+`~/.config/thingpulse/gadget-app-signing.pem` with owner-only file permissions.
+Keep it in secure key storage before depending on it for releases.
+
+`build.py --signing-key <private.pem>` emits authenticated GAPP2; omitting that
+argument emits legacy unsigned GAPP1 for development. The signing command
+checks that its private key matches the committed public key. GitHub Actions
+uses the `APP_SIGNING_PRIVATE_KEY` secret in the protected `app-signing`
+environment. Do not put a private key in repository variables or build logs.
+
+Unsigned installs and execution are rejected by default. **Developer mode can
+only be changed on the device's Apps screen**, not through the browser API. It
+persists until disabled. Existing unsigned packages remain visible/removable
+in the browser, but their launcher icons and execution are disabled when the
+mode is off. Invalid or unknown signatures are rejected even in Developer mode.
+Custom unsigned app IDs and usage are excluded from reporting.
+
+GAPP2 has a 124-byte header:
+
+| Bytes | Meaning |
+|---|---|
+| 0–7 | `GOSAPP2\0` |
+| 8–19 | Three little-endian uint32 lengths: padded JSON, RGB565 icon, ELF |
+| 20–51 | SHA-256 of bytes 0–19 + bytes 52–59 + payload at byte 124 |
+| 52–59 | First eight SHA-256 bytes of canonical public-key PEM, including its final newline |
+| 60–123 | ECDSA-P256 signature of that digest, fixed-width `r || s` |
+| 124 onward | JSON padded to four bytes, 40×40 RGB565 icon, ELF |
+
+The signature covers all manifest, icon and executable bytes and all length/key
+fields. The key identifier is a lookup hint; the full public key verifies the
+signature. Key rotation/revocation currently requires a host firmware update.
+There is no multi-publisher trust store or anti-rollback version policy yet.
+A user can explicitly install an older correctly signed version from a file.
+
+## Independent app releases
+
+Edit each app's own version in `apps.json`; it need not match the OS version.
+The `Publish signed native apps` workflow builds both chip variants, validates
+signatures/parser behavior, creates icons, merges the catalog and publishes.
+Existing app versions are immutable. An identical rebuild reuses the original
+signed file (ECDSA signatures otherwise have different random nonces); changing
+an existing version's content aborts publication. The `app-catalog` branch stores
+the static site and old immutable package versions. App IDs not rebuilt remain
+in the catalog.
+
+One-time repository setup, **not performed by merely building this branch**:
+
+1. Review/merge this implementation into `master`.
+2. Configure the `app-signing` environment with protected refs/reviewers and its
+   `APP_SIGNING_PRIVATE_KEY` secret, matching the committed public key.
+3. Enable GitHub Pages with **GitHub Actions** as the source. This workflow owns
+   the repository's Pages site; do not replace another existing site accidentally.
+4. Dispatch the workflow for validation only, then push an `apps-v*` tag pointing
+   to a commit on `master` to publish. Tags from outside `master` are rejected.
+5. Review and deploy the reporting backend changes once if usage reporting is
+   desired. No further web-app deployment is needed for app or OS releases.
+
+A missing catalog returns an explanatory message; local signed uploads still
+work. The release workflow is separate from the existing firmware release job.
+The initial metadata publishes Native Counter 0.1.0 and ISS Position 0.2.0.
+
+Local commands (using the installed PlatformIO toolchain):
+
+```sh
+python scripts/build-native-apps.py \
+  --toolchain ~/.platformio/packages/toolchain-xtensa-esp-elf/bin \
+  --signing-key ~/.config/thingpulse/gadget-app-signing.pem \
+  --output .pio/signed-apps
+python scripts/build-native-catalog.py --packages .pio/signed-apps --site .pio/app-site
+python scripts/test-native-signing.py
+node scripts/test-native-store-page.mjs
+```
+
+## Reporting only
+
+Users can enable **Settings → System → Share app usage**. It defaults off and
+saves immediately. The firmware records an explicit allow-list of built-in app
+routes and authenticated native apps: app ID/version, launches, foreground
+seconds, successful installs and failures after a package has been authenticated.
+No app contents, settings, custom unsigned IDs or per-launch requests are sent.
+The installed inventory contains authenticated native apps only.
+
+Counters are bounded to 32 app/version entries, saved at most every five minutes
+plus check-in/deep sleep, and sent with the existing installation identity.
+Abrupt power loss can lose the last unsaved interval. A new consent session gets
+a new epoch; turning sharing off deletes local counters. Already received server
+reports are not deleted by that switch.
+
+The existing `/api/v1/check-in` body remains unchanged. After a successful daily
+OS check-in, opted-in firmware independently posts a bounded snapshot to
+`/api/v1/app-usage`. A missing or unavailable usage endpoint never changes the OS
+check-in result or blocks catalog/download/installation. Cumulative snapshots
+are retried on later check-ins; the backend replaces snapshots rather than
+adding them, and preserves the highest counters within an epoch to avoid both
+double-counting and regressions after a restart.
+
+The separate `thingpulse-device-management` change adds a migration, endpoint
+and **App usage** dashboard. Dashboard activity is explicitly labeled as
+cumulative counters from devices reporting within the chosen window, not activity
+totals for that window. Versioned payload schema 1 avoids web deployments for new
+app IDs, app versions or OS versions.

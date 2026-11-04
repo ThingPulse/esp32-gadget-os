@@ -3,6 +3,8 @@
 import argparse, hashlib, json, os, pathlib, subprocess, struct
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser()
+p.add_argument('--signing-key', type=pathlib.Path, help='ECDSA P-256 private key; omit only for Developer mode')
+p.add_argument('--public-key', type=pathlib.Path, default=ROOT/'experiments/native-app/signing-public.pem')
 p.add_argument('--chip', required=True, choices=['esp32', 'esp32s3'])
 p.add_argument('--id', help='Optional package ID for independent launcher discovery')
 p.add_argument('--version', default='0.1.0')
@@ -54,5 +56,8 @@ metadata=json.dumps(manifest,separators=(',',':')).encode(); metadata+=b' '*((-l
 payload=metadata+icon+elf.read_bytes()
 header=b'GOSAPP1\0'+struct.pack('<III',len(metadata),len(icon),elf.stat().st_size)
 package=header+hashlib.sha256(header+payload).digest()+payload
+if a.signing_key:
+ from package_tools import sign_package
+ package=sign_package(package,a.signing_key,a.public_key)
 path=out.parent/(app_id+'.gapp'); path.write_bytes(package)
 print('Installable package:',path,'bytes:',len(package))

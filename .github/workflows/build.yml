@@ -81,3 +81,32 @@ jobs:
           python scripts/test-update-target.py
           python scripts/test-update-schedule.py
           node scripts/test-update-manifest.mjs
+
+  native-app-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install app toolchain and host crypto
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+          python -m pip install -r requirements-build.txt
+          pio pkg install -e esp32-color-kit-native-app
+      - name: Build standalone fixtures
+        run: |
+          for chip in esp32 esp32s3; do
+            for app in counter iss; do
+              python experiments/native-app/build.py --chip "$chip" --app "$app" --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
+            done
+          done
+      - name: Validate packages, signatures, lifecycle and catalog
+        run: |
+          python scripts/test-native-app.py
+          python scripts/test-native-install.py
+          python scripts/test-native-signing.py
+          node scripts/test-native-store-page.mjs
+          c++ -std=c++17 -g -fsanitize=address,undefined -Iinclude test/native_app/usage.cpp -o /tmp/app-usage-test
+          /tmp/app-usage-test

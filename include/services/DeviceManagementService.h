@@ -27,5 +27,7 @@ private:
     uint32_t _server_delay = 0;
     std::string _identity;
     std::string _payload;
+    std::string _usage_payload;
+    uint32_t _usage_generation=0;
 #endif
 };

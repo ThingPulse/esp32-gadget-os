@@ -1,5 +1,6 @@
 #if GADGET_OS_NATIVE_APP_LOADER
 #include "experimental/NativeApp.h"
+#include "services/AppUsage.h"
 #include "experimental/NativePackage.h"
 #include "experimental/NativeHttp.h"
 #include "experimental/NativeStore.h"
@@ -203,12 +204,14 @@ void open_now()
     if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>1 || !session.app.shutdown) {
         show_error("App initialization/API handshake failed"); return;
     }
+    AppUsage::native_start(package.manifest.id.c_str(),package.manifest.version.c_str(),package.trusted);
     sample("app-ui-created");
     Serial.printf("[NATIVE] cycle=%u load_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
     session.start_ms=session.activity_ms=millis();
 }
 void finish()
 {
+    AppUsage::stop();
     const int64_t start=esp_timer_get_time();
     unload();
     Serial.printf("[NATIVE] cycle=%u unload_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
@@ -285,7 +288,12 @@ void poll()
         if (!reset_sent && uint32_t(millis()-session.start_ms)>=600) {
             reset_sent=true; lv_obj_send_event(session.widgets[2].obj,LV_EVENT_CLICKED,nullptr);
         }
-        if (!close_sent && uint32_t(millis()-session.start_ms)>=1500) {
+        // Network work can coalesce LVGL timer ticks. Keep the same callback
+        // acceptance threshold without closing a healthy app before it reaches it.
+        if (uint32_t(millis()-session.start_ms)>=5000 && session.callbacks<6) {
+            show_error("Cycle test timed out waiting for timer callbacks");return;
+        }
+        if (!close_sent && uint32_t(millis()-session.start_ms)>=1500 && session.callbacks>=6) {
             close_sent=true; lv_obj_send_event(session.widgets[3].obj,LV_EVENT_CLICKED,nullptr);
         }
     }

@@ -1,0 +1,50 @@
+[
+  {
+    "environment": "esp32-color-kit",
+    "firmware_bin_bytes": 2323312,
+    "loader_symbols": false
+  },
+  {
+    "environment": "esp32-color-kit-pro",
+    "firmware_bin_bytes": 2305072,
+    "loader_symbols": false
+  },
+  {
+    "environment": "esp32-color-kit-native-app",
+    "firmware_bin_bytes": 2388992,
+    "loader_symbols": true
+  },
+  {
+    "environment": "esp32-color-kit-pro-native-app",
+    "firmware_bin_bytes": 2356352,
+    "loader_symbols": true
+  },
+  {
+    "chip": "esp32",
+    "app": "native-demo",
+    "elf_bytes": 1772,
+    "package_bytes": 1930,
+    "installable_bytes": 5152
+  },
+  {
+    "chip": "esp32",
+    "app": "native-iss",
+    "elf_bytes": 3532,
+    "package_bytes": 3687,
+    "installable_bytes": 6912
+  },
+  {
+    "chip": "esp32s3",
+    "app": "native-demo",
+    "elf_bytes": 1772,
+    "package_bytes": 1932,
+    "installable_bytes": 5156
+  },
+  {
+    "chip": "esp32s3",
+    "app": "native-iss",
+    "elf_bytes": 3544,
+    "package_bytes": 3701,
+    "installable_bytes": 6924
+  }
+]
