@@ -1,0 +1,32 @@
+[
+  {
+    "environment": "esp32-color-kit",
+    "firmware_bin_bytes": 2307440,
+    "loader_symbols": false
+  },
+  {
+    "environment": "esp32-color-kit-pro",
+    "firmware_bin_bytes": 2289280,
+    "loader_symbols": false
+  },
+  {
+    "environment": "esp32-color-kit-native-app",
+    "firmware_bin_bytes": 2336224,
+    "loader_symbols": true
+  },
+  {
+    "environment": "esp32-color-kit-pro-native-app",
+    "firmware_bin_bytes": 2304848,
+    "loader_symbols": true
+  },
+  {
+    "chip": "esp32",
+    "elf_bytes": 1772,
+    "package_bytes": 1902
+  },
+  {
+    "chip": "esp32s3",
+    "elf_bytes": 1772,
+    "package_bytes": 1904
+  }
+]

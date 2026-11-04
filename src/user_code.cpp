@@ -1,3 +1,4 @@
+#include "experimental/NativeApp.h"
 #include "ui/I18n.h"
 #include "ui/ReleaseNotes.h"
 #include "apps/TransitApp.h"
@@ -1227,6 +1228,53 @@ static void create_home_screen(void)
   }
 }
 
+#if GADGET_OS_NATIVE_APP_LOADER
+static bool native_update_dialog_hidden = false;
+static bool native_update_notes_hidden = false;
+static void native_restore_update_overlays()
+{
+  if (native_update_dialog_hidden && update_dialog)
+    lv_obj_remove_flag(update_dialog, LV_OBJ_FLAG_HIDDEN);
+  if (native_update_notes_hidden && update_notes_dialog)
+    lv_obj_remove_flag(update_notes_dialog, LV_OBJ_FLAG_HIDDEN);
+  native_update_dialog_hidden = native_update_notes_hidden = false;
+}
+bool native_launcher_is_active()
+{
+  const auto state = UpdateService::instance().state();
+  return lv_screen_active() == home_screen &&
+         state != UpdateService::State::Downloading &&
+         state != UpdateService::State::ReadyToReboot;
+}
+void native_launcher_release()
+{
+  // These dialogs live on lv_layer_top(), outside the launcher tree. Suspend
+  // an existing notice too; delaying new notices alone leaves it over the app.
+  if (update_dialog && !lv_obj_has_flag(update_dialog, LV_OBJ_FLAG_HIDDEN)) {
+    native_update_dialog_hidden = true;
+    lv_obj_add_flag(update_dialog, LV_OBJ_FLAG_HIDDEN);
+  }
+  if (update_notes_dialog && !lv_obj_has_flag(update_notes_dialog, LV_OBJ_FLAG_HIDDEN)) {
+    native_update_notes_hidden = true;
+    lv_obj_add_flag(update_notes_dialog, LV_OBJ_FLAG_HIDDEN);
+  }
+  lv_obj_t *old = lv_screen_active();
+  lv_screen_load(lv_obj_create(nullptr));
+  home_screen = nullptr;
+  home_pager = nullptr;
+  lv_obj_delete(old);
+  UiSessionState::set_route("home");
+}
+void native_launcher_restore()
+{
+  lv_obj_t *old = lv_screen_active();
+  lv_screen_load(lv_obj_create(nullptr));
+  create_home_screen();
+  lv_obj_delete(old);
+  UiSessionState::set_route("home");
+}
+#endif
+
 static void lvgl_flush(lv_display_t *d, const lv_area_t *area, uint8_t *px_map)
 {
   const uint32_t flush_start_ms = flush_perf_enabled ? flush_perf_now_ms() : 0;
@@ -1270,6 +1318,9 @@ static uint32_t get_tick_ms(void)
 
 void setup(void)
 {
+#if GADGET_OS_NATIVE_APP_LOADER
+  Serial.begin(115200);
+#endif
 #if defined(COLOR_KIT_PRO) && defined(ARDUINO) && defined(ESP_PLATFORM)
   pro_power_begin();
 #endif
@@ -1436,7 +1487,11 @@ void loop(void)
   lv_tick_inc(cur_ms - prev_ms);
   prev_ms = cur_ms;
 #endif
-  if (i18n::take_reload_request()) {
+  if (
+#if GADGET_OS_NATIVE_APP_LOADER
+      !native_app::busy() &&
+#endif
+      i18n::take_reload_request()) {
     lv_obj_t *previous = lv_screen_active();
     lv_obj_t *previous_home = home_screen;
     lv_screen_load(lv_obj_create(nullptr));
@@ -1446,11 +1501,19 @@ void loop(void)
     if(previous_home != previous && previous_home && lv_obj_is_valid(previous_home))lv_obj_delete(previous_home);
   }
   ServiceRegistry::instance().loop_all();
-  if (update_dialog_pending) { update_dialog_pending=false; show_update_dialog(); }
+  if (update_dialog_pending
+#if GADGET_OS_NATIVE_APP_LOADER
+      && !native_app::busy()
+#endif
+  ) { update_dialog_pending=false; show_update_dialog(); }
 #if defined(SDL_h_)
   native_run_tutorial();
 #endif
   lv_task_handler();
+#if GADGET_OS_NATIVE_APP_LOADER
+  native_app::poll();
+  if (!native_app::busy()) native_restore_update_overlays();
+#endif
 #if defined(SDL_h_)
   native_capture_if_requested();
   native_record_video_if_requested();

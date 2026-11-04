@@ -1,0 +1,113 @@
+{
+  "phase_medians": {
+    "launcher-idle": {
+      "internal": 142352,
+      "largest": 98292,
+      "exec": 110332,
+      "exec_largest": 98292,
+      "psram": 2069904,
+      "psram_largest": 2031604,
+      "lvgl_free": 39808,
+      "lvgl_largest": 39180,
+      "sampled_cycle_min": 142352
+    },
+    "launcher-released": {
+      "internal": 142352,
+      "largest": 98292,
+      "exec": 110332,
+      "exec_largest": 98292,
+      "psram": 2069904,
+      "psram_largest": 2031604,
+      "lvgl_free": 56252,
+      "lvgl_largest": 39300,
+      "sampled_cycle_min": 142352
+    },
+    "relocated-with-file-buffer": {
+      "internal": 139716,
+      "largest": 94196,
+      "exec": 107696,
+      "exec_largest": 94196,
+      "psram": 2069904,
+      "psram_largest": 2031604,
+      "lvgl_free": 56252,
+      "lvgl_largest": 39300,
+      "sampled_cycle_min": 139716
+    },
+    "executable-loaded": {
+      "internal": 141512,
+      "largest": 98292,
+      "exec": 109492,
+      "exec_largest": 98292,
+      "psram": 2069904,
+      "psram_largest": 2031604,
+      "lvgl_free": 56252,
+      "lvgl_largest": 39300,
+      "sampled_cycle_min": 139716
+    },
+    "app-ui-created": {
+      "internal": 141512,
+      "largest": 98292,
+      "exec": 109492,
+      "exec_largest": 98292,
+      "psram": 2069904,
+      "psram_largest": 2031604,
+      "lvgl_free": 54612,
+      "lvgl_largest": 39300,
+      "sampled_cycle_min": 139716
+    },
+    "activity": {
+      "internal": 141668,
+      "largest": 98292,
+      "exec": 109648,
+      "exec_largest": 98292,
+      "psram": 2069904,
+      "psram_largest": 2031604,
+      "lvgl_free": 54852,
+      "lvgl_largest": 39368,
+      "sampled_cycle_min": 139716
+    },
+    "shutdown-unloaded": {
+      "internal": 142508,
+      "largest": 98292,
+      "exec": 110488,
+      "exec_largest": 98292,
+      "psram": 2069904,
+      "psram_largest": 2031604,
+      "lvgl_free": 56444,
+      "lvgl_largest": 39376,
+      "sampled_cycle_min": 139716
+    },
+    "launcher-restored": {
+      "internal": 142352,
+      "largest": 98292,
+      "exec": 110332,
+      "exec_largest": 98292,
+      "psram": 2069904,
+      "psram_largest": 2031604,
+      "lvgl_free": 39368,
+      "lvgl_largest": 39180,
+      "sampled_cycle_min": 139716
+    }
+  },
+  "timings_us": {
+    "load_us": {
+      "median": 27047,
+      "p95": 28759,
+      "min": 26966,
+      "max": 30776
+    },
+    "unload_us": {
+      "median": 1507,
+      "p95": 1595,
+      "min": 1450,
+      "max": 2168
+    },
+    "unload_restore_us": {
+      "median": 81640,
+      "p95": 84134,
+      "min": 80242,
+      "max": 87111
+    }
+  },
+  "unload_recovered_internal_median": 840
+}

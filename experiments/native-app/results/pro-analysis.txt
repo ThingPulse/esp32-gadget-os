@@ -1,0 +1,10 @@
+internal: first median=142352.0, last median=142352.0, drop=0.0, slope=0.04 bytes/cycle
+largest: first median=98292.0, last median=98292.0, drop=0.0, slope=0.00 bytes/cycle
+exec: first median=110332.0, last median=110332.0, drop=0.0, slope=0.04 bytes/cycle
+exec_largest: first median=98292.0, last median=98292.0, drop=0.0, slope=0.00 bytes/cycle
+psram: first median=2069904.0, last median=2070224.0, drop=-320.0, slope=4.55 bytes/cycle
+psram_largest: first median=2031604.0, last median=2031604.0, drop=0.0, slope=0.00 bytes/cycle
+lvgl_free: first median=39364.0, last median=39356.0, drop=8.0, slope=-0.12 bytes/cycle
+lvgl_largest: first median=39172.0, last median=39172.0, drop=0.0, slope=-0.11 bytes/cycle
+PASS: 100 captured cycles, no detected resets, no decline above tolerance after five warm-up cycles.
+Still verify touch interaction, visual correctness and a built-in app manually.

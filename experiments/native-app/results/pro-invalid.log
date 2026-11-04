@@ -1,0 +1,114 @@
+[CASE] wrong-chip
+[NATIVE] cycle=1 phase=launcher-idle internal=142312 largest=98292 exec=110292 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142312 callbacks=0 lvgl_total=61552 lvgl_free=35492 lvgl_largest=35256
+[NATIVE] cycle=1 phase=launcher-released internal=142360 largest=98292 exec=110340 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142312 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] ERROR Package is for a different chip
+[NATIVE] cycle=1 phase=load-failed-cleaned internal=142180 largest=98292 exec=110160 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142180 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] cycle=1 unload_us=17
+[NATIVE] cycle=1 phase=shutdown-unloaded internal=142468 largest=98292 exec=110448 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142180 callbacks=0 lvgl_total=63100 lvgl_free=51168 lvgl_largest=35200
+[NATIVE] cycle=1 phase=launcher-restored internal=142360 largest=98292 exec=110340 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142180 callbacks=0 lvgl_total=61424 lvgl_free=34812 lvgl_largest=33864
+[PASS] wrong-chip rejected; launcher restored without reboot
+[CASE] wrong-chip
+[NATIVE] cycle=1 unload_restore_us=81169
+[NATIVE] cycle=2 phase=launcher-idle internal=142360 largest=98292 exec=110340 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142360 callbacks=0 lvgl_total=61420 lvgl_free=35252 lvgl_largest=33864
+[NATIVE] cycle=2 phase=launcher-released internal=142360 largest=98292 exec=110340 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142360 callbacks=0 lvgl_total=63112 lvgl_free=51760 lvgl_largest=34004
+[NATIVE] ERROR Package is for a different chip
+[NATIVE] cycle=2 phase=load-failed-cleaned internal=142180 largest=98292 exec=110160 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142180 callbacks=0 lvgl_total=63112 lvgl_free=51760 lvgl_largest=34004
+[NATIVE] cycle=2 unload_us=17
+[NATIVE] cycle=2 phase=shutdown-unloaded internal=142516 largest=98292 exec=110496 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142180 callbacks=0 lvgl_total=63108 lvgl_free=51168 lvgl_largest=34004
+[NATIVE] cycle=2 phase=launcher-restored internal=142312 largest=98292 exec=110292 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113432 sampled_cycle_min=142180 callbacks=0 lvgl_total=61420 lvgl_free=34816 lvgl_largest=33856
+[PASS] wrong-chip rejected; launcher restored without reboot
+[CASE] wrong-api
+[NATIVE] cycle=1 phase=launcher-idle internal=142360 largest=77812 exec=110340 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142360 callbacks=0 lvgl_total=61552 lvgl_free=35492 lvgl_largest=35256
+[NATIVE] cycle=1 phase=launcher-released internal=142360 largest=77812 exec=110340 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142360 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] ERROR Unsupported host API version
+[NATIVE] cycle=1 phase=load-failed-cleaned internal=142172 largest=77812 exec=110152 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142172 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] cycle=1 unload_us=17
+[NATIVE] cycle=1 phase=shutdown-unloaded internal=142516 largest=77812 exec=110496 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142172 callbacks=0 lvgl_total=63100 lvgl_free=51180 lvgl_largest=35200
+[NATIVE] cycle=1 phase=launcher-restored internal=142360 largest=77812 exec=110340 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142172 callbacks=0 lvgl_total=61428 lvgl_free=34808 lvgl_largest=33868
+[PASS] wrong-api rejected; launcher restored without reboot
+[CASE] wrong-api
+[NATIVE] cycle=1 unload_restore_us=80977
+[NATIVE] cycle=2 phase=launcher-idle internal=142360 largest=77812 exec=110340 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142360 callbacks=0 lvgl_total=61428 lvgl_free=35272 lvgl_largest=33868
+[NATIVE] cycle=2 phase=launcher-released internal=142360 largest=77812 exec=110340 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142360 callbacks=0 lvgl_total=63120 lvgl_free=51780 lvgl_largest=34032
+[NATIVE] ERROR Unsupported host API version
+[NATIVE] cycle=2 phase=load-failed-cleaned internal=142164 largest=77812 exec=110144 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142164 callbacks=0 lvgl_total=63120 lvgl_free=51780 lvgl_largest=34032
+[NATIVE] cycle=2 unload_us=17
+[NATIVE] cycle=2 phase=shutdown-unloaded internal=142516 largest=77812 exec=110496 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142164 callbacks=0 lvgl_total=63100 lvgl_free=51188 lvgl_largest=34032
+[NATIVE] cycle=2 phase=launcher-restored internal=142360 largest=77812 exec=110340 exec_largest=77812 psram=2069888 psram_largest=1998836 boot_min_internal=113428 sampled_cycle_min=142164 callbacks=0 lvgl_total=61420 lvgl_free=34816 lvgl_largest=33884
+[PASS] wrong-api rejected; launcher restored without reboot
+[CASE] bad-manifest
+[NATIVE] cycle=1 phase=launcher-idle internal=142332 largest=94196 exec=110312 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142332 callbacks=0 lvgl_total=61548 lvgl_free=35476 lvgl_largest=35244
+[NATIVE] cycle=1 phase=launcher-released internal=142332 largest=94196 exec=110312 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142332 callbacks=0 lvgl_total=63120 lvgl_free=51752 lvgl_largest=35148
+[NATIVE] ERROR Malformed manifest
+[NATIVE] cycle=1 phase=load-failed-cleaned internal=142284 largest=94196 exec=110264 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142284 callbacks=0 lvgl_total=63120 lvgl_free=51752 lvgl_largest=35148
+[NATIVE] cycle=1 unload_us=17
+[NATIVE] cycle=1 phase=shutdown-unloaded internal=142488 largest=94196 exec=110468 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142284 callbacks=0 lvgl_total=63100 lvgl_free=51176 lvgl_largest=35188
+[NATIVE] cycle=1 phase=launcher-restored internal=142284 largest=94196 exec=110264 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142284 callbacks=0 lvgl_total=61416 lvgl_free=34780 lvgl_largest=33856
+[PASS] bad-manifest rejected; launcher restored without reboot
+[CASE] bad-manifest
+[NATIVE] cycle=1 unload_restore_us=80466
+[NATIVE] cycle=2 phase=launcher-idle internal=142332 largest=94196 exec=110312 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142332 callbacks=0 lvgl_total=61412 lvgl_free=35220 lvgl_largest=33856
+[NATIVE] cycle=2 phase=launcher-released internal=142332 largest=94196 exec=110312 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142332 callbacks=0 lvgl_total=63116 lvgl_free=51752 lvgl_largest=33996
+[NATIVE] ERROR Malformed manifest
+[NATIVE] cycle=2 phase=load-failed-cleaned internal=142284 largest=94196 exec=110264 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142284 callbacks=0 lvgl_total=63116 lvgl_free=51752 lvgl_largest=33996
+[NATIVE] cycle=2 unload_us=17
+[NATIVE] cycle=2 phase=shutdown-unloaded internal=142488 largest=94196 exec=110468 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142284 callbacks=0 lvgl_total=63100 lvgl_free=51176 lvgl_largest=33996
+[NATIVE] cycle=2 phase=launcher-restored internal=142332 largest=94196 exec=110312 exec_largest=94196 psram=2069908 psram_largest=2064372 boot_min_internal=113636 sampled_cycle_min=142284 callbacks=0 lvgl_total=61420 lvgl_free=34788 lvgl_largest=33864
+[PASS] bad-manifest rejected; launcher restored without reboot
+[CASE] missing-manifest
+[NATIVE] cycle=1 phase=launcher-idle internal=142300 largest=98292 exec=110280 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142300 callbacks=0 lvgl_total=61552 lvgl_free=35492 lvgl_largest=35256
+[NATIVE] cycle=1 phase=launcher-released internal=142348 largest=98292 exec=110328 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142300 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] ERROR Missing or oversized /apps/native-demo/manifest.json
+[NATIVE] cycle=1 phase=load-failed-cleaned internal=142276 largest=98292 exec=110256 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142276 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] cycle=1 unload_us=17
+[NATIVE] cycle=1 phase=shutdown-unloaded internal=142456 largest=98292 exec=110436 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142276 callbacks=0 lvgl_total=63104 lvgl_free=51168 lvgl_largest=35200
+[NATIVE] cycle=1 phase=launcher-restored internal=142348 largest=98292 exec=110328 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142276 callbacks=0 lvgl_total=61428 lvgl_free=34824 lvgl_largest=33864
+[PASS] missing-manifest rejected; launcher restored without reboot
+[CASE] missing-manifest
+[NATIVE] cycle=1 unload_restore_us=82296
+[NATIVE] cycle=2 phase=launcher-idle internal=142296 largest=98292 exec=110276 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142296 callbacks=0 lvgl_total=61424 lvgl_free=35268 lvgl_largest=33864
+[NATIVE] cycle=2 phase=launcher-released internal=142348 largest=98292 exec=110328 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142296 callbacks=0 lvgl_total=63124 lvgl_free=51756 lvgl_largest=34004
+[NATIVE] ERROR Missing or oversized /apps/native-demo/manifest.json
+[NATIVE] cycle=2 phase=load-failed-cleaned internal=142276 largest=98292 exec=110256 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142276 callbacks=0 lvgl_total=63124 lvgl_free=51756 lvgl_largest=34004
+[NATIVE] cycle=2 unload_us=28
+[NATIVE] cycle=2 phase=shutdown-unloaded internal=142456 largest=98292 exec=110436 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142276 callbacks=0 lvgl_total=63104 lvgl_free=51160 lvgl_largest=34004
+[NATIVE] cycle=2 phase=launcher-restored internal=142348 largest=98292 exec=110328 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113400 sampled_cycle_min=142276 callbacks=0 lvgl_total=61420 lvgl_free=34816 lvgl_largest=33856
+[PASS] missing-manifest rejected; launcher restored without reboot
+[CASE] missing-elf
+[NATIVE] cycle=1 phase=launcher-idle internal=142368 largest=98292 exec=110348 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142368 callbacks=0 lvgl_total=61552 lvgl_free=35492 lvgl_largest=35256
+[NATIVE] cycle=1 phase=launcher-released internal=142368 largest=98292 exec=110348 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142368 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] ERROR Missing or oversized app.elf
+[NATIVE] cycle=1 phase=load-failed-cleaned internal=142116 largest=98292 exec=110096 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142116 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] cycle=1 unload_us=17
+[NATIVE] cycle=1 phase=shutdown-unloaded internal=142508 largest=98292 exec=110488 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142116 callbacks=0 lvgl_total=63104 lvgl_free=51188 lvgl_largest=35200
+[NATIVE] cycle=1 phase=launcher-restored internal=142364 largest=98292 exec=110344 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142116 callbacks=0 lvgl_total=61428 lvgl_free=34808 lvgl_largest=33868
+[PASS] missing-elf rejected; launcher restored without reboot
+[CASE] missing-elf
+[NATIVE] cycle=1 unload_restore_us=81086
+[NATIVE] cycle=2 phase=launcher-idle internal=142364 largest=98292 exec=110344 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142364 callbacks=0 lvgl_total=61424 lvgl_free=35260 lvgl_largest=33868
+[NATIVE] cycle=2 phase=launcher-released internal=142364 largest=98292 exec=110344 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142364 callbacks=0 lvgl_total=63120 lvgl_free=51760 lvgl_largest=34008
+[NATIVE] ERROR Missing or oversized app.elf
+[NATIVE] cycle=2 phase=load-failed-cleaned internal=142112 largest=98292 exec=110092 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142112 callbacks=0 lvgl_total=63120 lvgl_free=51760 lvgl_largest=34008
+[NATIVE] cycle=2 unload_us=17
+[NATIVE] cycle=2 phase=shutdown-unloaded internal=142508 largest=98292 exec=110488 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142112 callbacks=0 lvgl_total=63108 lvgl_free=51180 lvgl_largest=34008
+[NATIVE] cycle=2 phase=launcher-restored internal=142364 largest=98292 exec=110344 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113204 sampled_cycle_min=142112 callbacks=0 lvgl_total=61412 lvgl_free=34840 lvgl_largest=33900
+[PASS] missing-elf rejected; launcher restored without reboot
+[CASE] truncated-elf
+[NATIVE] cycle=1 phase=launcher-idle internal=142340 largest=98292 exec=110320 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142340 callbacks=0 lvgl_total=61552 lvgl_free=35492 lvgl_largest=35256
+[NATIVE] cycle=1 phase=launcher-released internal=142340 largest=98292 exec=110320 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142340 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] ERROR Invalid ELF section table
+[NATIVE] cycle=1 phase=load-failed-cleaned internal=142284 largest=98292 exec=110264 exec_largest=98292 psram=2069908 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142284 callbacks=0 lvgl_total=63128 lvgl_free=51772 lvgl_largest=35200
+[NATIVE] cycle=1 unload_us=17
+[NATIVE] cycle=1 phase=shutdown-unloaded internal=142528 largest=98292 exec=110508 exec_largest=98292 psram=2069896 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142284 callbacks=0 lvgl_total=63104 lvgl_free=51188 lvgl_largest=35200
+[NATIVE] cycle=1 phase=launcher-restored internal=142392 largest=98292 exec=110372 exec_largest=98292 psram=2069896 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142284 callbacks=0 lvgl_total=61428 lvgl_free=34808 lvgl_largest=33868
+[PASS] truncated-elf rejected; launcher restored without reboot
+[CASE] truncated-elf
+[NATIVE] cycle=1 unload_restore_us=80974
+[NATIVE] cycle=2 phase=launcher-idle internal=142392 largest=98292 exec=110372 exec_largest=98292 psram=2069896 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142392 callbacks=0 lvgl_total=61424 lvgl_free=35260 lvgl_largest=33868
+[NATIVE] cycle=2 phase=launcher-released internal=142392 largest=98292 exec=110372 exec_largest=98292 psram=2069896 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142392 callbacks=0 lvgl_total=63120 lvgl_free=51760 lvgl_largest=34008
+[NATIVE] ERROR Invalid ELF section table
+[NATIVE] cycle=2 phase=load-failed-cleaned internal=142336 largest=98292 exec=110316 exec_largest=98292 psram=2069896 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142336 callbacks=0 lvgl_total=63120 lvgl_free=51760 lvgl_largest=34008
+[NATIVE] cycle=2 unload_us=17
+[NATIVE] cycle=2 phase=shutdown-unloaded internal=142528 largest=98292 exec=110508 exec_largest=98292 psram=2069896 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142336 callbacks=0 lvgl_total=63108 lvgl_free=51180 lvgl_largest=34008
+[NATIVE] cycle=2 phase=launcher-restored internal=142392 largest=98292 exec=110372 exec_largest=98292 psram=2069896 psram_largest=2064372 boot_min_internal=113648 sampled_cycle_min=142336 callbacks=0 lvgl_total=61412 lvgl_free=34840 lvgl_largest=33900
+[PASS] truncated-elf rejected; launcher restored without reboot

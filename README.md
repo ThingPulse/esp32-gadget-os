@@ -16,6 +16,11 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 | `esp32-color-kit` | ThingPulse Color Kit Grande | ESP32 |
 | `esp32-color-kit-pro` | ThingPulse Color Kit Pro | ESP32-S3 |
 
+For the opt-in native app loading feasibility experiment, see
+[build/upload instructions](experiments/native-app/README.md) and the
+[experiment report](experiments/native-app/REPORT.md). It is disabled in normal
+builds and is not a production app platform.
+
 ## Features
 
 - Swipeable app launcher with active and experimental apps

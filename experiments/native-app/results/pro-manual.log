@@ -1,0 +1,36 @@
+[NATIVE] cycle=1 phase=launcher-idle internal=127096 largest=73716 exec=95076 exec_largest=73716 psram=2023132 psram_largest=1998836 boot_min_internal=113420 sampled_cycle_min=127096 callbacks=0 lvgl_total=61908 lvgl_free=39828 lvgl_largest=39284
+[NATIVE] cycle=1 phase=launcher-released internal=127096 largest=73716 exec=95076 exec_largest=73716 psram=2023308 psram_largest=1998836 boot_min_internal=113420 sampled_cycle_min=127096 callbacks=0 lvgl_total=63652 lvgl_free=56272 lvgl_largest=39424
+[NATIVE] cycle=1 phase=relocated-with-file-buffer internal=124452 largest=73716 exec=92432 exec_largest=73716 psram=2023940 psram_largest=1998836 boot_min_internal=113420 sampled_cycle_min=124452 callbacks=0 lvgl_total=63652 lvgl_free=56272 lvgl_largest=39424
+[NATIVE] text_bytes=564 data_allocation=212 text_ptr=0x403bf370 data_ptr=0x3fcced14
+[NATIVE] text_psram=0 data_psram=0
+[NATIVE] cycle=1 phase=executable-loaded internal=126248 largest=73716 exec=94228 exec_largest=73716 psram=2023940 psram_largest=1998836 boot_min_internal=113420 sampled_cycle_min=124452 callbacks=0 lvgl_total=63652 lvgl_free=56272 lvgl_largest=39424
+[NATIVE app] counter initialized from filesystem ELF
+[NATIVE] cycle=1 phase=app-ui-created internal=126248 largest=73716 exec=94228 exec_largest=73716 psram=2023940 psram_largest=1998836 boot_min_internal=113420 sampled_cycle_min=124452 callbacks=0 lvgl_total=63500 lvgl_free=54628 lvgl_largest=39424
+[NATIVE] cycle=1 load_us=32402
+[NATIVE] cycle=1 phase=activity internal=127896 largest=77812 exec=95876 exec_largest=77812 psram=2028588 psram_largest=1998836 boot_min_internal=113420 sampled_cycle_min=119636 callbacks=4 lvgl_total=63520 lvgl_free=54864 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141616 largest=77812 exec=109596 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=8 lvgl_total=63520 lvgl_free=54864 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141476 largest=77812 exec=109456 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=12 lvgl_total=63520 lvgl_free=54864 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=16 lvgl_total=63520 lvgl_free=54864 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=20 lvgl_total=63520 lvgl_free=54864 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=24 lvgl_total=63520 lvgl_free=54864 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=28 lvgl_total=63520 lvgl_free=54864 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=32 lvgl_total=63520 lvgl_free=54864 lvgl_largest=39424
+[NATIVE app] reset button received
+[NATIVE app] reset button received
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=37 lvgl_total=63520 lvgl_free=54892 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=41 lvgl_total=63520 lvgl_free=54892 lvgl_largest=39424
+[NATIVE app] reset button received
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=46 lvgl_total=63520 lvgl_free=54892 lvgl_largest=39424
+[NATIVE app] reset button received
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=51 lvgl_total=63520 lvgl_free=54892 lvgl_largest=39424
+[NATIVE app] reset button received
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=56 lvgl_total=63520 lvgl_free=54892 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=60 lvgl_total=63520 lvgl_free=54892 lvgl_largest=39424
+[NATIVE] cycle=1 phase=activity internal=141664 largest=77812 exec=109644 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=64 lvgl_total=63520 lvgl_free=54892 lvgl_largest=39424
+[NATIVE app] reset button received
+[NATIVE] cycle=1 phase=activity internal=141616 largest=77812 exec=109596 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=69 lvgl_total=63520 lvgl_free=54892 lvgl_largest=39424
+[NATIVE app] close button received
+[NATIVE app] counter shutdown
+[NATIVE] cycle=1 unload_us=1593
+[NATIVE] cycle=1 phase=shutdown-unloaded internal=142512 largest=77812 exec=110492 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=72 lvgl_total=63684 lvgl_free=56460 lvgl_largest=39424
+[NATIVE] cycle=1 phase=launcher-restored internal=142380 largest=77812 exec=110360 exec_largest=77812 psram=2069908 psram_largest=2064372 boot_min_internal=113420 sampled_cycle_min=118784 callbacks=72 lvgl_total=61900 lvgl_free=39380 lvgl_largest=39196
