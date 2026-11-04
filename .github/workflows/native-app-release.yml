@@ -35,7 +35,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libssl-dev pkg-config
           python -m pip install -r requirements-build.txt
-          pio pkg install -e esp32-color-kit-native-app
+          # Initialize pioarduino's compiler via the build path, including on
+          # fresh runners. This also checks both host/app integration builds.
+          pio run -e esp32-color-kit-native-app -e esp32-color-kit-pro-native-app
       - name: Build signed packages
         env:
           APP_SIGNING_PRIVATE_KEY: ${{ secrets.APP_SIGNING_PRIVATE_KEY }}

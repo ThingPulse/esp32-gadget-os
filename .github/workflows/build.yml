@@ -94,7 +94,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libssl-dev pkg-config
           python -m pip install -r requirements-build.txt
-          pio pkg install -e esp32-color-kit-native-app
+          # pioarduino provisions its compiler during build configuration;
+          # pkg install alone leaves a fresh runner without the executables.
+          pio run -e esp32-color-kit-native-app -e esp32-color-kit-pro-native-app
       - name: Build standalone fixtures
         run: |
           for chip in esp32 esp32s3; do
