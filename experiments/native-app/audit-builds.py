@@ -16,5 +16,6 @@ for chip in ['esp32','esp32s3']:
     for app in ['native-demo','native-iss']:
         folder=root/'.pio/native-app-packages'/chip/app
         rows.append(dict(chip=chip,app=app,elf_bytes=(folder/'app.elf').stat().st_size,
-            package_bytes=sum(p.stat().st_size for p in folder.iterdir() if p.is_file())))
+            package_bytes=sum(p.stat().st_size for p in folder.iterdir() if p.is_file()),
+            installable_bytes=folder.with_suffix('.gapp').stat().st_size))
 print(json.dumps(rows,indent=2))

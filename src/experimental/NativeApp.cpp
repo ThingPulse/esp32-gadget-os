@@ -2,6 +2,7 @@
 #include "experimental/NativeApp.h"
 #include "experimental/NativePackage.h"
 #include "experimental/NativeHttp.h"
+#include "experimental/NativeStore.h"
 #include "gadget_app.h"
 #include "AppRegistry.h"
 #include "ui/UiSessionState.h"
@@ -17,25 +18,6 @@
 #include <cstdlib>
 #include <memory>
 
-APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Native demo", LV_SYMBOL_FILE, native_app::launch, 0x8561c5, 95);
-namespace {
-lv_obj_t *iss_icon(lv_obj_t *parent,lv_coord_t size)
-{
-    auto *icon=lv_obj_create(parent); lv_obj_remove_style_all(icon);
-    lv_obj_set_size(icon,size,size); lv_obj_remove_flag(icon,static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE));
-    auto box=[&](int x,int y,int w,int h,uint32_t color) {
-        auto *part=lv_obj_create(icon); lv_obj_remove_style_all(part);
-        lv_obj_set_pos(part,x*size/40,y*size/40); lv_obj_set_size(part,w*size/40,h*size/40);
-        lv_obj_set_style_bg_color(part,lv_color_hex(color),0); lv_obj_set_style_bg_opa(part,LV_OPA_COVER,0);
-        lv_obj_remove_flag(part,static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE));
-    };
-    box(2,19,36,2,0xffffff); box(2,8,11,24,0x63d5d0); box(27,8,11,24,0x63d5d0);
-    box(16,12,8,16,0xffffff); box(19,3,2,9,0xffffff);
-    return icon;
-}
-const bool iss_registered=AppRegistry::instance().registerApp(
-    {"ISS Position",LV_SYMBOL_GPS,native_app::launch_iss,0x237e77,96,AppAvailability::Experimental,iss_icon});
-}
 namespace native_app {
 namespace {
 struct Widget { lv_obj_t *obj=nullptr; bool label=false; gadget_callback cb=nullptr; void *user=nullptr; };
@@ -53,7 +35,7 @@ struct Session {
     unsigned callbacks=0;
 } session;
 bool active=false, pending=false;
-bool pending_iss=false;
+std::string selected_id="native-demo";
 unsigned cycle=0, cycles_left=0;
 uint32_t next_cycle_ms=0;
 bool reset_sent=false, close_sent=false;
@@ -183,13 +165,6 @@ void show_error(const std::string &message)
     auto *caption=lv_label_create(button); lv_label_set_text(caption,"Back to launcher"); lv_obj_center(caption);
     lv_obj_add_event_cb(button,[](lv_event_t *){session.error=false;},LV_EVENT_CLICKED,nullptr);
 }
-bool read_bounded(const char *path, size_t limit, std::string &bytes)
-{
-    auto f=LittleFS.open(path,"r");
-    if (!f || f.isDirectory() || !f.size() || f.size()>limit) return false;
-    bytes.resize(f.size());
-    return f.readBytes(&bytes[0],bytes.size())==bytes.size();
-}
 void open_now()
 {
     pending=false; active=true; ++cycle; session=Session{};
@@ -201,31 +176,12 @@ void open_now()
     lv_obj_set_flex_flow(session.screen,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(session.screen,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
     sample("launcher-released");
-    std::string bytes,error; Manifest manifest;
-#if CONFIG_IDF_TARGET_ESP32S3
-    const char *chip="esp32s3";
-#else
-    const char *chip="esp32";
-#endif
-    const char *id=pending_iss?"native-iss":"native-demo";
-    const std::string base=std::string("/apps/")+id+"/";
-    if (!read_bounded((base+"manifest.json").c_str(),2048,bytes)) { show_error("Missing or oversized "+base+"manifest.json"); return; }
-    if (!parse_manifest(bytes,chip,manifest,error)) { show_error(error); return; }
-    if (manifest.id!=id) { show_error("Package ID does not match selected launcher app"); return; }
-    std::string().swap(bytes);
-    auto file=LittleFS.open((base+"app.elf").c_str(),"r");
-    if (!file || file.isDirectory() || !file.size() || file.size()>max_elf_bytes) {
-        show_error("Missing or oversized app.elf"); return;
-    }
-    const size_t file_size=file.size();
-    std::unique_ptr<uint8_t,decltype(&heap_caps_free)> image(
-        static_cast<uint8_t *>(heap_caps_malloc(file_size,MALLOC_CAP_8BIT)),heap_caps_free);
-    if (!image) { show_error("Not enough memory to read app.elf"); return; }
-    if (file.read(image.get(),file_size)!=file_size) { image.reset(); show_error("Cannot read app.elf"); return; }
-    file.close();
-    if (!validate_elf(image.get(),file_size,error)) { image.reset(); show_error(error); return; }
+    Package package; std::string error;
+    auto image=store::read(store::path(selected_id).c_str(),package,error);
+    if(!image){show_error(error);return;}
+    if(package.manifest.id!=selected_id){show_error("Package ID mismatch");return;}
     esp_elf_init(&session.elf);
-    int result=esp_elf_relocate(&session.elf,image.get());
+    int result=esp_elf_relocate(&session.elf,image.get()+package.elf_offset);
     sample("relocated-with-file-buffer");
     // Release the file buffer before measuring the steady executable allocation.
     image.reset();
@@ -274,14 +230,17 @@ void receive_command()
             command[command_len]=0;
             if (!strcmp(command,"native open")) launch();
             else if (!strcmp(command,"native iss")) launch_iss();
-            else if (active && pending_iss && !session.error && !session.gate.closing &&
+            else if (!strcmp(command,"native manager")) store::request_manager();
+            else if (!strcmp(command,"native manager close")) store::close_manager();
+            else if (!strncmp(command,"native run ",11)) launch_id(command+11);
+            else if (active && selected_id=="native-iss" && !session.error && !session.gate.closing &&
                      (!strcmp(command,"native iss refresh") || !strcmp(command,"native iss close"))) {
                 const unsigned index=!strcmp(command,"native iss refresh")?3:4;
                 if (session.widgets[index].obj) lv_obj_send_event(session.widgets[index].obj,LV_EVENT_CLICKED,nullptr);
             }
             else if (!strcmp(command,"native close")) { pending=false; request_close(); session.error=false; cycles_left=0; }
             else if (!strcmp(command,"native test 100") && !busy() && native_launcher_is_active()) {
-                cycles_left=100; launch();
+                launch(); cycles_left=100;
             }
             command_len=0;
         } else if (c!='\r') {
@@ -291,12 +250,17 @@ void receive_command()
     }
 }
 }
-bool busy() { return active || pending || cycles_left; }
-void launch() { if (!active && !pending && native_launcher_is_active()) { pending=true; pending_iss=false; } }
-void launch_iss() { if (!active && !pending && native_launcher_is_active()) { pending=true; pending_iss=true; } }
+bool busy() { return active || pending || cycles_left || store::managing(); }
+bool running(const char *id) {return (active||pending||cycles_left)&&selected_id==id;}
+void launch_id(const char *id) {
+    if(!busy()&&native_launcher_is_active()&&id&&valid_app_id(id)){selected_id=id;pending=true;}
+}
+void launch() { launch_id("native-demo"); }
+void launch_iss() { launch_id("native-iss"); }
 void poll()
 {
     receive_command();
+    store::poll();
     if (pending) open_now();
     if (std::unique_ptr<http::Result> r{http::take_completed()}; r) {
         bool delivered=active && !session.error && session.http_delivery.deliver(
@@ -308,7 +272,7 @@ void poll()
         sample(delivered?"http-delivered":"http-discarded");
     }
     if (!active) {
-        if (cycles_left && int32_t(millis()-next_cycle_ms)>=0) launch();
+        if (cycles_left && int32_t(millis()-next_cycle_ms)>=0) { selected_id="native-demo"; pending=true; }
         return;
     }
     session.sampled_min_internal=std::min(session.sampled_min_internal,heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));

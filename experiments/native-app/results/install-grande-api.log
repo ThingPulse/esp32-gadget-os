@@ -1,0 +1,6 @@
+PASS: pairing, Origin and Host checks
+PASS: generic ID install, atomic replacement, incompatible/corrupt/truncated package rejection
+PASS: interrupted body/header retain prior app; following requests recover
+PASS: dynamically installed executable runs; running update/remove rejected; closure works
+PASS: eight-app limit and replacement while full
+PASS: removal and catalog refresh

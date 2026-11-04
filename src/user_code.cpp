@@ -1,4 +1,5 @@
 #include "experimental/NativeApp.h"
+#include "experimental/NativeStore.h"
 #include "ui/I18n.h"
 #include "ui/ReleaseNotes.h"
 #include "apps/TransitApp.h"
@@ -1226,6 +1227,9 @@ static void create_home_screen(void)
                                 : stable_grid;
     if (target_grid) create_app_tile(target_grid, app, i);
   }
+#if GADGET_OS_NATIVE_APP_LOADER
+  if(labs_grid)native_app::store::create_tiles(labs_grid);
+#endif
 }
 
 #if GADGET_OS_NATIVE_APP_LOADER

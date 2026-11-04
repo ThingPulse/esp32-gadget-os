@@ -1,8 +1,11 @@
 # Experimental native app loader
 
-Opt-in feasibility experiment, not an installable app platform or a sandbox.
+Opt-in native app experiment with local browser installation; not a sandbox.
 External native code has the same privileges as firmware. Only use trusted
-packages. Neither the manifest nor ELF checks authenticate executable code.
+packages. Manifest, ELF and SHA-256 checks do not authenticate executable code.
+
+Current browser-installation results are in [INSTALLREPORT.md](INSTALLREPORT.md).
+The earlier feasibility/HTTP reports describe the preceding stages.
 
 ## Architecture and scope
 
@@ -53,11 +56,17 @@ python3 experiments/native-app/build.py --chip esp32s3 --app iss \
   --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
 python3 scripts/test-native-app.py
 python3 scripts/test-native-app-cycles.py
+python3 scripts/test-native-install.py
 ```
 
-Packages are `.pio/native-app-packages/<chip>/{native-demo,native-iss}/{manifest.json,app.elf}`.
-They are separate build outputs, never firmware byte arrays. `build.py` reports
-executable/package sizes, SHA-256 and compiler identity. The stripped ELF's
+Installable packages are `.pio/native-app-packages/<chip>/{native-demo,native-iss}.gapp`.
+Each includes its manifest, 40×40 RGB565 icon and executable. Intermediate
+`manifest.json` / `app.elf` files remain available in each app's subdirectory.
+They are separate build outputs, never firmware byte arrays. Use `--id my-app`
+to build a separately identified sample, or `--version 0.2.0` to build an update.
+The matching chip is mandatory: `esp32` for Grande, `esp32s3` for Pro.
+
+`build.py` reports sizes, SHA-256 and compiler identity. The stripped ELF's
 removed `.dynamic` section can cause a readelf diagnostic; the loader uses section
 headers, not the program's dynamic segment. The linker RWX-segment warning does
 not imply a memory protection boundary exists on these devices.
@@ -78,42 +87,64 @@ python3 experiments/native-app/audit-builds.py \
   --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
 ```
 
-## Upload
+## Install, update and remove in the browser
 
-Build/upload the firmware for the matching board:
+Flash the experimental firmware once for the matching board:
 
 ```sh
 pio run -e esp32-color-kit-native-app -t upload --upload-port /dev/cu.YOUR_PORT
 # Pro: replace the environment with esp32-color-kit-pro-native-app.
 ```
 
-There was no existing incremental arbitrary-file upload service. PlatformIO
-`uploadfs` writes the WHOLE LittleFS partition: it replaces filesystem settings
-and caches, but not NVS. Use a development device and back up anything needed.
-Do not use it expecting to preserve existing filesystem contents. Stage a clean
-filesystem image outside the normal `data/` tree, optionally adding your backed-up
-files to that staging directory first:
+1. Connect the device and browser to the same trusted local network.
+2. Open **Labs → Apps** and scan the QR code. It pairs the browser with a local
+   installer on port 8081; the link expires after ten minutes without API use.
+3. Choose the matching `.gapp` file and select **Install / Update**. The page
+   displays installed names and versions and offers **Update** and **Remove**.
+4. Choose **Back to launcher** on the device. Installed apps appear automatically
+   under **Labs**, using their packaged icons. More icons can be reached by scrolling.
+5. Open **ISS Position** or **Native Counter**, then use the app's **Close** button
+   to return to the launcher. Close an app before updating or removing it.
 
-```sh
-mkdir -p .pio/native-app-fs/esp32/apps
-cp -R .pio/native-app-packages/esp32/native-demo \
-  .pio/native-app-packages/esp32/native-iss .pio/native-app-fs/esp32/apps/
-PLATFORMIO_DATA_DIR="$PWD/.pio/native-app-fs/esp32" \
-  pio run -e esp32-color-kit-native-app -t uploadfs --upload-port /dev/cu.YOUR_PORT
+No filesystem image upload, device backup or restoration is needed. Settings
+and caches are preserved. Earlier loose `/apps/native-demo` and `/apps/native-iss`
+files are left alone but are no longer discovered; install their `.gapp` versions.
+Installed packages persist across restart in `/apps/installed/<id>.gapp`.
 
-mkdir -p .pio/native-app-fs/esp32s3/apps
-cp -R .pio/native-app-packages/esp32s3/native-demo \
-  .pio/native-app-packages/esp32s3/native-iss .pio/native-app-fs/esp32s3/apps/
-PLATFORMIO_DATA_DIR="$PWD/.pio/native-app-fs/esp32s3" \
-  pio run -e esp32-color-kit-pro-native-app -t uploadfs --upload-port /dev/cu.YOUR_PORT
-```
+Uploads are streamed to a temporary file, then the full manifest, target chip,
+API version, ELF structure and SHA-256 digest are checked. Only a successful
+validation permits an atomic LittleFS rename over the previous package. Failed,
+interrupted or rejected uploads retain the installed version. There is no
+runtime rollback if otherwise valid native code crashes or fails to initialize.
 
-At runtime the selected app's `manifest.json` and `app.elf` are read from
-`/apps/native-demo` or `/apps/native-iss`. Open **Labs → Native demo** to test the
-counter, or **Labs → ISS Position** for the HTTP app. Reset the counter, then close.
-Reset leaves a visible “Reset received” acknowledgement; reset/close callbacks
-also emit explicit serial messages.
-The launcher is rebuilt without a reboot. Open Calculator and use it afterwards.
+Up to eight apps are supported, with a 70,836-byte per-package limit and space
+reserved for staging. Installing a new app requires no host firmware rebuild or
+hardcoded launcher registration. This is a local developer workflow, not a
+public app store: packages are unsigned and execute with firmware privileges.
+
+### Package format (version 1)
+
+All integers are unsigned little-endian. The 52-byte header contains:
+
+| Offset | Bytes | Meaning |
+| --- | --- | --- |
+| 0 | 8 | Magic `GOSAPP1\0` |
+| 8 | 4 | JSON manifest length, padded with spaces to a multiple of four, max 2048 |
+| 12 | 4 | Icon length, exactly 3200 bytes |
+| 16 | 4 | ELF length, max 65536 bytes |
+| 20 | 32 | SHA-256 of header bytes 0–19 followed by the complete payload |
+
+The payload is the padded JSON manifest, then a 40×40 RGB565 little-endian icon,
+then the ELF. No trailing bytes are allowed. IDs match `[a-z][a-z0-9-]{0,31}`;
+name and version are printable ASCII, 1–32 characters. The manifest executable
+field remains `app.elf` as a format identifier, not an arbitrary filesystem path.
+The ELF entry is four-byte aligned within the package.
+
+The pairing key is carried in the URL fragment, removed from the address bar
+and kept in browser session storage. API calls send `X-App-Key`; the device
+checks Host/Origin and does not allow CORS. The page uses plain local HTTP, so
+pair only on a trusted network. See the implementation and install test report
+for the experimental limits; these checks do not sandbox or sign native code.
 
 ## ABI and ownership
 
@@ -224,20 +255,19 @@ not assumed. See REPORT.md for measured build sizes and outstanding hardware wor
 ## OTA and follow-up
 
 Core OTA currently writes an app slot, leaving LittleFS untouched when the
-partition layout stays unchanged. Future loaders could preserve packages and
-reject incompatible manifests before load; compatibility across core releases
+partition layout stays unchanged. The loader rejects incompatible manifests before load; compatibility across core releases
 has NOT been tested, and filesystem upload/formatting/partition migration can
 remove packages. This experiment does not alter the OTA workflow.
 
 ## Independent ISS Position app (API 1.1)
 
-Install the matching `native-iss` directory under `/apps/native-iss` in LittleFS,
-alongside the counter, using the same upload/backup considerations above.
+Install the matching `native-iss.gapp` through **Labs → Apps**, using the browser
+workflow above. No filesystem image replacement is needed.
 Open **Labs → ISS Position** (satellite icon). The separately built app owns
 the endpoint, response fields, formatting, Refresh/Close actions and age label.
 It displays latitude, longitude, altitude and speed from
 [Where the ISS at?](https://wheretheiss.at/w/developer). The built-in ISS pass
-forecast app and its Pollux Labs API are unchanged. No map or installer is added.
+forecast app and its Pollux Labs API are unchanged. This sample does not include a map.
 
 The host HTTP wrapper runs on a host-owned 8 KiB FreeRTOS worker stack. It copies
 the URL (maximum 255 bytes), permits HTTPS without redirects, uses the built-in

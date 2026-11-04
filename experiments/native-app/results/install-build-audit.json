@@ -1,0 +1,54 @@
+[
+  {
+    "environment": "esp32-color-kit",
+    "firmware_bin_bytes": 2307440,
+    "loader_symbols": false,
+    "sha256": "4bececee11e1e41bb2921e51aebd82ada5e9abf01d5555a8622a623f2a3052af"
+  },
+  {
+    "environment": "esp32-color-kit-pro",
+    "firmware_bin_bytes": 2289280,
+    "loader_symbols": false,
+    "sha256": "30026a6bbbc3c71f5ca2577a038e52241482494d6201ffa491a86e98df7ffd2b"
+  },
+  {
+    "environment": "esp32-color-kit-native-app",
+    "firmware_bin_bytes": 2363632,
+    "loader_symbols": true,
+    "sha256": "772ae581661c49882cba2b69417e69a6c1e0c491b284a7bf0eef733eeff1eaf4"
+  },
+  {
+    "environment": "esp32-color-kit-pro-native-app",
+    "firmware_bin_bytes": 2331808,
+    "loader_symbols": true,
+    "sha256": "e9a661e5d99aec01a1e3aefc05271e08978503dd73e288d8769ad570495d967f"
+  },
+  {
+    "chip": "esp32",
+    "app": "native-demo",
+    "elf_bytes": 1772,
+    "package_bytes": 1930,
+    "installable_bytes": 5152
+  },
+  {
+    "chip": "esp32",
+    "app": "native-iss",
+    "elf_bytes": 3532,
+    "package_bytes": 3687,
+    "installable_bytes": 6912
+  },
+  {
+    "chip": "esp32s3",
+    "app": "native-demo",
+    "elf_bytes": 1772,
+    "package_bytes": 1932,
+    "installable_bytes": 5156
+  },
+  {
+    "chip": "esp32s3",
+    "app": "native-iss",
+    "elf_bytes": 3544,
+    "package_bytes": 3701,
+    "installable_bytes": 6924
+  }
+]

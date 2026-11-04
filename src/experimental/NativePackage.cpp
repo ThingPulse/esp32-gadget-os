@@ -4,8 +4,19 @@
 #include <cstring>
 #include <algorithm>
 #include <vector>
+#if defined(ARDUINO)
+#include <mbedtls/sha256.h>
+#else
+#include <CommonCrypto/CommonDigest.h>
+#endif
 namespace native_app {
 static bool fail(std::string &e, const char *s) { e = s; return false; }
+bool valid_app_id(const std::string &id)
+{
+    if(id.empty() || id.size()>32 || id[0]<'a' || id[0]>'z') return false;
+    for(char c:id) if(!((c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='-')) return false;
+    return true;
+}
 bool parse_manifest(const std::string &json, const char *chip, Manifest &out, std::string &e)
 {
     if (json.empty() || json.size() > 2048) return fail(e, "Manifest missing or too large");
@@ -18,12 +29,35 @@ bool parse_manifest(const std::string &json, const char *chip, Manifest &out, st
         d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 1)
         return fail(e, "Unsupported host API version");
     out = {d["id"].as<std::string>(), d["version"].as<std::string>(), d["executable"].as<std::string>()};
-    if ((out.id != "native-demo" && out.id != "native-iss") || out.version.size() > 32 || out.executable != "app.elf")
-        return fail(e, "Expected native-demo or native-iss package with app.elf");
+    out.name=d["name"] | out.id;
+    if (!valid_app_id(out.id) || out.version.size()>32 || out.name.empty() || out.name.size()>32 || out.executable!="app.elf")
+        return fail(e,"Invalid app ID, name, version or executable");
+    for (const auto &field:{out.name,out.version}) for(unsigned char c:field)
+        if(c<32 || c>126) return fail(e,"Use printable ASCII for app name and version");
     return true;
 }
 static uint16_t u16(const uint8_t *p) { return p[0] | uint16_t(p[1]) << 8; }
 static uint32_t u32(const uint8_t *p) { return u16(p) | uint32_t(u16(p+2)) << 16; }
+bool validate_package(const uint8_t *b,size_t n,const char *chip,Package &out,std::string &e)
+{
+    if(!b || n<package_header_bytes || n>max_package_bytes || memcmp(b,"GOSAPP1\0",8)) return fail(e,"Invalid package header");
+    uint32_t manifest=u32(b+8),icon=u32(b+12),elf=u32(b+16);
+    if(!manifest || manifest>2048 || manifest%4 || icon!=package_icon_bytes || !elf || elf>max_elf_bytes ||
+       n!=package_header_bytes+manifest+icon+elf) return fail(e,"Invalid package lengths");
+    uint8_t digest[32];
+#if defined(ARDUINO)
+    mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha,0);
+    mbedtls_sha256_update(&sha,b,20); mbedtls_sha256_update(&sha,b+52,n-52);
+    mbedtls_sha256_finish(&sha,digest); mbedtls_sha256_free(&sha);
+#else
+    CC_SHA256_CTX sha; CC_SHA256_Init(&sha); CC_SHA256_Update(&sha,b,20);
+    CC_SHA256_Update(&sha,b+52,(CC_LONG)(n-52)); CC_SHA256_Final(digest,&sha);
+#endif
+    if(memcmp(digest,b+20,32)) return fail(e,"Package checksum mismatch");
+    if(!parse_manifest(std::string((const char*)b+52,manifest),chip,out.manifest,e)) return false;
+    out.icon_offset=52+manifest; out.elf_offset=out.icon_offset+icon; out.elf_size=elf;
+    return validate_elf(b+out.elf_offset,elf,e);
+}
 struct Section { uint32_t name,type,flags,addr,off,size,link,info,align,entsize; const char *label; bool loaded; };
 bool validate_elf(const uint8_t *b, size_t n, std::string &e)
 {
