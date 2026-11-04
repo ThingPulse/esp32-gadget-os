@@ -28,7 +28,9 @@ static void call(gadget_callback cb) { if (gate.enter()) { cb(nullptr); gate.lea
 int main(int argc,char **argv) {
  assert(argc==4); std::string e; Manifest m;
  assert(parse_manifest(manifest(),"esp32",m,e));
- for (auto s:{std::string(""),std::string("{"),std::string("[]"),std::string("{}"),manifest("esp32s3"),manifest("esp32",2),manifest("esp32",1,1),std::string(2049,' ')})
+ auto iss=manifest("esp32",1,1); iss.replace(iss.find("native-demo"),11,"native-iss");
+ assert(parse_manifest(iss,"esp32",m,e) && m.id=="native-iss");
+ for (auto s:{std::string(""),std::string("{"),std::string("[]"),std::string("{}"),manifest("esp32s3"),manifest("esp32",2),manifest("esp32",1,2),std::string(2049,' ')})
   assert(!parse_manifest(s,"esp32",m,e));
  auto path=manifest(); path.replace(path.find("app.elf"),7,"../app.elf"); assert(!parse_manifest(path,"esp32",m,e));
  for (int target=1;target<=2;++target) {
@@ -62,7 +64,7 @@ int main(int argc,char **argv) {
  for (unsigned i=0;i<100;++i) {
   gate={}; auto *lib=dlopen(argv[3],RTLD_NOW|RTLD_LOCAL); assert(lib);
   auto entry=(int(*)(int,char**))dlsym(lib,"gadget_app_entry"); assert(entry);
-  gadget_host_api host={sizeof(host),1,0,log_message,screen,make_label,button,set_label,timer,close_app};
+  gadget_host_api host={offsetof(gadget_host_api,http_get_json),1,0,log_message,screen,make_label,button,set_label,timer,close_app};
   gadget_app_lifecycle app={sizeof(app),1,0,nullptr};
   char *args[]={(char*)&host,(char*)&app};
   host.major=2; assert(entry(2,args)!=0); host.major=1;

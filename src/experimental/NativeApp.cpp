@@ -1,6 +1,7 @@
 #if GADGET_OS_NATIVE_APP_LOADER
 #include "experimental/NativeApp.h"
 #include "experimental/NativePackage.h"
+#include "experimental/NativeHttp.h"
 #include "gadget_app.h"
 #include "AppRegistry.h"
 #include "ui/UiSessionState.h"
@@ -17,12 +18,31 @@
 #include <memory>
 
 APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Native demo", LV_SYMBOL_FILE, native_app::launch, 0x8561c5, 95);
+namespace {
+lv_obj_t *iss_icon(lv_obj_t *parent,lv_coord_t size)
+{
+    auto *icon=lv_obj_create(parent); lv_obj_remove_style_all(icon);
+    lv_obj_set_size(icon,size,size); lv_obj_remove_flag(icon,static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE));
+    auto box=[&](int x,int y,int w,int h,uint32_t color) {
+        auto *part=lv_obj_create(icon); lv_obj_remove_style_all(part);
+        lv_obj_set_pos(part,x*size/40,y*size/40); lv_obj_set_size(part,w*size/40,h*size/40);
+        lv_obj_set_style_bg_color(part,lv_color_hex(color),0); lv_obj_set_style_bg_opa(part,LV_OPA_COVER,0);
+        lv_obj_remove_flag(part,static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE));
+    };
+    box(2,19,36,2,0xffffff); box(2,8,11,24,0x63d5d0); box(27,8,11,24,0x63d5d0);
+    box(16,12,8,16,0xffffff); box(19,3,2,9,0xffffff);
+    return icon;
+}
+const bool iss_registered=AppRegistry::instance().registerApp(
+    {"ISS Position",LV_SYMBOL_GPS,native_app::launch_iss,0x237e77,96,AppAvailability::Experimental,iss_icon});
+}
 namespace native_app {
 namespace {
 struct Widget { lv_obj_t *obj=nullptr; bool label=false; gadget_callback cb=nullptr; void *user=nullptr; };
 struct Timer { lv_timer_t *obj=nullptr; gadget_callback cb=nullptr; void *user=nullptr; };
 struct Session {
     DeliveryGate gate;
+    HttpDelivery http_delivery;
     esp_elf_t elf{};
     gadget_app_lifecycle app{};
     lv_obj_t *screen=nullptr;
@@ -33,6 +53,7 @@ struct Session {
     unsigned callbacks=0;
 } session;
 bool active=false, pending=false;
+bool pending_iss=false;
 unsigned cycle=0, cycles_left=0;
 uint32_t next_cycle_ms=0;
 bool reset_sent=false, close_sent=false;
@@ -52,7 +73,9 @@ void sample(const char *phase)
         (unsigned)heap_caps_get_minimum_free_size(internal),(unsigned)session.sampled_min_internal,session.callbacks,
         (unsigned)lv_memory.total_size,(unsigned)lv_memory.free_size,(unsigned)lv_memory.free_biggest_size);
 }
-void request_close() { if (active) session.gate.close(); }
+void request_close() {
+    if (active) { session.gate.close(); session.http_delivery.clear(); http::cancel(cycle); }
+}
 void invoke(gadget_callback cb, void *user)
 {
     if (!cb || !session.gate.enter()) return;
@@ -119,9 +142,17 @@ gadget_handle timer_create(uint32_t ms,gadget_callback cb,void *user)
     }
     return nullptr;
 }
-const gadget_host_api api={sizeof(api),1,0,log,screen_create,label_create,button_create,label_set,timer_create,request_close};
+int32_t http_get(const char *url,gadget_http_callback callback,void *user)
+{
+    if (!active || session.gate.closing || !callback) return GADGET_HTTP_INVALID;
+    int32_t result=http::start(url,cycle);
+    if (!result) session.http_delivery={cycle,callback,user};
+    return result;
+}
+const gadget_host_api api={sizeof(api),1,1,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled};
 void resources_clear()
 {
+    session.http_delivery.clear(); http::cancel(cycle);
     for (auto &t:session.timers) { if (t.obj) lv_timer_delete(t.obj); t={}; }
     // Only host trampoline pointers are registered with LVGL. Destroy their
     // owning object tree before releasing the executable and callback records.
@@ -176,10 +207,13 @@ void open_now()
 #else
     const char *chip="esp32";
 #endif
-    if (!read_bounded("/apps/native-demo/manifest.json",2048,bytes)) { show_error("Missing or oversized /apps/native-demo/manifest.json"); return; }
+    const char *id=pending_iss?"native-iss":"native-demo";
+    const std::string base=std::string("/apps/")+id+"/";
+    if (!read_bounded((base+"manifest.json").c_str(),2048,bytes)) { show_error("Missing or oversized "+base+"manifest.json"); return; }
     if (!parse_manifest(bytes,chip,manifest,error)) { show_error(error); return; }
+    if (manifest.id!=id) { show_error("Package ID does not match selected launcher app"); return; }
     std::string().swap(bytes);
-    auto file=LittleFS.open("/apps/native-demo/app.elf","r");
+    auto file=LittleFS.open((base+"app.elf").c_str(),"r");
     if (!file || file.isDirectory() || !file.size() || file.size()>max_elf_bytes) {
         show_error("Missing or oversized app.elf"); return;
     }
@@ -204,13 +238,13 @@ void open_now()
     Serial.printf("[NATIVE] text_psram=%u data_psram=%u\n",
         esp_ptr_external_ram(session.elf.ptext)?1:0,esp_ptr_external_ram(session.elf.pdata)?1:0);
     sample("executable-loaded");
-    session.app={sizeof(session.app),1,0,nullptr};
+    session.app={sizeof(session.app),1,1,nullptr};
     char *args[]={reinterpret_cast<char *>(const_cast<gadget_host_api *>(&api)),reinterpret_cast<char *>(&session.app)};
     session.initialized=true;
     session.gate.enter();
     result=session.elf.entry(2,args);
     session.gate.leave();
-    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>0 || !session.app.shutdown) {
+    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>1 || !session.app.shutdown) {
         show_error("App initialization/API handshake failed"); return;
     }
     sample("app-ui-created");
@@ -239,6 +273,12 @@ void receive_command()
         if (c=='\n') {
             command[command_len]=0;
             if (!strcmp(command,"native open")) launch();
+            else if (!strcmp(command,"native iss")) launch_iss();
+            else if (active && pending_iss && !session.error && !session.gate.closing &&
+                     (!strcmp(command,"native iss refresh") || !strcmp(command,"native iss close"))) {
+                const unsigned index=!strcmp(command,"native iss refresh")?3:4;
+                if (session.widgets[index].obj) lv_obj_send_event(session.widgets[index].obj,LV_EVENT_CLICKED,nullptr);
+            }
             else if (!strcmp(command,"native close")) { pending=false; request_close(); session.error=false; cycles_left=0; }
             else if (!strcmp(command,"native test 100") && !busy() && native_launcher_is_active()) {
                 cycles_left=100; launch();
@@ -252,11 +292,21 @@ void receive_command()
 }
 }
 bool busy() { return active || pending || cycles_left; }
-void launch() { if (!active && !pending && native_launcher_is_active()) pending=true; }
+void launch() { if (!active && !pending && native_launcher_is_active()) { pending=true; pending_iss=false; } }
+void launch_iss() { if (!active && !pending && native_launcher_is_active()) { pending=true; pending_iss=true; } }
 void poll()
 {
     receive_command();
     if (pending) open_now();
+    if (std::unique_ptr<http::Result> r{http::take_completed()}; r) {
+        bool delivered=active && !session.error && session.http_delivery.deliver(
+            r->generation,session.gate,r->status,r->body,r->size);
+        if (delivered) ++session.callbacks;
+        Serial.printf("[NATIVE HTTP] generation=%u phase=complete status=%ld bytes=%u elapsed_ms=%u delivered=%u\n",
+            r->generation,(long)r->status,r->size,r->elapsed_ms,delivered?1:0);
+        r.reset();
+        sample(delivered?"http-delivered":"http-discarded");
+    }
     if (!active) {
         if (cycles_left && int32_t(millis()-next_cycle_ms)>=0) launch();
         return;

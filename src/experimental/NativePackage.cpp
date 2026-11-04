@@ -15,11 +15,11 @@ bool parse_manifest(const std::string &json, const char *chip, Manifest &out, st
         if (!d[key].is<const char *>() || !d[key].as<const char *>()[0]) return fail(e, "Missing manifest field");
     if (d["chip"].as<std::string>() != chip) return fail(e, "Package is for a different chip");
     if (!d["api_major"].is<unsigned>() || !d["api_minor"].is<unsigned>() ||
-        d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 0)
+        d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 1)
         return fail(e, "Unsupported host API version");
     out = {d["id"].as<std::string>(), d["version"].as<std::string>(), d["executable"].as<std::string>()};
-    if (out.id != "native-demo" || out.version.size() > 32 || out.executable != "app.elf")
-        return fail(e, "Expected native-demo package with app.elf");
+    if ((out.id != "native-demo" && out.id != "native-iss") || out.version.size() > 32 || out.executable != "app.elf")
+        return fail(e, "Expected native-demo or native-iss package with app.elf");
     return true;
 }
 static uint16_t u16(const uint8_t *p) { return p[0] | uint16_t(p[1]) << 8; }

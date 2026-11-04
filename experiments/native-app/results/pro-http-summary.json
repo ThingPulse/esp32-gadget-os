@@ -1,0 +1,104 @@
+{
+  "device": "Color Kit Pro ESP32-S3, 2 MiB PSRAM",
+  "api": "1.1",
+  "automated_sequences": 3,
+  "app_loads": 6,
+  "successful_https_responses": 6,
+  "cancelled_after_unload_and_reopen": 3,
+  "median_success_http_ms": 2030.5,
+  "median_load_us": 29728.0,
+  "median_unload_us": 1843.0,
+  "median_unload_restore_us": 94487.0,
+  "minimum_sampled_cycle_internal_bytes": 122268,
+  "settled_launcher_samples": [
+    {
+      "cycle": 2,
+      "internal": 142404,
+      "largest": 98292,
+      "exec_largest": 98292,
+      "psram": 2069512,
+      "lvgl_free": 33172
+    },
+    {
+      "cycle": 4,
+      "internal": 142216,
+      "largest": 98292,
+      "exec_largest": 98292,
+      "psram": 2069512,
+      "lvgl_free": 33248
+    },
+    {
+      "cycle": 6,
+      "internal": 142356,
+      "largest": 98292,
+      "exec_largest": 98292,
+      "psram": 2069512,
+      "lvgl_free": 33176
+    }
+  ],
+  "http_completions": [
+    {
+      "generation": 1,
+      "status": 200,
+      "bytes": 313,
+      "elapsed_ms": 1729,
+      "delivered": 1
+    },
+    {
+      "generation": 1,
+      "status": -7,
+      "bytes": 0,
+      "elapsed_ms": 2805,
+      "delivered": 0
+    },
+    {
+      "generation": 2,
+      "status": 200,
+      "bytes": 313,
+      "elapsed_ms": 2349,
+      "delivered": 1
+    },
+    {
+      "generation": 3,
+      "status": 200,
+      "bytes": 313,
+      "elapsed_ms": 2366,
+      "delivered": 1
+    },
+    {
+      "generation": 3,
+      "status": -7,
+      "bytes": 0,
+      "elapsed_ms": 1839,
+      "delivered": 0
+    },
+    {
+      "generation": 4,
+      "status": 200,
+      "bytes": 313,
+      "elapsed_ms": 1962,
+      "delivered": 1
+    },
+    {
+      "generation": 5,
+      "status": 200,
+      "bytes": 313,
+      "elapsed_ms": 2099,
+      "delivered": 1
+    },
+    {
+      "generation": 5,
+      "status": -7,
+      "bytes": 0,
+      "elapsed_ms": 2377,
+      "delivered": 0
+    },
+    {
+      "generation": 6,
+      "status": 200,
+      "bytes": 313,
+      "elapsed_ms": 1811,
+      "delivered": 1
+    }
+  ]
+}

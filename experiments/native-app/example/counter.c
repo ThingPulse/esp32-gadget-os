@@ -1,4 +1,5 @@
 #include "gadget_app.h"
+#include <stddef.h>
 static const gadget_host_api *host;
 static gadget_handle label, title;
 static uint32_t count;
@@ -29,10 +30,10 @@ int gadget_app_entry(int argc, char **argv)
     if (argc != 2 || !argv) return -1;
     host = (const gadget_host_api *)argv[0];
     gadget_app_lifecycle *app = (gadget_app_lifecycle *)argv[1];
-    if (!host || host->struct_size < sizeof(*host) || host->major != GADGET_APP_API_MAJOR ||
+    if (!host || host->struct_size < offsetof(gadget_host_api, http_get_json) || host->major != GADGET_APP_API_MAJOR ||
         !app || app->struct_size < sizeof(*app)) return -2;
     app->major = GADGET_APP_API_MAJOR;
-    app->minor = GADGET_APP_API_MINOR;
+    app->minor = 0; /* Counter still only needs API 1.0. */
     app->shutdown = shutdown_app;
     count = 0;
     gadget_handle screen = host->screen_create();

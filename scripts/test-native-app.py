@@ -15,3 +15,12 @@ with tempfile.TemporaryDirectory() as temp:
         'src/experimental/NativePackage.cpp','test/native_app/regression.cpp','-o',str(temp/'test')],check=True)
     subprocess.run([str(temp/'test'),'.pio/native-app-packages/esp32/native-demo/app.elf',
         '.pio/native-app-packages/esp32s3/native-demo/app.elf',str(temp/'demo.so')],check=True)
+    subprocess.run(['cc','-shared','-fPIC',*flags,'-Iexperiments/native-app/sdk',
+        'experiments/native-app/example/iss.c','-o',str(temp/'iss.so')],check=True)
+    subprocess.run(['c++','-std=c++17',*flags,'-DGADGET_OS_NATIVE_APP_LOADER=1',
+        '-Iinclude','-Iexperiments/native-app/sdk','-I'+str(arduino_json),
+        'src/experimental/NativePackage.cpp','src/experimental/NativeJson.cpp',
+        'test/native_app/http.cpp','-o',str(temp/'http-test')],check=True)
+    subprocess.run([str(temp/'http-test'),str(temp/'iss.so'),
+        '.pio/native-app-packages/esp32/native-iss/app.elf',
+        '.pio/native-app-packages/esp32s3/native-iss/app.elf'],check=True)

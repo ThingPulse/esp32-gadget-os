@@ -1,0 +1,101 @@
+{
+  "device": "Color Kit Grande ESP32-D0WD-V3",
+  "api": "1.1",
+  "automated_sequences": 3,
+  "app_loads": 6,
+  "successful_https_responses": 6,
+  "cancelled_after_unload_and_reopen": 3,
+  "median_success_http_ms": 1903.0,
+  "median_load_us": 121941.0,
+  "median_unload_us": 1991.0,
+  "median_unload_restore_us": 160271.0,
+  "minimum_sampled_cycle_internal_bytes": 52312,
+  "settled_launcher_samples": [
+    {
+      "cycle": 2,
+      "internal": 67060,
+      "largest": 49140,
+      "exec_largest": 49140,
+      "psram": 4185972
+    },
+    {
+      "cycle": 4,
+      "internal": 67240,
+      "largest": 49140,
+      "exec_largest": 49140,
+      "psram": 4185972
+    },
+    {
+      "cycle": 6,
+      "internal": 67148,
+      "largest": 49140,
+      "exec_largest": 49140,
+      "psram": 4185972
+    }
+  ],
+  "http_completions": [
+    {
+      "generation": 1,
+      "status": 200,
+      "bytes": 312,
+      "elapsed_ms": 1782,
+      "delivered": 1
+    },
+    {
+      "generation": 1,
+      "status": -7,
+      "bytes": 0,
+      "elapsed_ms": 2237,
+      "delivered": 0
+    },
+    {
+      "generation": 2,
+      "status": 200,
+      "bytes": 309,
+      "elapsed_ms": 3479,
+      "delivered": 1
+    },
+    {
+      "generation": 3,
+      "status": 200,
+      "bytes": 311,
+      "elapsed_ms": 2906,
+      "delivered": 1
+    },
+    {
+      "generation": 3,
+      "status": -7,
+      "bytes": 0,
+      "elapsed_ms": 2139,
+      "delivered": 0
+    },
+    {
+      "generation": 4,
+      "status": 200,
+      "bytes": 312,
+      "elapsed_ms": 1946,
+      "delivered": 1
+    },
+    {
+      "generation": 5,
+      "status": 200,
+      "bytes": 312,
+      "elapsed_ms": 1860,
+      "delivered": 1
+    },
+    {
+      "generation": 5,
+      "status": -7,
+      "bytes": 0,
+      "elapsed_ms": 1928,
+      "delivered": 0
+    },
+    {
+      "generation": 6,
+      "status": 200,
+      "bytes": 309,
+      "elapsed_ms": 1819,
+      "delivered": 1
+    }
+  ]
+}

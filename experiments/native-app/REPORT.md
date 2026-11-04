@@ -1,5 +1,8 @@
 # Native app loader feasibility report
 
+This report records the API 1.0 counter experiment. The API 1.1 independent ISS
+app and asynchronous HTTP follow-up are documented in [HTTP-REPORT.md](HTTP-REPORT.md).
+
 Date: 2026-11-04. Recommendation: **Viable on both chips**, for the tested minimal lifecycle.
 
 Physical Color Kit Grande (classic ESP32-D0WD-V3, 8 MiB flash) and Color Kit

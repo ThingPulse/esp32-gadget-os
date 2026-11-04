@@ -47,11 +47,15 @@ python3 experiments/native-app/build.py --chip esp32 \
   --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
 python3 experiments/native-app/build.py --chip esp32s3 \
   --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
+python3 experiments/native-app/build.py --chip esp32 --app iss \
+  --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
+python3 experiments/native-app/build.py --chip esp32s3 --app iss \
+  --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
 python3 scripts/test-native-app.py
 python3 scripts/test-native-app-cycles.py
 ```
 
-Packages are `.pio/native-app-packages/<chip>/native-demo/{manifest.json,app.elf}`.
+Packages are `.pio/native-app-packages/<chip>/{native-demo,native-iss}/{manifest.json,app.elf}`.
 They are separate build outputs, never firmware byte arrays. `build.py` reports
 executable/package sizes, SHA-256 and compiler identity. The stripped ELF's
 removed `.dynamic` section can cause a readelf diagnostic; the loader uses section
@@ -92,18 +96,21 @@ files to that staging directory first:
 
 ```sh
 mkdir -p .pio/native-app-fs/esp32/apps
-cp -R .pio/native-app-packages/esp32/native-demo .pio/native-app-fs/esp32/apps/
+cp -R .pio/native-app-packages/esp32/native-demo \
+  .pio/native-app-packages/esp32/native-iss .pio/native-app-fs/esp32/apps/
 PLATFORMIO_DATA_DIR="$PWD/.pio/native-app-fs/esp32" \
   pio run -e esp32-color-kit-native-app -t uploadfs --upload-port /dev/cu.YOUR_PORT
 
 mkdir -p .pio/native-app-fs/esp32s3/apps
-cp -R .pio/native-app-packages/esp32s3/native-demo .pio/native-app-fs/esp32s3/apps/
+cp -R .pio/native-app-packages/esp32s3/native-demo \
+  .pio/native-app-packages/esp32s3/native-iss .pio/native-app-fs/esp32s3/apps/
 PLATFORMIO_DATA_DIR="$PWD/.pio/native-app-fs/esp32s3" \
   pio run -e esp32-color-kit-pro-native-app -t uploadfs --upload-port /dev/cu.YOUR_PORT
 ```
 
-At runtime only `/apps/native-demo/manifest.json` and `/apps/native-demo/app.elf`
-are read. Open **Labs → Native demo**. Watch the counter, reset it, then close.
+At runtime the selected app's `manifest.json` and `app.elf` are read from
+`/apps/native-demo` or `/apps/native-iss`. Open **Labs → Native demo** to test the
+counter, or **Labs → ISS Position** for the HTTP app. Reset the counter, then close.
 Reset leaves a visible “Reset received” acknowledgement; reset/close callbacks
 also emit explicit serial messages.
 The launcher is rebuilt without a reboot. Open Calculator and use it afterwards.
@@ -113,7 +120,8 @@ The launcher is rebuilt without a reboot. Open Calculator and use it afterwards.
 `experiments/native-app/sdk/gadget_app.h` is the complete C-compatible boundary.
 The explicit ELF entry `gadget_app_entry(int,char**)` receives two opaque pointers
 in argv: a read-only host table and a writable lifecycle descriptor. They are not
-strings. Both tables contain size/major/minor fields. API 1.0 is supported.
+strings. Both tables contain size/major/minor fields. API 1.1 appends HTTP and
+numeric JSON helpers; API 1.0 counter packages remain supported.
 The manifest rejects wrong chip, missing fields, path traversal and unsupported
 versions. A 2 KiB manifest / 64 KiB ELF limit bounds file-buffer allocations.
 
@@ -181,7 +189,7 @@ open Calculator and verify it still functions after the test.
 
 For invalid-package testing, stage/upload each variant separately: missing
 manifest, `{` malformed JSON, chip changed to the other target, `api_major: 2`,
-`api_minor: 1`, missing ELF, truncated ELF. Each must show a useful error and
+`api_minor: 2`, missing ELF, truncated ELF. Each must show a useful error and
 return via Back without reboot. Restore the valid package afterwards. The
 portable regression tests cover these parsers, truncations, 40,000 mutations,
 nested callback-close gating and 100 desktop dynamic-library demo ABI cycles.
@@ -221,5 +229,57 @@ reject incompatible manifests before load; compatibility across core releases
 has NOT been tested, and filesystem upload/formatting/partition migration can
 remove packages. This experiment does not alter the OTA workflow.
 
-Asynchronous HTTP/JSON is deferred until the basic loader and lifecycle pass on
-hardware. No HTTP callbacks into app code exist in this implementation.
+## Independent ISS Position app (API 1.1)
+
+Install the matching `native-iss` directory under `/apps/native-iss` in LittleFS,
+alongside the counter, using the same upload/backup considerations above.
+Open **Labs → ISS Position** (satellite icon). The separately built app owns
+the endpoint, response fields, formatting, Refresh/Close actions and age label.
+It displays latitude, longitude, altitude and speed from
+[Where the ISS at?](https://wheretheiss.at/w/developer). The built-in ISS pass
+forecast app and its Pollux Labs API are unchanged. No map or installer is added.
+
+The host HTTP wrapper runs on a host-owned 8 KiB FreeRTOS worker stack. It copies
+the URL (maximum 255 bytes), permits HTTPS without redirects, uses the built-in
+CA bundle, and caps the response at 2048 bytes. At most one request is outstanding
+across all sessions, with at least five seconds between starts. Connection/read
+timeouts are five seconds, TLS handshake timeout eight seconds, and body writes
+stop after a 20-second budget. These are transport/inactivity limits, not a hard
+wall-clock deadline for arbitrary DNS/header behaviour. A slow or failing request
+does not block the UI; memory remains owned by the host until it finishes.
+
+Closing clears callback/user pointers immediately and requests cooperative
+transport cancellation. The worker holds only copied data and a generation
+number, never an app callback or an app-owned pointer. It publishes completion
+with release/acquire synchronization after destroying transport objects. The UI
+discards results for closed or older sessions, then frees the result. Unloading
+does not wait for the network. A newly opened app may show “Network busy” until
+the previous worker finishes; Refresh retries. The response pointer is borrowed
+only during its UI-thread callback. JSON helpers accept finite top-level numeric
+fields, return rounded scaled integers and reject overflow/missing/wrong types.
+
+The app fetches on launch and on Refresh, not periodically. It prevents duplicate
+requests, waits five seconds between attempts, and waits a minute after HTTP 429.
+It shows offline, transport and invalid-response errors. Close works while loading.
+The SDK remains a trusted-code experiment, without task/process isolation.
+
+Serial commands `native iss`, `native iss refresh`, and `native iss close` open
+the app and deliver actual LVGL button events. `native close` is a host recovery
+command. `scripts/test-native-app.py` additionally validates both ISS ELFs and
+runs 100 desktop close-pending/unload/reopen cycles with late completions under
+ASan/UBSan, plus success, invalid-response, offline, API-version and rate-limit
+checks. These simulate transport; actual HTTPS/TLS and Xtensa execution require
+the device tests recorded separately in REPORT.md.
+
+With the host and packages installed, run real-network lifecycle tests:
+
+```sh
+python3 experiments/native-app/http-cycles.py --port /dev/cu.YOUR_PORT \
+  --log /tmp/native-http-cycles.log
+```
+
+This runs three successful-fetch/close-during-refresh/reopen/retry sequences.
+It requires working Wi-Fi and the public API. A response that wins the close
+race is reported as a test failure to repeat, not claimed as a cancellation pass.
+The [HTTP follow-up report](HTTP-REPORT.md) separates hardware observations from
+desktop simulations and historical counter results.

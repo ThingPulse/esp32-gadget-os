@@ -2,6 +2,7 @@
 #if GADGET_OS_NATIVE_APP_LOADER
 namespace native_app {
 void launch();
+void launch_iss();
 void poll(); // after lv_task_handler returns, UI thread only
 bool busy();
 }
