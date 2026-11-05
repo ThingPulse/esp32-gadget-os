@@ -51,16 +51,20 @@ Relevant implementation: `include/ColorKitPro.h`, `include/ColorKitGrande.h`,
 `src/user_code.cpp`, and the installed LovyanGFX `Panel_LCD::writePixels`,
 `LGFXBase::create_pc_fast`, and ESP32-S3 `Bus_Parallel16::writePixels/writeBytes`.
 
-## Opt-in change
+## Enabled Pro optimization
 
-`esp32-color-kit-pro-display-test` builds the normal application with:
+Since 2026-11-05, the shared `esp32-color-kit-pro` profile enables
+`GADGET_OS_PRO_DISPLAY_DMA=1`. Both normal and native-app Pro builds use:
 
 - A 64-row internal DMA-capable buffer (40,960 bytes), selected after hardware measurements.
 - One bulk RGB565 byte swap followed by `writePixelsDMA` using `swap565_t`.
 - A synchronous `endWrite` before notifying LVGL that the buffer is reusable.
 - A 32-row internal fallback, then the original eight-row path if internal allocations fail.
 
-The standard Pro target remains unchanged; the faster path is available in the opt-in application target for visual and full-application validation.
+`esp32-color-kit-pro-display-test` remains as a compatibility alias. The historical
+measurement reports describe the earlier opt-in configuration; their timings are
+not fresh measurements of the current firmware. Native-app runtime memory
+headroom with this larger display buffer still needs hardware validation.
 The bus clock, pin mapping, panel initialization, and refresh period are unchanged.
 The transfer helper is shared by the application experiment and the benchmark.
 
