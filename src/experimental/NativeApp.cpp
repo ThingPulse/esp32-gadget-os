@@ -1,4 +1,5 @@
 #if GADGET_OS_NATIVE_APP_LOADER
+#include "experimental/NativeAppStore.h"
 #include "experimental/NativeApp.h"
 #include "services/AppUsage.h"
 #include "experimental/NativePackage.h"
@@ -241,7 +242,7 @@ void receive_command()
                 const unsigned index=!strcmp(command,"native iss refresh")?3:4;
                 if (session.widgets[index].obj) lv_obj_send_event(session.widgets[index].obj,LV_EVENT_CLICKED,nullptr);
             }
-            else if (!strcmp(command,"native close")) { pending=false; request_close(); session.error=false; cycles_left=0; }
+            else if (!strcmp(command,"native close")) { app_store::close(); pending=false; request_close(); session.error=false; cycles_left=0; }
             else if (!strcmp(command,"native test 100") && !busy() && native_launcher_is_active()) {
                 launch(); cycles_left=100;
             }
@@ -253,7 +254,7 @@ void receive_command()
     }
 }
 }
-bool busy() { return active || pending || cycles_left || store::managing(); }
+bool busy() { return active || pending || cycles_left || store::managing() || app_store::active(); }
 bool running(const char *id) {return (active||pending||cycles_left)&&selected_id==id;}
 void launch_id(const char *id) {
     if(!busy()&&native_launcher_is_active()&&id&&valid_app_id(id)){selected_id=id;pending=true;}
@@ -264,6 +265,7 @@ void poll()
 {
     receive_command();
     store::poll();
+    app_store::poll();
     if (pending) open_now();
     if (std::unique_ptr<http::Result> r{http::take_completed()}; r) {
         bool delivered=active && !session.error && session.http_delivery.deliver(

@@ -55,6 +55,7 @@ jobs:
           python scripts/test-native-app.py
           python scripts/test-native-install.py
           python scripts/test-native-signing.py
+          python scripts/test-native-catalog.py
           node scripts/test-native-store-page.mjs
       - name: Load previous immutable catalog
         shell: bash

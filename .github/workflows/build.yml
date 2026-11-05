@@ -109,6 +109,7 @@ jobs:
           python scripts/test-native-app.py
           python scripts/test-native-install.py
           python scripts/test-native-signing.py
+          python scripts/test-native-catalog.py
           node scripts/test-native-store-page.mjs
           c++ -std=c++17 -g -fsanitize=address,undefined -Iinclude test/native_app/usage.cpp -o /tmp/app-usage-test
           /tmp/app-usage-test

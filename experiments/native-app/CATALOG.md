@@ -5,7 +5,32 @@ PlatformIO profiles. Normal firmware does not gain a native-app loader.
 
 ## Delivery and installation
 
-`Labs → Apps` pairs a browser with the device. The browser loads
+The main launcher's **Add apps** tile opens an on-device store. It shows compatible
+apps with descriptions, an explicit Install/Update action, download progress and
+Open after installation. Installed apps appear on the main launcher, which scrolls
+vertically when necessary. Back cancels an in-flight download without installing it.
+No app is installed automatically.
+
+The store checks for new apps after Wi-Fi connects while the launcher is idle,
+then daily (retrying failures after 15 minutes). A **New** badge is based on app IDs,
+not version changes. Visiting a successfully loaded catalog saves the seen IDs in
+NVS, so the badge survives firmware restarts through a fresh catalog check without
+reappearing for the same apps. Users can also explicitly Refresh. Catalog contents
+are cached in RAM only; offline visits can browse that cache during the same boot.
+The screen creates at most four app cards at a time, with More apps/Previous apps
+navigation, to bound LVGL memory use as the catalog grows. Descriptions come from
+`apps.json` when the next catalog is published; older catalogs show a generic
+description and remain compatible.
+
+Downloads run in a worker with TLS certificate validation, no redirects, bounded
+response sizes and socket timeouts. The UI remains available for cancellation.
+Only URLs under the configured HTTPS catalog directory are accepted. Before
+commit, the package's signature, chip/API and identity/version/name are checked;
+Developer mode never allows unsigned on-device-store downloads. Failed updates
+retain the existing package. Storage/capacity/OTA conflicts produce an explanation.
+Removal and custom file uploads remain in the browser manager.
+
+`Labs → Browser apps` pairs a browser with the device. The browser loads
 `https://thingpulse.github.io/esp32-gadget-os/apps/catalog.json`, filters by chip
 and host API, and downloads a compatible package directly from the same static
 GitHub Pages site. It uploads that package through the existing paired device
@@ -14,7 +39,7 @@ installer. File uploads remain available when the catalog is offline.
 The device verifies package integrity, its ECDSA-P256 signature, chip/API
 compatibility and ELF structure before atomic replacement. It verifies again
 when loading the app. Closing an app releases its resources before unloading;
-installed app icons still appear under Labs. Running-app replacement/removal
+installed app icons appear on the main launcher. Running-app replacement/removal
 and OTA conflicts remain blocked.
 
 The catalog contains at most 128 chip variants / 64 KiB. Packages remain bounded
@@ -46,7 +71,7 @@ uses the `APP_SIGNING_PRIVATE_KEY` secret in the protected `app-signing`
 environment. Do not put a private key in repository variables or build logs.
 
 Unsigned installs and execution are rejected by default. **Developer mode can
-only be changed on the device's Apps screen**, not through the browser API. It
+only be changed on the device's Browser apps screen**, not through the browser API. It
 persists until disabled. Existing unsigned packages remain visible/removable
 in the browser, but their launcher icons and execution are disabled when the
 mode is off. Invalid or unknown signatures are rejected even in Developer mode.
@@ -95,6 +120,15 @@ One-time repository setup, **not performed by merely building this branch**:
 A missing catalog returns an explanatory message; local signed uploads still
 work. The release workflow is separate from the existing firmware release job.
 The initial metadata publishes Native Counter 0.1.0 and ISS Position 0.2.0.
+
+On-device store validation (2026-11-05): simulator and both experimental firmware
+profiles compile. Sanitized catalog tests cover chip/API filtering, malformed
+entries, size bounds, duplicate IDs and URL confinement. Existing signed-package,
+catalog publication, browser installer, parser/mutation and asynchronous app
+lifecycle tests pass, as do language and device-check-in regressions. No devices
+were flashed or tested for this change. On-device touch/layout, cancellation,
+installation and runtime memory checks remain pending. The simulator build checks
+that normal builds still exclude the feature; it does not exercise the store UI.
 
 Local commands (using the installed PlatformIO toolchain):
 

@@ -25,6 +25,7 @@ def build(packages, site, base, public):
     catalog=json.loads(index.read_text()) if index.exists() else {'schema':1,'apps':[]}
     if catalog.get('schema')!=1 or not isinstance(catalog.get('apps'),list):raise ValueError('Unsupported existing catalog')
     entries={(a['id'],a['chip']):a for a in catalog['apps']}
+    descriptions={a['id']:a.get('description','') for a in json.loads((ROOT/'experiments/native-app/apps.json').read_text())['apps']}
     files=sorted(packages.glob('*/*.gapp'))
     if not files:raise ValueError('No packages found')
     with tempfile.TemporaryDirectory() as temporary:
@@ -44,6 +45,9 @@ def build(packages, site, base, public):
             image=relative.replace('/packages/','/icons/').replace('.gapp','.png')
             (site/image).parent.mkdir(parents=True,exist_ok=True);(site/image).write_bytes(png(icon))
             entries[(m['id'],m['chip'])]={**{k:m[k] for k in ('id','name','version','chip','api_major','api_minor')},'url':base.rstrip('/')+'/'+relative,'icon':base.rstrip('/')+'/'+image,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+            description=descriptions.get(m['id'],'')
+            if len(description.encode())>240 or any(ord(c)<32 for c in description):raise ValueError('Invalid app description')
+            entries[(m['id'],m['chip'])]['description']=description
     catalog={'schema':1,'apps':sorted(entries.values(),key=lambda a:(a['id'],a['chip']))}
     encoded=json.dumps(catalog,indent=2)+'\n'
     if len(entries)>128 or len(encoded.encode())>65536:raise ValueError('Catalog capacity exceeded')

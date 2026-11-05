@@ -7,6 +7,7 @@
 #include <Preferences.h>
 #include "NativeTrust.h"
 #include "services/AppUsage.h"
+#include "ui/I18n.h"
 #include <src/misc/cache/instance/lv_image_cache.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -20,7 +21,7 @@
 #include <cctype>
 #include "NativeStorePage.inc"
 
-APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Apps",LV_SYMBOL_DOWNLOAD,native_app::store::request_manager,0x237e77,94);
+APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Browser apps",LV_SYMBOL_DOWNLOAD,native_app::store::request_manager,0x237e77,94);
 namespace native_app::store {
 namespace {
 constexpr unsigned MaxApps=8;
@@ -199,6 +200,27 @@ void usage_inventory(JsonArray apps){
     scan();for(unsigned i=0;i<count;++i){Package p;std::string why;auto b=read(path(entries[i].manifest.id).c_str(),p,why);
         if(b&&p.trusted){auto a=apps.add<JsonObject>();a["id"]=std::string("native.")+p.manifest.id;a["version"]=p.manifest.version;}}
 }
+std::vector<Installed> installed(){
+    scan();std::vector<Installed> result;
+    for(unsigned i=0;i<count;++i)result.push_back({entries[i].manifest,entries[i].trusted});
+    return result;
+}
+bool install_signed(const uint8_t *data,size_t size,const Manifest &expected,std::string &why){
+    Package package;
+    if(!validate_package(data,size,chip(),package,why,GADGET_OS_APP_PUBLIC_KEY))return false;
+    if(!package.trusted){why="The app store only accepts signed packages.";return false;}
+    const auto &m=package.manifest;
+    if(m.id!=expected.id||m.version!=expected.version||m.name!=expected.name){why="Package does not match the catalog.";return false;}
+    auto fail=[&](const char *message){why=message;AppUsage::installation(m.id.c_str(),m.version.c_str(),true,false);return false;};
+    if(uploading||native_app::running(m.id.c_str())||ota_busy())return fail("Another installation or OS update is in progress.");
+    scan();if(!LittleFS.exists(path(m.id).c_str())&&count>=MaxApps)return fail("App storage is full. Remove an app using Browser apps in Labs.");
+    if(LittleFS.totalBytes()-LittleFS.usedBytes()<size+8192)return fail("Not enough storage. Remove an app using Browser apps in Labs.");
+    LittleFS.mkdir("/apps");LittleFS.mkdir("/apps/installed");auto file=LittleFS.open(Stage,"w");
+    if(!file)return fail("Could not save the download.");
+    const bool written=file.write(data,size)==size;file.flush();file.close();
+    if(!written||!LittleFS.rename(Stage,path(m.id).c_str())){LittleFS.remove(Stage);return fail("Installation failed; the existing app was retained.");}
+    dirty=true;AppUsage::installation(m.id.c_str(),m.version.c_str(),true,true);return true;
+}
 void create_tiles(lv_obj_t *grid) {
     scan();dirty=false;
     lv_obj_add_flag(grid,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_scroll_dir(grid,LV_DIR_VER);lv_obj_set_scrollbar_mode(grid,LV_SCROLLBAR_MODE_AUTO);
@@ -214,6 +236,8 @@ void create_tiles(lv_obj_t *grid) {
         lv_obj_set_style_bg_opa(tile,LV_OPA_TRANSP,0);lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
         auto *image=lv_image_create(tile);lv_image_set_src(image,&icon->descriptor);lv_obj_align(image,LV_ALIGN_TOP_MID,0,14);
         auto *name=lv_label_create(tile);lv_label_set_text(name,entry.manifest.name.c_str());lv_obj_set_width(name,84);
+        lv_obj_set_style_text_font(name,i18n::font14(),0);lv_obj_set_height(name,2*i18n::font14()->line_height);
+        lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);lv_obj_align(name,LV_ALIGN_BOTTOM_MID,0,0);
         lv_obj_add_event_cb(tile,[](lv_event_t *e){native_app::launch_id(((Icon*)lv_event_get_user_data(e))->id);},LV_EVENT_CLICKED,icon);
         lv_obj_add_event_cb(image,[](lv_event_t *e){auto*p=(Icon*)lv_event_get_user_data(e);lv_image_set_src((lv_obj_t*)lv_event_get_target(e),nullptr);lv_image_cache_drop(&p->descriptor);heap_caps_free(p);},LV_EVENT_DELETE,icon);

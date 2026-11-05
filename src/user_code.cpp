@@ -1,5 +1,6 @@
 #include "experimental/NativeApp.h"
 #include "experimental/NativeStore.h"
+#include "experimental/NativeAppStore.h"
 #include "ui/I18n.h"
 #include "ui/ReleaseNotes.h"
 #include "apps/TransitApp.h"
@@ -1203,6 +1204,9 @@ static void create_home_screen(void)
                         LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
   lv_obj_t *stable_grid = create_app_page(pager, nullptr);
+#if GADGET_OS_NATIVE_APP_LOADER
+  native_app::app_store::create_tile(stable_grid);
+#endif
   const AppRegistry &reg = AppRegistry::instance();
   bool has_experimental_apps = false;
   for (int i = 0; i < reg.count(); ++i) {
@@ -1231,7 +1235,7 @@ static void create_home_screen(void)
     if (target_grid) create_app_tile(target_grid, app, i);
   }
 #if GADGET_OS_NATIVE_APP_LOADER
-  if(labs_grid)native_app::store::create_tiles(labs_grid);
+  native_app::store::create_tiles(stable_grid);
 #endif
 }
 
