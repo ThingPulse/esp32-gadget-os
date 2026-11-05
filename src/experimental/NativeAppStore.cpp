@@ -30,7 +30,7 @@ struct Transfer {
 };
 Transfer *transfer=nullptr;
 bool requested=false,visible=false,closing=false,loaded=false,has_new=false;
-bool background_started=false,redraw=false;
+bool background_started=false,redraw=false,browser_requested=false;
 uint32_t last_check=0;
 int selection=-1;
 size_t page=0;
@@ -39,7 +39,7 @@ std::vector<catalog::Item> items;
 std::vector<store::Installed> installed_apps;
 std::set<std::string> new_ids;
 std::string message,open_id;
-lv_obj_t *content=nullptr,*status_label=nullptr,*progress=nullptr,*badge=nullptr;
+lv_obj_t *content=nullptr,*status_label=nullptr,*progress=nullptr,*badge=nullptr,*refresh_button=nullptr;
 
 bool ota_busy(){auto s=UpdateService::instance().state();return s==UpdateService::State::Downloading||s==UpdateService::State::ReadyToReboot;}
 class Sink:public Stream {
@@ -119,14 +119,17 @@ lv_obj_t *text(lv_obj_t *parent,const char *value,bool small=false){
     lv_obj_set_style_text_color(label,lv_color_hex(small?0xb6c7d8:0xedf4fa),0);return label;
 }
 lv_obj_t *button(lv_obj_t *parent,const char *value,lv_event_cb_t cb,void *data=nullptr){
-    auto *b=lv_button_create(parent);lv_obj_set_size(b,lv_pct(100),54);
+    auto *b=lv_button_create(parent);lv_obj_set_size(b,lv_pct(100),44);
     lv_obj_set_style_bg_color(b,lv_color_hex(0x237e77),0);
     auto *label=lv_label_create(b);lv_label_set_text(label,i18n::tr(value));lv_obj_center(label);
     lv_obj_add_event_cb(b,cb,LV_EVENT_CLICKED,data);return b;
 }
 void render(){
     redraw=false;if(!visible||!content)return;
-    lv_obj_clean(content);progress=nullptr;status_label=text(content,message.c_str(),true);
+    lv_obj_clean(content);progress=nullptr;status_label=nullptr;
+    lv_obj_scroll_to_y(content,0,LV_ANIM_OFF);
+    if(refresh_button){if(transfer)lv_obj_add_state(refresh_button,LV_STATE_DISABLED);else lv_obj_remove_state(refresh_button,LV_STATE_DISABLED);}
+    if(!message.empty())status_label=text(content,message.c_str(),true);
     if(transfer){
         if(transfer->package){progress=lv_bar_create(content);lv_obj_set_size(progress,lv_pct(100),18);}
         text(content,"You can go back to cancel the download.",true);return;
@@ -140,41 +143,63 @@ void render(){
             const auto &item=items[selection];const auto *old=find_installed(item.id);
             if(old&&old->trusted&&old->manifest.version==item.version){open_id=item.id;closing=true;}else start(true);
         });
-        if(!same)text(content,"The download is checked before installation. The app will appear on your main screen.",true);
+        if(!same)text(content,"The app will appear on the Installed apps screen.",true);
         return;
     }
-    button(content,"Refresh",[](lv_event_t*){selection=-1;start();});
     if(loaded&&items.empty())text(content,"No compatible apps are available yet.");
     for(size_t index=page*PageSize;index<std::min(items.size(),(page+1)*PageSize);++index){
-        auto &item=items[index];auto *card=lv_obj_create(content);lv_obj_set_width(card,lv_pct(100));lv_obj_set_height(card,LV_SIZE_CONTENT);
+        auto &item=items[index];auto *card=lv_button_create(content);
+        lv_obj_set_size(card,lv_pct(100),80);
         lv_obj_set_style_bg_color(card,lv_color_hex(0x213247),0);lv_obj_set_style_border_width(card,0,0);
-        lv_obj_set_flex_flow(card,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(card,12,0);
-        text(card,LV_SYMBOL_DOWNLOAD,true);text(card,item.name.c_str());text(card,item.description.c_str(),true);
+        lv_obj_set_style_shadow_width(card,0,0);lv_obj_set_style_pad_all(card,10,0);
+        auto *name=lv_label_create(card);lv_label_set_text(name,item.name.c_str());
+        lv_obj_set_style_text_font(name,i18n::font24(),0);lv_obj_set_width(name,lv_pct(88));
+        lv_obj_set_height(name,30);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
+        lv_obj_align(name,LV_ALIGN_TOP_LEFT,0,0);
         const auto *old=find_installed(item.id);const bool same=old&&old->trusted&&old->manifest.version==item.version;
-        if(new_ids.count(item.id)&&!old)text(card,"New",true);
-        button(card,same?"Open app":"View app",[](lv_event_t *e){
-            selection=int(intptr_t(lv_event_get_user_data(e)));const auto &item=items[selection];const auto *old=find_installed(item.id);
-            if(old&&old->trusted&&old->manifest.version==item.version){open_id=item.id;closing=true;}else redraw=true;
-        },(void*)intptr_t(index));
+        const char *state=same?"Installed":old?"Update available":new_ids.count(item.id)?"New":"View app";
+        auto *detail=lv_label_create(card);lv_label_set_text(detail,i18n::tr(state));
+        lv_obj_set_style_text_font(detail,i18n::font14(),0);lv_obj_set_style_text_color(detail,lv_color_hex(0x67e6c3),0);
+        lv_obj_align(detail,LV_ALIGN_BOTTOM_LEFT,0,0);
+        auto *arrow=lv_label_create(card);lv_label_set_text(arrow,LV_SYMBOL_RIGHT);lv_obj_align(arrow,LV_ALIGN_RIGHT_MID,0,0);
+        lv_obj_add_event_cb(card,[](lv_event_t *e){
+            selection=int(intptr_t(lv_event_get_user_data(e)));message.clear();redraw=true;
+        },LV_EVENT_CLICKED,(void*)intptr_t(index));
     }
     if(items.size()>PageSize){
         text(content,("Page "+std::to_string(page+1)+" / "+std::to_string((items.size()+PageSize-1)/PageSize)).c_str(),true);
         if(page)button(content,"Previous apps",[](lv_event_t*){--page;redraw=true;});
         if((page+1)*PageSize<items.size())button(content,"More apps",[](lv_event_t*){++page;redraw=true;});
     }
+    auto *browser=button(content,"Browser installation",[](lv_event_t*){browser_requested=true;closing=true;});
+    lv_obj_set_style_bg_opa(browser,LV_OPA_TRANSP,0);
+    lv_obj_set_style_shadow_width(browser,0,0);
 }
 void show(){
     requested=false;visible=true;selection=-1;page=0;native_launcher_release();
     auto *screen=lv_screen_active();lv_obj_set_style_bg_color(screen,lv_color_hex(0x172131),0);
-    lv_obj_set_style_pad_all(screen,12,0);lv_obj_set_flex_flow(screen,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(screen,0,0);lv_obj_set_style_border_width(screen,0,0);
     lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
-    button(screen,"Back",[](lv_event_t*){if(selection>=0&&!transfer){selection=-1;message.clear();redraw=true;}else closing=true;});
-    auto *title=text(screen,"Add apps");lv_obj_set_style_text_font(title,i18n::font24(),0);
-    content=lv_obj_create(screen);lv_obj_set_width(content,lv_pct(100));lv_obj_set_flex_grow(content,1);
-    lv_obj_set_style_pad_all(content,0,0);lv_obj_set_style_border_width(content,0,0);lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0);
+    auto *bar=lv_obj_create(screen);lv_obj_set_size(bar,lv_pct(100),44);lv_obj_set_pos(bar,0,0);
+    lv_obj_remove_flag(bar,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_style_pad_all(bar,0,0);
+    lv_obj_set_style_bg_color(bar,lv_color_hex(0x14162a),0);lv_obj_set_style_border_width(bar,0,0);lv_obj_set_style_radius(bar,0,0);
+    auto nav=[&](const char *symbol,lv_align_t alignment,lv_event_cb_t action){
+        auto *b=lv_button_create(bar);lv_obj_set_size(b,56,44);lv_obj_align(b,alignment,alignment==LV_ALIGN_LEFT_MID?4:-4,0);
+        lv_obj_set_style_bg_opa(b,LV_OPA_TRANSP,0);lv_obj_set_style_shadow_width(b,0,0);lv_obj_set_style_border_width(b,0,0);
+        auto *label=lv_label_create(b);lv_label_set_text(label,symbol);lv_obj_center(label);
+        lv_obj_add_event_cb(b,action,LV_EVENT_CLICKED,nullptr);return b;
+    };
+    nav(LV_SYMBOL_LEFT,LV_ALIGN_LEFT_MID,[](lv_event_t*){if(selection>=0&&!transfer){selection=-1;message.clear();redraw=true;}else closing=true;});
+    refresh_button=nav(LV_SYMBOL_REFRESH,LV_ALIGN_RIGHT_MID,[](lv_event_t*){selection=-1;page=0;start();});
+    auto *title=lv_label_create(bar);lv_label_set_text(title,i18n::tr("Add apps"));
+    lv_obj_set_style_text_color(title,lv_color_hex(0x63e6be),0);lv_obj_center(title);
+    content=lv_obj_create(screen);lv_obj_set_pos(content,0,44);
+    lv_obj_set_size(content,lv_pct(100),lv_display_get_vertical_resolution(nullptr)-44);
+    lv_obj_set_style_pad_all(content,10,0);lv_obj_set_style_pad_row(content,8,0);
+    lv_obj_set_style_border_width(content,0,0);lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0);
     lv_obj_set_flex_flow(content,LV_FLEX_FLOW_COLUMN);lv_obj_set_scroll_dir(content,LV_DIR_VER);
     installed_apps=store::installed();
-    if(loaded){remember_catalog(true);message="Choose an app to add to your main screen.";}
+    if(loaded){remember_catalog(true);message.clear();}
     else if(!transfer)start();
     redraw=true;
 }
@@ -198,7 +223,8 @@ void poll(){
     if(requested)show();
     if(closing){
         closing=false;requested=false;visible=false;if(transfer)transfer->cancelled.store(true);
-        content=status_label=progress=nullptr;native_launcher_restore();
+        content=status_label=progress=refresh_button=nullptr;native_launcher_restore();
+        if(browser_requested){browser_requested=false;store::request_manager();}
         if(!open_id.empty()){auto id=open_id;open_id.clear();native_app::launch_id(id.c_str());}
     }
     if(transfer&&!visible&&(!native_launcher_is_active()||native_app::busy()||ota_busy()))transfer->cancelled.store(true);
@@ -209,14 +235,14 @@ void poll(){
             else if(t->package){
                 Manifest expected{t->item.id,t->item.version,"app.elf",t->item.name};
                 if(store::install_signed(t->bytes,t->size,expected,message)){
-                    message="Installed. Your app is on the main screen.";installed_apps=store::installed();
+                    message="Installed. Find it on the Installed apps screen.";installed_apps=store::installed();
                 }
             }else {
                 std::vector<catalog::Item> next;
                 if(catalog::parse((char*)t->bytes,t->size,store::chip(),GADGET_OS_APP_CATALOG_URL,next,message)){
                     items=std::move(next);loaded=true;selection=-1;page=0;remember_catalog(visible);
                     std::stable_sort(items.begin(),items.end(),[](const auto &a,const auto &b){return new_ids.count(a.id)>new_ids.count(b.id);});
-                    message="Choose an app to add to your main screen.";
+                    message.clear();
                 }
             }
         }

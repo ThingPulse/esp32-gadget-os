@@ -4,7 +4,7 @@
 
 Gadget OS is an LVGL-based application shell for ThingPulse Color Kit devices. It provides a touch-oriented home screen, persistent settings, background network services, and a native SDL simulator for developing the UI without flashing hardware.
 
-The project is under active development. The main launcher includes Weather, Planes, Transit, Stocks, Calculator, and Settings. Experimental apps remain on the Labs page.
+The project is under active development. The main launcher contains the bundled apps. App-enabled experimental builds also include Add apps and a separate Installed apps page.
 
 For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 
@@ -23,8 +23,8 @@ builds and is not a production app platform.
 
 ## Features
 
-- Swipeable app launcher with active and experimental apps
-- Home Assistant dashboard in Labs: configurable pages for lights, switches, sensors, scenes and scripts, with local browser setup and on-demand, filtered entity search
+- App-enabled builds separate bundled apps and installed apps into two swipeable launcher pages
+- Home Assistant dashboard: configurable pages for lights, switches, sensors, scenes and scripts, with local browser setup and on-demand, filtered entity search
 - Weather for multiple saved locations, hourly and daily forecasts, cached results, and pull-to-refresh
 - Nearby-aircraft radar, plain-language spotting cards, flight-details dialog, and route enrichment
 - Calculator

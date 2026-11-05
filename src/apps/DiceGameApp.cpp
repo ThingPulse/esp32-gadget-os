@@ -9,8 +9,6 @@
 #include <cstdio>
 #include <cstring>
 
-APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Dice Score", LV_SYMBOL_LOOP,
-                                     dice_game_app_launch, 0x845ef7, 30);
 
 namespace {
 

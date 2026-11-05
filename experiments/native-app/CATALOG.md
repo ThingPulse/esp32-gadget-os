@@ -7,8 +7,10 @@ PlatformIO profiles. Normal firmware does not gain a native-app loader.
 
 The main launcher's **Add apps** tile opens an on-device store. It shows compatible
 apps with descriptions, an explicit Install/Update action, download progress and
-Open after installation. Installed apps appear on the main launcher, which scrolls
-vertically when necessary. Back cancels an in-flight download without installing it.
+Open after installation. The first launcher page contains bundled apps and Add
+apps; downloaded apps appear on the second page, titled Installed apps. The eight
+installed-app slots fit without vertical scrolling. Dice Score and Weather Icons
+are no longer registered in the launcher. Back cancels an in-flight download without installing it.
 No app is installed automatically.
 
 The store checks for new apps after Wi-Fi connects while the launcher is idle,
@@ -17,10 +19,18 @@ not version changes. Visiting a successfully loaded catalog saves the seen IDs i
 NVS, so the badge survives firmware restarts through a fresh catalog check without
 reappearing for the same apps. Users can also explicitly Refresh. Catalog contents
 are cached in RAM only; offline visits can browse that cache during the same boot.
-The screen creates at most four app cards at a time, with More apps/Previous apps
+The screen uses the Weather-style 44-pixel top bar, a back arrow on the left and
+a refresh icon on the right. Tappable 80-pixel rows show the app name and status;
+descriptions and Install/Open actions are in the detail view. The screen creates
+at most four app rows at a time, with More apps/Previous apps
 navigation, to bound LVGL memory use as the catalog grows. Descriptions come from
 `apps.json` when the next catalog is published; older catalogs show a generic
 description and remain compatible.
+
+Desktop-rendered UI previews using sample catalogue data:
+[compact list](../../docs/previews/native-app-store.png) and
+[app details](../../docs/previews/native-app-details.png). These exercise the store's
+layout code with transport stubbed, not downloads or touch on physical hardware.
 
 Downloads run in a worker with TLS certificate validation, no redirects, bounded
 response sizes and socket timeouts. The UI remains available for cancellation.
@@ -30,7 +40,7 @@ Developer mode never allows unsigned on-device-store downloads. Failed updates
 retain the existing package. Storage/capacity/OTA conflicts produce an explanation.
 Removal and custom file uploads remain in the browser manager.
 
-`Labs → Browser apps` pairs a browser with the device. The browser loads
+`Add apps → Browser installation` pairs a browser with the device. The browser loads
 `https://thingpulse.github.io/esp32-gadget-os/apps/catalog.json`, filters by chip
 and host API, and downloads a compatible package directly from the same static
 GitHub Pages site. It uploads that package through the existing paired device
@@ -39,7 +49,7 @@ installer. File uploads remain available when the catalog is offline.
 The device verifies package integrity, its ECDSA-P256 signature, chip/API
 compatibility and ELF structure before atomic replacement. It verifies again
 when loading the app. Closing an app releases its resources before unloading;
-installed app icons appear on the main launcher. Running-app replacement/removal
+installed app icons appear on the Installed apps page. Running-app replacement/removal
 and OTA conflicts remain blocked.
 
 The catalog contains at most 128 chip variants / 64 KiB. Packages remain bounded

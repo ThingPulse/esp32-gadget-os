@@ -21,7 +21,6 @@
 #include <cctype>
 #include "NativeStorePage.inc"
 
-APP_REGISTER_EXPERIMENTAL_COLOR_RANK("Browser apps",LV_SYMBOL_DOWNLOAD,native_app::store::request_manager,0x237e77,94);
 namespace native_app::store {
 namespace {
 constexpr unsigned MaxApps=8;
@@ -213,8 +212,8 @@ bool install_signed(const uint8_t *data,size_t size,const Manifest &expected,std
     if(m.id!=expected.id||m.version!=expected.version||m.name!=expected.name){why="Package does not match the catalog.";return false;}
     auto fail=[&](const char *message){why=message;AppUsage::installation(m.id.c_str(),m.version.c_str(),true,false);return false;};
     if(uploading||native_app::running(m.id.c_str())||ota_busy())return fail("Another installation or OS update is in progress.");
-    scan();if(!LittleFS.exists(path(m.id).c_str())&&count>=MaxApps)return fail("App storage is full. Remove an app using Browser apps in Labs.");
-    if(LittleFS.totalBytes()-LittleFS.usedBytes()<size+8192)return fail("Not enough storage. Remove an app using Browser apps in Labs.");
+    scan();if(!LittleFS.exists(path(m.id).c_str())&&count>=MaxApps)return fail("App storage is full. Remove an app using Browser installation in Add apps.");
+    if(LittleFS.totalBytes()-LittleFS.usedBytes()<size+8192)return fail("Not enough storage. Remove an app using Browser installation in Add apps.");
     LittleFS.mkdir("/apps");LittleFS.mkdir("/apps/installed");auto file=LittleFS.open(Stage,"w");
     if(!file)return fail("Could not save the download.");
     const bool written=file.write(data,size)==size;file.flush();file.close();
@@ -223,7 +222,11 @@ bool install_signed(const uint8_t *data,size_t size,const Manifest &expected,std
 }
 void create_tiles(lv_obj_t *grid) {
     scan();dirty=false;
-    lv_obj_add_flag(grid,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_scroll_dir(grid,LV_DIR_VER);lv_obj_set_scrollbar_mode(grid,LV_SCROLLBAR_MODE_AUTO);
+    if(!count){
+        auto *empty=lv_label_create(grid);lv_obj_set_width(empty,lv_pct(100));
+        lv_label_set_text(empty,i18n::tr("No apps installed yet. Open Add apps on the first screen."));
+        lv_obj_set_style_text_font(empty,i18n::font14(),0);
+    }
     for(unsigned i=0;i<count;++i){auto &entry=entries[i];if(!entry.trusted&&!developer_mode())continue;
         auto *icon=(Icon*)heap_caps_calloc(1,sizeof(Icon),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
         if(!icon)continue;

@@ -1208,34 +1208,23 @@ static void create_home_screen(void)
   native_app::app_store::create_tile(stable_grid);
 #endif
   const AppRegistry &reg = AppRegistry::instance();
-  bool has_experimental_apps = false;
-  for (int i = 0; i < reg.count(); ++i) {
-    if (reg.apps()[i].availability == AppAvailability::Experimental) {
-      has_experimental_apps = true;
-      break;
-    }
-  }
-  lv_obj_t *labs_grid = has_experimental_apps
-                            ? create_app_page(pager, i18n::tr("Labs  -  swipe right to return"))
-                            : nullptr;
-
-  if (has_experimental_apps) {
+#if GADGET_OS_NATIVE_APP_LOADER
+  lv_obj_t *installed_grid = create_app_page(pager, i18n::tr("Installed apps"));
+  {
     lv_obj_t *indicator = lv_label_create(scr);
     lv_label_set_text(indicator, "1 / 2");
     lv_obj_set_style_text_color(indicator, lv_color_hex(0x868e96), 0);
     lv_obj_align(indicator, LV_ALIGN_BOTTOM_MID, 0, -2);
     lv_obj_add_event_cb(pager, home_pager_scrolled, LV_EVENT_SCROLL, indicator);
   }
+#endif
 
   for (int i = 0; i < reg.count(); i++) {
     const App &app = reg.apps()[i];
-    lv_obj_t *target_grid = app.availability == AppAvailability::Experimental
-                                ? labs_grid
-                                : stable_grid;
-    if (target_grid) create_app_tile(target_grid, app, i);
+    create_app_tile(stable_grid, app, i);
   }
 #if GADGET_OS_NATIVE_APP_LOADER
-  native_app::store::create_tiles(stable_grid);
+  native_app::store::create_tiles(installed_grid);
 #endif
 }
 
