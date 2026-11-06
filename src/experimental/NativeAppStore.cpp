@@ -39,7 +39,8 @@ constexpr size_t PageSize=4;
 std::vector<catalog::Item> items;
 std::vector<store::Installed> installed_apps;
 std::set<std::string> new_ids;
-std::string message,open_id;
+std::string message,open_id,remove_id;
+bool installed_view=false;
 lv_obj_t *content=nullptr,*status_label=nullptr,*progress=nullptr,*badge=nullptr,*refresh_button=nullptr;
 
 bool ota_busy(){auto s=UpdateService::instance().state();return s==UpdateService::State::Downloading||s==UpdateService::State::ReadyToReboot;}
@@ -131,6 +132,37 @@ void render(){
     lv_obj_scroll_to_y(content,0,LV_ANIM_OFF);
     if(refresh_button){if(transfer)lv_obj_add_state(refresh_button,LV_STATE_DISABLED);else lv_obj_remove_state(refresh_button,LV_STATE_DISABLED);}
     if(!message.empty())status_label=text(content,message.c_str(),true);
+    if(!remove_id.empty()){
+        const auto *app=find_installed(remove_id);
+        text(content,"Remove app?");
+        text(content,app?app->manifest.name.c_str():remove_id.c_str());
+        text(content,"This removes the app and its saved settings and cache.",true);
+        auto *remove=button(content,"Remove",[](lv_event_t*){
+            std::string why;
+            if(store::uninstall(remove_id,why)){
+                message="App removed.";remove_id.clear();installed_apps=store::installed();
+            }else message=why;
+            redraw=true;
+        });
+        lv_obj_set_style_bg_color(remove,lv_color_hex(0x963e49),0);
+        button(content,"Cancel",[](lv_event_t*){remove_id.clear();message.clear();redraw=true;});
+        return;
+    }
+    if(installed_view){
+        text(content,"Installed apps");
+        if(installed_apps.empty())text(content,"No installed apps.",true);
+        for(size_t i=0;i<installed_apps.size();++i){
+            button(content,installed_apps[i].manifest.name.c_str(),[](lv_event_t *e){
+                const auto index=size_t(intptr_t(lv_event_get_user_data(e)));
+                if(index<installed_apps.size()){remove_id=installed_apps[index].manifest.id;message.clear();redraw=true;}
+            },(void*)intptr_t(i));
+        }
+        text(content,"Select an app to remove it.",true);
+        return;
+    }
+    if(selection<0)button(content,"Installed apps",[](lv_event_t*){
+        installed_apps=store::installed();installed_view=true;message.clear();redraw=true;
+    });
     if(transfer){
         if(transfer->package){progress=lv_bar_create(content);lv_obj_set_size(progress,lv_pct(100),18);}
         text(content,"You can go back to cancel the download.",true);return;
@@ -144,6 +176,7 @@ void render(){
             const auto &item=items[selection];const auto *old=find_installed(item.id);
             if(old&&old->trusted&&old->manifest.version==item.version){open_id=item.id;closing=true;}else start(true);
         });
+        if(old)button(content,"Remove",[](lv_event_t*){remove_id=items[selection].id;message.clear();redraw=true;});
         if(!same)text(content,"The app will appear on the Installed apps screen.",true);
         return;
     }
@@ -178,7 +211,7 @@ void render(){
     lv_obj_set_style_shadow_width(browser,0,0);
 }
 void show(){
-    requested=false;visible=true;selection=-1;page=0;native_launcher_release();
+    requested=false;visible=true;selection=-1;page=0;installed_view=false;remove_id.clear();native_launcher_release();
     auto *screen=lv_screen_active();lv_obj_set_style_bg_color(screen,lv_color_hex(0x172131),0);
     lv_obj_set_style_pad_all(screen,0,0);lv_obj_set_style_border_width(screen,0,0);
     lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
@@ -191,8 +224,8 @@ void show(){
         auto *label=lv_label_create(b);lv_label_set_text(label,symbol);lv_obj_center(label);
         lv_obj_add_event_cb(b,action,LV_EVENT_CLICKED,nullptr);return b;
     };
-    nav(LV_SYMBOL_LEFT,LV_ALIGN_LEFT_MID,[](lv_event_t*){if(selection>=0&&!transfer){selection=-1;message.clear();redraw=true;}else closing=true;});
-    refresh_button=nav(LV_SYMBOL_REFRESH,LV_ALIGN_RIGHT_MID,[](lv_event_t*){selection=-1;page=0;start();});
+    nav(LV_SYMBOL_LEFT,LV_ALIGN_LEFT_MID,[](lv_event_t*){if(!remove_id.empty()){remove_id.clear();message.clear();redraw=true;}else if(installed_view){installed_view=false;message.clear();redraw=true;}else if(selection>=0&&!transfer){selection=-1;message.clear();redraw=true;}else closing=true;});
+    refresh_button=nav(LV_SYMBOL_REFRESH,LV_ALIGN_RIGHT_MID,[](lv_event_t*){selection=-1;page=0;installed_view=false;remove_id.clear();start();});
     auto *title=lv_label_create(bar);lv_label_set_text(title,i18n::tr("Add apps"));
     lv_obj_set_style_text_color(title,lv_color_hex(0x63e6be),0);lv_obj_center(title);
     content=lv_obj_create(screen);lv_obj_set_pos(content,0,44);

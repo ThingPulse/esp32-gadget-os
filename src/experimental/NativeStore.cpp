@@ -120,14 +120,9 @@ void parse_headers() {
     if(method=="GET"&&route=="/api/apps"&&length==0){list();return;}
     if(method=="DELETE"&&route.rfind("/api/apps/",0)==0&&length==0){
         auto id=route.substr(10);
-        if(!valid_app_id(id)){error(400,"Invalid app ID.");return;}
-        if(native_app::running(id.c_str())||ota_busy()){error(409,"Close the running app or finish the OS update first.");return;}
-        if(!LittleFS.exists(path(id).c_str())){error(404,"App not installed.");return;}
-        if(!LittleFS.remove(path(id).c_str())){error(507,"Could not remove app.");return;}
-        LittleFS.remove((std::string("/apps/settings/")+id+".json").c_str());
-        LittleFS.remove((std::string("/apps/settings/")+id+".json.tmp").c_str());
-        services::erase_cache(id.c_str());
-        dirty=true;respond(200,"{\"ok\":true}");return;
+        std::string why;
+        if(!uninstall(id,why)){error(409,why.c_str());return;}
+        respond(200,"{\"ok\":true}");return;
     }
     if(method!="POST"||route!="/api/install"){error(405,"Unsupported request.");return;}
     if(!has_length||length<package_header_bytes||length>max_package_bytes){error(413,"Invalid package size.");return;}
@@ -208,6 +203,18 @@ std::vector<Installed> installed(){
     for(unsigned i=0;i<count;++i)result.push_back({entries[i].manifest,entries[i].trusted});
     return result;
 }
+bool uninstall(const std::string &id,std::string &why){
+    if(!valid_app_id(id)){why="Invalid app ID.";return false;}
+    if(uploading||native_app::running(id.c_str())||ota_busy()){
+        why="Close the running app or finish the OS update first.";return false;
+    }
+    if(!LittleFS.exists(path(id).c_str())){why="App not installed.";return false;}
+    if(!LittleFS.remove(path(id).c_str())){why="Could not remove app.";return false;}
+    LittleFS.remove((std::string("/apps/settings/")+id+".json").c_str());
+    LittleFS.remove((std::string("/apps/settings/")+id+".json.tmp").c_str());
+    services::erase_cache(id.c_str());
+    dirty=true;return true;
+}
 bool install_signed(const uint8_t *data,size_t size,const Manifest &expected,std::string &why){
     Package package;
     if(!validate_package(data,size,chip(),package,why,GADGET_OS_APP_PUBLIC_KEY))return false;
@@ -216,8 +223,8 @@ bool install_signed(const uint8_t *data,size_t size,const Manifest &expected,std
     if(m.id!=expected.id||m.version!=expected.version||m.name!=expected.name){why="Package does not match the catalog.";return false;}
     auto fail=[&](const char *message){why=message;AppUsage::installation(m.id.c_str(),m.version.c_str(),true,false);return false;};
     if(uploading||native_app::running(m.id.c_str())||ota_busy())return fail("Another installation or OS update is in progress.");
-    scan();if(!LittleFS.exists(path(m.id).c_str())&&count>=MaxApps)return fail("App storage is full. Remove an app using Browser installation in Add apps.");
-    if(LittleFS.totalBytes()-LittleFS.usedBytes()<size+8192)return fail("Not enough storage. Remove an app using Browser installation in Add apps.");
+    scan();if(!LittleFS.exists(path(m.id).c_str())&&count>=MaxApps)return fail("App storage is full. Remove an app in Add apps.");
+    if(LittleFS.totalBytes()-LittleFS.usedBytes()<size+8192)return fail("Not enough storage. Remove an app in Add apps.");
     LittleFS.mkdir("/apps");LittleFS.mkdir("/apps/installed");auto file=LittleFS.open(Stage,"w");
     if(!file)return fail("Could not save the download.");
     const bool written=file.write(data,size)==size;file.flush();file.close();

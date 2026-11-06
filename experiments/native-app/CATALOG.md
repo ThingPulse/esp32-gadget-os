@@ -13,6 +13,13 @@ installed-app slots fit without vertical scrolling. Dice Score and Weather Icons
 are no longer registered in the launcher. Back cancels an in-flight download without installing it.
 No app is installed automatically.
 
+To uninstall on the device, open **Add apps → Installed apps**, select an app,
+then confirm **Remove**. This list also includes retired and locally uploaded apps
+and works without a catalogue connection. Installed catalogue entries also offer
+Remove in their detail view. Confirmation explains that saved app settings and
+cache are deleted; Cancel or Back leaves the app installed. Browser removal uses
+the same cleanup operation. Running apps and active OS updates block removal.
+
 The store checks for new apps after Wi-Fi connects while the launcher is idle,
 then daily (retrying failures after 15 minutes). A **New** badge is based on app IDs,
 not version changes. Visiting a successfully loaded catalog saves the seen IDs in
