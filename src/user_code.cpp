@@ -1042,6 +1042,14 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data)
 #endif
   {
     pressed = lcd.getTouch(&tp);
+#if defined(ARDUINO) && GADGET_OS_NATIVE_APP_LOADER
+    if(native_app::trace_enabled()){
+      static bool previous=false;static uint32_t last=0,report=0,max_gap=0;
+      const uint32_t now=millis();if(last)max_gap=std::max(max_gap,now-last);last=now;
+      if(pressed!=previous){Serial.printf("[TOUCH] state=%u x=%d y=%d\n",unsigned(pressed),int(tp.x),int(tp.y));previous=pressed;}
+      if(now-report>=2000){Serial.printf("[TOUCH] max_poll_gap_ms=%u\n",unsigned(max_gap));report=now;max_gap=0;}
+    }
+#endif
   }
 
   if (pressed) {
@@ -1320,6 +1328,11 @@ void setup(void)
 {
 #if GADGET_OS_NATIVE_APP_LOADER
   Serial.begin(115200);
+#if defined(COLOR_KIT_PRO) && ARDUINO_USB_MODE == 1 && ARDUINO_USB_CDC_ON_BOOT
+  // HWCDC can otherwise wait ~2 seconds per write when a USB host is connected
+  // but not draining serial. Logging must never stall display/input processing.
+  Serial.setTxTimeoutMs(0);
+#endif
 #endif
 #if defined(COLOR_KIT_PRO) && defined(ARDUINO) && defined(ESP_PLATFORM)
   pro_power_begin();

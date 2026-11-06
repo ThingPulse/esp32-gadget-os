@@ -68,7 +68,7 @@ void scan() {
     std::sort(entries,entries+count,[](const Entry&a,const Entry&b){return a.manifest.name<b.manifest.name;});
 }
 void list() {
-    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=1;
+    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=4;
     auto apps=d["apps"].to<JsonArray>();
     for(unsigned i=0;i<count;++i){auto a=apps.add<JsonObject>();auto &m=entries[i].manifest;
         a["trusted"]=entries[i].trusted;a["id"]=m.id;a["name"]=m.name;a["version"]=m.version;a["running"]=native_app::running(m.id.c_str());}
@@ -123,6 +123,8 @@ void parse_headers() {
         if(native_app::running(id.c_str())||ota_busy()){error(409,"Close the running app or finish the OS update first.");return;}
         if(!LittleFS.exists(path(id).c_str())){error(404,"App not installed.");return;}
         if(!LittleFS.remove(path(id).c_str())){error(507,"Could not remove app.");return;}
+        LittleFS.remove((std::string("/apps/settings/")+id+".json").c_str());
+        LittleFS.remove((std::string("/apps/settings/")+id+".json.tmp").c_str());
         dirty=true;respond(200,"{\"ok\":true}");return;
     }
     if(method!="POST"||route!="/api/install"){error(405,"Unsupported request.");return;}
@@ -236,7 +238,7 @@ void create_tiles(lv_obj_t *grid) {
         icon->descriptor.header.cf=LV_COLOR_FORMAT_RGB565;icon->descriptor.header.w=40;icon->descriptor.header.h=40;
         icon->descriptor.header.stride=80;icon->descriptor.data_size=package_icon_bytes;icon->descriptor.data=icon->pixels;
         auto *tile=lv_button_create(grid);lv_obj_set_size(tile,88,112);
-        lv_obj_set_style_bg_opa(tile,LV_OPA_TRANSP,0);lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
+        lv_obj_set_style_bg_opa(tile,LV_OPA_TRANSP,0);lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,LV_STATE_PRESSED);lv_obj_set_style_bg_color(tile,lv_color_hex(0x38706f),LV_STATE_PRESSED);lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
         auto *image=lv_image_create(tile);lv_image_set_src(image,&icon->descriptor);lv_obj_align(image,LV_ALIGN_TOP_MID,0,14);
         auto *name=lv_label_create(tile);lv_label_set_text(name,entry.manifest.name.c_str());lv_obj_set_width(name,84);
         lv_obj_set_style_text_font(name,i18n::font14(),0);lv_obj_set_height(name,2*i18n::font14()->line_height);

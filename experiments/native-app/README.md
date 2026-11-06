@@ -7,6 +7,36 @@ packages. Manifest, ELF and SHA-256 checks do not authenticate executable code.
 Current browser-installation results are in [INSTALLREPORT.md](INSTALLREPORT.md).
 The earlier feasibility/HTTP reports describe the preceding stages.
 
+## Agent Usage prototype
+
+See [Agent Usage setup and testing](../../tools/agent-usage/README.md) for the
+Codex/Claude allowance app, simulator preview, private companion and `.gapp`
+installation steps. It is not yet published in the catalogue.
+
+## UI and settings API 1.2
+
+The host table keeps its API 1.0/1.1 prefix unchanged. API 1.2 appends a UI table
+and per-app settings getters/setters. Existing packages remain compatible;
+Agent Usage 0.3.0 declares minor version 3 (local companion support) and requires an updated host firmware.
+
+The UI table supports opaque root/container/label/button/bar handles, pixel
+bounds, row/column layout, padding/gaps, semantic styles, mutable text, progress,
+visibility and selection. Styles provide the shared navy/mint theme, 14/24/32px
+text, cards, tabs and back/refresh icons. `NativeUi.cpp` is used by both device
+and simulator. Limits: 64 widgets including root, depth 8, 160-byte text. The
+root replaces the legacy automatic column layout. UI callbacks still use the
+host's closure gate; the host deletes the UI tree before unloading app code.
+
+Settings are strings scoped to the installed app ID: up to eight keys of
+24 characters (`[a-z0-9_]`), values up to 255 bytes, serialized document at most
+2400 bytes. Writes replace a temporary file atomically and skip unchanged
+values. Device files live under `/apps/settings/`; simulator files under
+`.pio/native-app-settings/`. Updates retain settings; browser uninstall removes
+them. This is API-level separation, not a security sandbox for native code.
+
+Run `python3 scripts/test-native-ui.py` after a native build to test the actual
+shared renderer and produce `.pio/ui-previews/agent-usage-*.png` screenshots.
+
 ## Architecture and scope
 
 The existing PlatformIO/pioarduino 55.03.312-1 setup uses Arduino-ESP32 3.3.12,
@@ -220,7 +250,7 @@ open Calculator and verify it still functions after the test.
 
 For invalid-package testing, stage/upload each variant separately: missing
 manifest, `{` malformed JSON, chip changed to the other target, `api_major: 2`,
-`api_minor: 2`, missing ELF, truncated ELF. Each must show a useful error and
+`api_minor: 3`, missing ELF, truncated ELF. Each must show a useful error and
 return via Back without reboot. Restore the valid package afterwards. The
 portable regression tests cover these parsers, truncations, 40,000 mutations,
 nested callback-close gating and 100 desktop dynamic-library demo ABI cycles.
@@ -313,3 +343,41 @@ It requires working Wi-Fi and the public API. A response that wins the close
 race is reported as a test failure to repeat, not claimed as a cancellation pass.
 The [HTTP follow-up report](HTTP-REPORT.md) separates hardware observations from
 desktop simulations and historical counter results.
+
+### Local companion (API 1.3)
+
+Agent Usage 0.3.0 defaults to the paired local companion, without an embedded URL.
+See [Gadget Companion](../../tools/gadget-companion/README.md) for setup.
+`companion_read(json, capacity)` is appended after the 1.2 settings functions;
+it returns a bounded, age-adjusted JSON snapshot or -1 when absent. The host only
+exposes usage summaries to the canonical `agent-usage` app ID. This is a host API
+policy, not a security sandbox for native code. No callbacks or credentials cross
+this boundary. Older API 1.0–1.2 binaries keep their existing table prefix.
+
+### Optional hardware diagnostics
+
+Native-app heap/lifecycle logging is off by default. Send `native trace on`
+over USB while actively reading serial to enable lifecycle, raw touch edges,
+input polling gaps and SDK button events; send `native trace off` to disable it.
+`native test 100` enables diagnostics automatically. Pro USB writes are
+nonblocking: diagnostic output may be dropped if the host stops consuming it,
+rather than freezing the UI for the HWCDC backpressure timeout.
+
+Agent Usage 0.4.0 adds a Codex detail view within the existing 64-widget SDK limit.
+It uses optional companion snapshot fields for seven daily counts, lifetime/peak
+counts, streaks and longest turn. The ABI remains 1.3; use updated host firmware
+and companion 0.2.0 to forward these fields. Missing details do not block quotas.
+
+Agent Usage 0.5.0 shows remaining allowance only on the overview. Codex details
+select Today / 7 days / calendar Month in UTC. Companion 0.3.0 sends bounded
+period sums and coverage (`cx_p0..2_{v,u,n,e}`), plus seven five-day month groups
+(`cx_m0..6_{v,u,bar}`). Missing buckets are not zero-filled. The host allowlists
+these optional fields within the existing 2048-byte snapshot and SDK 1.3 limits.
+
+## System Monitor and SDK 1.4
+
+[System Monitor 0.1.0](../../docs/system-monitor.md) uses the existing companion
+pairing, a dedicated allowlisted system snapshot, string decoding, opacity and
+bounded 60-point line charts. The SDK additions are append-only; existing 1.3
+Agent Usage binaries remain supported. Installer and catalogue compatibility
+advertise minor version 4. Build with `--app system_monitor` for either chip.

@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 #define GADGET_APP_API_MAJOR 1
-#define GADGET_APP_API_MINOR 1
+#define GADGET_APP_API_MINOR 4
 /* All calls and callbacks run synchronously on the UI thread. Handles expire
  * at shutdown. No tasks, interrupts, exceptions, or background callbacks. */
 typedef void *gadget_handle;
@@ -16,6 +16,33 @@ typedef void (*gadget_http_callback)(int32_t status, const char *json, uint32_t 
 enum { GADGET_HTTP_BUSY=-1, GADGET_HTTP_OFFLINE=-2, GADGET_HTTP_INVALID=-3,
        GADGET_HTTP_MEMORY=-4, GADGET_HTTP_TRANSPORT=-5, GADGET_HTTP_TOO_LARGE=-6,
        GADGET_HTTP_CANCELLED=-7, GADGET_HTTP_RATE_LIMIT=-8 };
+/* API 1.2: host-owned bounded UI. No LVGL types cross this boundary.
+ * create(NULL, ROOT, ...) starts a fresh root layout. All other parents must be
+ * handles returned by this table. At most 64 widgets, 160-byte text, depth 8.
+ * box dimensions are logical pixels; flow is 0=absolute, 1=row, 2=column.
+ * Setters return 0 on success, -1 for invalid/expired handles or arguments. */
+enum { GADGET_UI_ROOT, GADGET_UI_CONTAINER, GADGET_UI_LABEL, GADGET_UI_BUTTON, GADGET_UI_BAR, GADGET_UI_CHART };
+enum { GADGET_STYLE_DEFAULT, GADGET_STYLE_HEADER, GADGET_STYLE_CARD,
+       GADGET_STYLE_TITLE, GADGET_STYLE_VALUE, GADGET_STYLE_MUTED,
+       GADGET_STYLE_TAB, GADGET_STYLE_BACK, GADGET_STYLE_REFRESH,
+       GADGET_STYLE_ACCENT, GADGET_STYLE_BLUE, GADGET_STYLE_ELLIPSIS, GADGET_STYLE_WHITE };
+typedef struct gadget_ui_api {
+    uint32_t struct_size;
+    gadget_handle (*create)(gadget_handle parent, uint32_t kind, const char *text,
+                            gadget_callback callback, void *user);
+    int32_t (*box)(gadget_handle, int32_t x, int32_t y, int32_t width, int32_t height);
+    int32_t (*flow)(gadget_handle, uint32_t axis, uint32_t padding, uint32_t gap);
+    int32_t (*style)(gadget_handle, uint32_t preset);
+    int32_t (*text)(gadget_handle, const char *text);
+    int32_t (*value)(gadget_handle, int32_t percentage);
+    int32_t (*visible)(gadget_handle, uint32_t visible);
+    int32_t (*selected)(gadget_handle, uint32_t selected);
+    /* Text alignment: 0=left, 1=center, 2=right. */
+    int32_t (*align)(gadget_handle, uint32_t alignment);
+    /* API 1.4: fixed 0..100 line chart; up to 60 copied samples, -1 is a gap. */
+    int32_t (*chart)(gadget_handle,const int32_t *values,uint32_t count);
+    int32_t (*opacity)(gadget_handle,uint32_t percent);
+} gadget_ui_api;
 typedef struct gadget_host_api {
     uint32_t struct_size;
     uint16_t major, minor;
@@ -35,6 +62,20 @@ typedef struct gadget_host_api {
      * No JSON/runtime objects or floating-point helpers cross the app boundary. */
     int32_t (*json_number_scaled)(const char *json, uint32_t size, const char *key,
                                   int32_t scale, int32_t *value);
+    /* Append-only ABI: old binaries continue using the unchanged prefix. */
+    const gadget_ui_api *ui;
+    /* Per-app private strings: keys [a-z0-9_], max 24 chars; max 8 keys,
+     * values <=255 bytes. get returns length or -1; never truncates. */
+    int32_t (*setting_get)(const char *key, char *value, uint32_t capacity);
+    int32_t (*setting_set)(const char *key, const char *value);
+    /* API 1.3: local paired companion snapshot for Agent Usage. Returns JSON
+     * length or -1 (no data / unavailable). Capacity includes NUL. RAM-only;
+     * host adjusts observation ages and reset countdowns on every read. */
+    int32_t (*companion_read)(char *json, uint32_t capacity);
+    /* API 1.4: paired System Monitor snapshot; -2 means no computer paired. */
+    int32_t (*system_read)(char *json,uint32_t capacity);
+    int32_t (*system_refresh)(void);
+    int32_t (*json_string)(const char *json,uint32_t size,const char *key,char *out,uint32_t capacity);
 } gadget_host_api;
 typedef struct gadget_app_lifecycle {
     uint32_t struct_size;

@@ -33,7 +33,7 @@ def build(packages, site, base, public):
             data=source.read_bytes();m,icon=inspect_signed(data,public,temporary)
             if not re.fullmatch(r'[a-z][a-z0-9-]{0,31}',m['id']) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?',m['version']) or m['chip'] not in ('esp32','esp32s3'):
                 raise ValueError('Invalid catalog identity/version/chip')
-            if m['api_major']!=1 or m['api_minor'] not in (0,1):raise ValueError('Unsupported host API')
+            if m['api_major']!=1 or m['api_minor'] not in (0,1,2,3,4):raise ValueError('Unsupported host API')
             relative=f"apps/packages/{m['id']}/{m['version']}/{m['chip']}.gapp"
             target=site/relative;target.parent.mkdir(parents=True,exist_ok=True)
             if target.exists():

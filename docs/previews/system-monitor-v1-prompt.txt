@@ -1,0 +1,24 @@
+Use case: ui-mockup.
+Create a precise, realistic product UI approval board for the Gadget OS installable "System Monitor" app. This is an implementation contract, not speculative concept art. Show THREE equally sized front-on screen rectangles side by side, each exactly 2:3 aspect ratio representing 320 x 480 logical pixels. Large high-resolution output, clean light grey surrounding canvas with panel headings "Overview", "Processes", "Storage" outside the screens and bottom caption "System Monitor · Proposed v1 · Example data". No physical device frames, perspective, glow, decorative illustrations, fake extra controls or tiny unreadable text.
+Use existing Gadget OS look: flat dark navy background #172131, darker header #141629, slate cards #22364A, mint accent #63E6C2, off-white text #F4F7FB, muted blue-grey #B5C2D2. Rounded cards 12 logical pixels, rounded buttons 8. Humanist sans similar Montserrat, logical minimum 14px except unobtrusive outer caption; titles 24px; headline metrics 32px. Keep genuinely feasible touchscreen proportions and generous spacing.
+
+COMMON EXACT SCREEN STRUCTURE: header y0-44, small left back chevron with 44x44 hit area, centered title "System Monitor", small circular-arrow refresh icon at right with44x44 hit area. Below header y44-78 a one-line host status "My MacBook" left and a small mint dot plus "Live" right. Bottom navigation y432-480 three equal 106px buttons "Overview", "Processes", "Storage"; current tab mint background/dark text, other tabs dark muted. Text "Updated 2s ago" at x14 y410 above navigation. All body content must fit between y84 and400. NO scrolling in these three examples. All example information must match between screens.
+
+OVERVIEW body:
+Two side-by-side cards x10 and166 y84 width144 height154.
+Left: small title "CPU", large "38%", smaller "8 logical cores", mint thin simple line history chart at bottom and caption "Last 2 min". Right: title "Memory", large "68%", smaller "10.8 / 16 GB", mint thin line history chart at bottom caption "Last 2 min". Charts have no false numeric axes or fancy shading.
+Full width network card x10 y248 width300 height78: title "Network", two equal columns with small down arrow "2.4 MB/s" and up arrow "180 KB/s"; subordinate labels "Download", "Upload".
+Full width power card x10 y336 width300 height64: modest battery icon on left, large enough label "Battery 82%" and second line "Charging"; right side small text "Uptime" above "3d 4h". No temperature, GPU or fan statistics.
+
+PROCESSES body:
+CPU / Memory segmented sort control x10 y84 w300 h40, CPU selected mint. Below y132 small column headings "Process" left, "CPU" right. A single slate panel x10 y158 w300 h224 with exactly five rows separated by subtle thin lines, rowheight44. Rows:
+"Safari" / "14.2%"
+"node" / "9.1%"
+"WindowServer" / "6.4%"
+"Codex" / "4.8%"
+"kernel_task" / "2.1%"
+Left aligned process names with ample width; right aligned percentages. Below panel small explanation "CPU: share of whole system" at y388. No kill buttons, no process detail arrows, no tiny sublines. Bottom Processes tab selected.
+
+STORAGE body:
+One full width card x10 y84 w300 h190. title "Macintosh HD", prominent "184 GB free", secondary "316 / 500 GB used", horizontal progress bar precisely 63% filled mint, small "63% used". A second full width muted panel x10 y288 w300 h96 with two text lines "Startup volume" and "Available space for your files". Do not invent disk speed/SMART statistics, disk cleanup buttons, hard-drive temperature, or folders. Bottom Storage tab selected.
+Draw all exact labels accurately, with actual realistic app screenshot styling. The charts and sample values are illustrative and must not imply extra metrics.

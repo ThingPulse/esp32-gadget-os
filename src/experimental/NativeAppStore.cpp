@@ -3,6 +3,7 @@
 #include "experimental/NativeCatalog.h"
 #include "experimental/NativeStore.h"
 #include "experimental/NativeApp.h"
+#include "experimental/Companion.h"
 #include "services/UpdateService.h"
 #include "ui/I18n.h"
 #include "NativeTrust.h"
@@ -30,7 +31,7 @@ struct Transfer {
 };
 Transfer *transfer=nullptr;
 bool requested=false,visible=false,closing=false,loaded=false,has_new=false;
-bool background_started=false,redraw=false,browser_requested=false;
+bool background_started=false,redraw=false,browser_requested=false,pair_requested=false;
 uint32_t last_check=0;
 int selection=-1;
 size_t page=0;
@@ -171,6 +172,7 @@ void render(){
         if(page)button(content,"Previous apps",[](lv_event_t*){--page;redraw=true;});
         if((page+1)*PageSize<items.size())button(content,"More apps",[](lv_event_t*){++page;redraw=true;});
     }
+    button(content,"Pair computer",[](lv_event_t*){pair_requested=true;closing=true;});
     auto *browser=button(content,"Browser installation",[](lv_event_t*){browser_requested=true;closing=true;});
     lv_obj_set_style_bg_opa(browser,LV_OPA_TRANSP,0);
     lv_obj_set_style_shadow_width(browser,0,0);
@@ -224,6 +226,7 @@ void poll(){
     if(closing){
         closing=false;requested=false;visible=false;if(transfer)transfer->cancelled.store(true);
         content=status_label=progress=refresh_button=nullptr;native_launcher_restore();
+        if(pair_requested){pair_requested=false;companion::request_pairing();}
         if(browser_requested){browser_requested=false;store::request_manager();}
         if(!open_id.empty()){auto id=open_id;open_id.clear();native_app::launch_id(id.c_str());}
     }

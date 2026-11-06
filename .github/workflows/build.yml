@@ -7,6 +7,19 @@ on:
     branches: ["**"]
 
 jobs:
+  gadget-companion:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test --prefix tools/gadget-companion
+      - run: node tools/gadget-companion/src/cli.mjs --help
+
   build:
     name: ${{ matrix.env }}
     runs-on: ${{ matrix.os }}
@@ -45,6 +58,12 @@ jobs:
 
       - name: Build ${{ matrix.env }}
         run: platformio run -e ${{ matrix.env }}
+
+      - name: Test shared installable-app UI and settings
+        if: matrix.env == 'native'
+        run: |
+          python scripts/test-native-ui.py
+          python scripts/test-companion.py
 
       - name: Test device check-in policy
         if: matrix.env == 'native'
@@ -103,9 +122,13 @@ jobs:
             for app in counter iss; do
               python experiments/native-app/build.py --chip "$chip" --app "$app" --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
             done
+            python experiments/native-app/build.py --chip "$chip" --app agent_usage --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
+            python experiments/native-app/build.py --chip "$chip" --app system_monitor --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
           done
       - name: Validate packages, signatures, lifecycle and catalog
         run: |
+          python scripts/test-agent-usage.py
+          python scripts/test-system-monitor.py
           python scripts/test-native-app.py
           python scripts/test-native-install.py
           python scripts/test-native-signing.py

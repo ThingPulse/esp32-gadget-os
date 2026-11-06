@@ -7,6 +7,7 @@ void launch_id(const char *id);
 bool running(const char *id);
 void poll(); // after lv_task_handler returns, UI thread only
 bool busy();
+bool trace_enabled();
 }
 // Implemented by the launcher, only linked in experimental builds.
 bool native_launcher_is_active();

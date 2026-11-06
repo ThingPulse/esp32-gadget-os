@@ -61,7 +61,7 @@ int main(int argc,char **argv)
         gadget_host_api host={sizeof(host),1,1,log_message,screen,label,button,set_label,timer,close_app,http_get,json_number_scaled};
         gadget_app_lifecycle app={sizeof(app),1,1,nullptr}; char *args[]={(char*)&host,(char*)&app};
         host.minor=0; assert(entry(2,args)!=0); host.minor=1;
-        host.struct_size=offsetof(gadget_host_api,http_get_json); assert(entry(2,args)!=0); host.struct_size=sizeof(host);
+        host.struct_size=offsetof(gadget_host_api,http_get_json); assert(entry(2,args)!=0); host.struct_size=offsetof(gadget_host_api,ui); // Exact API 1.1 host prefix, without the new UI/settings fields.
         assert(entry(2,args)==0 && app.shutdown && delivery.callback);
         assert(!complete(generation-1,200,good)); // Old app cannot receive this response.
         assert(complete(generation,200,good)); assert(!delivery.callback);

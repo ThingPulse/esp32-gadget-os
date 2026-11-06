@@ -1,6 +1,7 @@
 /* Independent app: no firmware includes, networking implementation or LVGL ABI.
  * Host owns HTTPS/JSON primitives. App owns endpoint, fields, UI and lifecycle. */
 #include "gadget_app.h"
+#include <stddef.h>
 static const gadget_host_api *host;
 static gadget_handle details,status_label;
 static unsigned pending,cooldown,age,has_data;
@@ -82,7 +83,7 @@ __attribute__((visibility("default"))) int gadget_app_entry(int argc,char **argv
     if(argc!=2 || !argv) return -1;
     host=(const gadget_host_api*)argv[0];
     gadget_app_lifecycle *app=(gadget_app_lifecycle*)argv[1];
-    if(!host || host->struct_size<sizeof(*host) || host->major!=1 || host->minor<1 ||
+    if(!host || host->struct_size<offsetof(gadget_host_api,ui) || host->major!=1 || host->minor<1 ||
        !host->http_get_json || !host->json_number_scaled || !app || app->struct_size<sizeof(*app)) return -1;
     app->major=1; app->minor=1; app->shutdown=shutdown;
     pending=cooldown=age=has_data=0;

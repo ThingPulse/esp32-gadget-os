@@ -1,6 +1,9 @@
 #if GADGET_OS_NATIVE_APP_LOADER
 #include "experimental/NativeAppStore.h"
 #include "experimental/NativeApp.h"
+#include "experimental/Companion.h"
+#include "experimental/NativeUi.h"
+#include "experimental/NativeSettings.h"
 #include "services/AppUsage.h"
 #include "experimental/NativePackage.h"
 #include "experimental/NativeHttp.h"
@@ -9,6 +12,7 @@
 #include "AppRegistry.h"
 #include "ui/UiSessionState.h"
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <LittleFS.h>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
@@ -22,6 +26,8 @@
 
 namespace native_app {
 namespace {
+bool diagnostics=false;
+#define NATIVE_TRACE(...) do { if(diagnostics) Serial.printf(__VA_ARGS__); } while(0)
 struct Widget { lv_obj_t *obj=nullptr; bool label=false; gadget_callback cb=nullptr; void *user=nullptr; };
 struct Timer { lv_timer_t *obj=nullptr; gadget_callback cb=nullptr; void *user=nullptr; };
 struct Session {
@@ -45,12 +51,13 @@ char command[64]; size_t command_len=0;
 
 void sample(const char *phase)
 {
+    if(!diagnostics)return;
     const uint32_t internal=MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT;
     lv_mem_monitor_t lv_memory{};
     lv_mem_monitor(&lv_memory);
     size_t free=heap_caps_get_free_size(internal);
     session.sampled_min_internal=std::min(session.sampled_min_internal,free);
-    Serial.printf("[NATIVE] cycle=%u phase=%s internal=%u largest=%u exec=%u exec_largest=%u psram=%u psram_largest=%u boot_min_internal=%u sampled_cycle_min=%u callbacks=%u lvgl_total=%u lvgl_free=%u lvgl_largest=%u\n",
+    NATIVE_TRACE("[NATIVE] cycle=%u phase=%s internal=%u largest=%u exec=%u exec_largest=%u psram=%u psram_largest=%u boot_min_internal=%u sampled_cycle_min=%u callbacks=%u lvgl_total=%u lvgl_free=%u lvgl_largest=%u\n",
         cycle,phase,(unsigned)free,(unsigned)heap_caps_get_largest_free_block(internal),
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_EXEC),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_EXEC),
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM),
@@ -58,7 +65,7 @@ void sample(const char *phase)
         (unsigned)lv_memory.total_size,(unsigned)lv_memory.free_size,(unsigned)lv_memory.free_biggest_size);
 }
 void request_close() {
-    if (active) { session.gate.close(); session.http_delivery.clear(); http::cancel(cycle); }
+    if (active) { ui::suspend(); session.gate.close(); session.http_delivery.clear(); http::cancel(cycle); }
 }
 void invoke(gadget_callback cb, void *user)
 {
@@ -77,7 +84,7 @@ void timer_event(lv_timer_t *timer)
     auto *t=static_cast<Timer *>(lv_timer_get_user_data(timer));
     invoke(t->cb,t->user);
 }
-void log(const char *s) { Serial.printf("[NATIVE app] %.160s\n",s?s:""); }
+void log(const char *s) { NATIVE_TRACE("[NATIVE app] %.160s\n",s?s:""); }
 gadget_handle screen_create()
 {
     if (session.gate.closing) return nullptr;
@@ -133,9 +140,16 @@ int32_t http_get(const char *url,gadget_http_callback callback,void *user)
     if (!result) session.http_delivery={cycle,callback,user};
     return result;
 }
-const gadget_host_api api={sizeof(api),1,1,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled};
+int32_t setting_get(const char *k,char *v,uint32_t n){return session.gate.closing?-1:settings::get(k,v,n);}
+int32_t setting_set(const char *k,const char *v){return session.gate.closing?-1:settings::set(k,v);}
+int32_t companion_read(char *v,uint32_t n){return session.gate.closing||selected_id!="agent-usage"?-1:companion::read_usage(v,n);}
+int32_t system_read(char *v,uint32_t n){return session.gate.closing||selected_id!="system-monitor"?-1:companion::read_system(v,n);}
+int32_t system_refresh(){return session.gate.closing||selected_id!="system-monitor"?-1:companion::refresh_system();}
+int32_t json_string(const char *s,uint32_t n,const char *key,char *out,uint32_t cap){if(!s||!n||n>2048||!key||strlen(key)>48||!out||!cap||cap>2049)return -1;JsonDocument d;if(deserializeJson(d,s,n)||!d[key].is<const char*>())return -1;const char *v=d[key];size_t len=strlen(v);if(len>=cap)return -1;memcpy(out,v,len+1);return len;}
+const gadget_host_api api={sizeof(api),1,4,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string};
 void resources_clear()
 {
+    ui::end(); settings::end();
     session.http_delivery.clear(); http::cancel(cycle);
     for (auto &t:session.timers) { if (t.obj) lv_timer_delete(t.obj); t={}; }
     // Only host trampoline pointers are registered with LVGL. Destroy their
@@ -158,7 +172,9 @@ void show_error(const std::string &message)
 {
     session.gate.close(); unload();
     session.error=true; cycles_left=0;
-    Serial.printf("[NATIVE] ERROR %.160s\n",message.c_str());
+    lv_obj_set_flex_flow(session.screen,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(session.screen,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    NATIVE_TRACE("[NATIVE] ERROR %.160s\n",message.c_str());
     sample("load-failed-cleaned");
     auto *label=lv_label_create(session.screen);
     lv_obj_set_width(label,lv_pct(95)); lv_label_set_text(label,message.c_str());
@@ -175,11 +191,19 @@ void open_now()
     const int64_t start=esp_timer_get_time();
     native_launcher_release();
     session.screen=lv_screen_active();
+    lv_obj_set_style_bg_color(session.screen,lv_color_hex(0x172131),0);
+    lv_obj_set_style_bg_opa(session.screen,LV_OPA_COVER,0);
+    lv_obj_set_style_text_color(session.screen,lv_color_hex(0xf1f3f5),0);
     lv_obj_set_flex_flow(session.screen,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(session.screen,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    // Paint acknowledgement before synchronous package validation and relocation.
+    auto *loading=lv_label_create(session.screen);
+    lv_label_set_text(loading,"Opening app...");
+    lv_refr_now(nullptr);
     sample("launcher-released");
     Package package; std::string error;
     auto image=store::read(store::path(selected_id).c_str(),package,error);
+    lv_obj_delete(loading);
     if(!image){show_error(error);return;}
     if(package.manifest.id!=selected_id){show_error("Package ID mismatch");return;}
     esp_elf_init(&session.elf);
@@ -188,26 +212,27 @@ void open_now()
     // Release the file buffer before measuring the steady executable allocation.
     image.reset();
     if (result) { show_error("ELF relocation/allocation failed; see serial log"); return; }
-    Serial.printf("[NATIVE] text_bytes=%u data_allocation=%u text_ptr=%p data_ptr=%p\n",
+    NATIVE_TRACE("[NATIVE] text_bytes=%u data_allocation=%u text_ptr=%p data_ptr=%p\n",
         (unsigned)session.elf.sec[ELF_SEC_TEXT].size,
         (unsigned)(session.elf.pdata?heap_caps_get_allocated_size(session.elf.pdata):0),session.elf.ptext,session.elf.pdata);
     // Executable pointers can use an IRAM alias not recognized by
     // heap_caps_get_allocated_size(). Measure its cost with heap deltas.
-    Serial.printf("[NATIVE] text_psram=%u data_psram=%u\n",
+    NATIVE_TRACE("[NATIVE] text_psram=%u data_psram=%u\n",
         esp_ptr_external_ram(session.elf.ptext)?1:0,esp_ptr_external_ram(session.elf.pdata)?1:0);
     sample("executable-loaded");
-    session.app={sizeof(session.app),1,1,nullptr};
+    ui::begin(session.screen,invoke); settings::begin(selected_id.c_str());
+    session.app={sizeof(session.app),1,2,nullptr};
     char *args[]={reinterpret_cast<char *>(const_cast<gadget_host_api *>(&api)),reinterpret_cast<char *>(&session.app)};
     session.initialized=true;
     session.gate.enter();
     result=session.elf.entry(2,args);
     session.gate.leave();
-    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>1 || !session.app.shutdown) {
+    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>4 || !session.app.shutdown) {
         show_error("App initialization/API handshake failed"); return;
     }
     AppUsage::native_start(package.manifest.id.c_str(),package.manifest.version.c_str(),package.trusted);
     sample("app-ui-created");
-    Serial.printf("[NATIVE] cycle=%u load_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
+    NATIVE_TRACE("[NATIVE] cycle=%u load_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
     session.start_ms=session.activity_ms=millis();
 }
 void finish()
@@ -215,14 +240,14 @@ void finish()
     AppUsage::stop();
     const int64_t start=esp_timer_get_time();
     unload();
-    Serial.printf("[NATIVE] cycle=%u unload_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
+    NATIVE_TRACE("[NATIVE] cycle=%u unload_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
     sample("shutdown-unloaded");
     native_launcher_restore(); active=false; session.screen=nullptr;
     sample("launcher-restored");
-    Serial.printf("[NATIVE] cycle=%u unload_restore_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
+    NATIVE_TRACE("[NATIVE] cycle=%u unload_restore_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
     if (cycles_left) {
         --cycles_left;
-        if (!cycles_left) Serial.printf("[NATIVE] CYCLES COMPLETE\n");
+        if (!cycles_left) NATIVE_TRACE("[NATIVE] CYCLES COMPLETE\n");
         else next_cycle_ms=millis()+500;
     }
 }
@@ -232,7 +257,9 @@ void receive_command()
         char c=Serial.read();
         if (c=='\n') {
             command[command_len]=0;
-            if (!strcmp(command,"native open")) launch();
+            if (!strcmp(command,"native trace on")) diagnostics=true;
+            else if (!strcmp(command,"native trace off")) diagnostics=false;
+            else if (!strcmp(command,"native open")) launch();
             else if (!strcmp(command,"native iss")) launch_iss();
             else if (!strcmp(command,"native manager")) store::request_manager();
             else if (!strcmp(command,"native manager close")) store::close_manager();
@@ -244,7 +271,7 @@ void receive_command()
             }
             else if (!strcmp(command,"native close")) { app_store::close(); pending=false; request_close(); session.error=false; cycles_left=0; }
             else if (!strcmp(command,"native test 100") && !busy() && native_launcher_is_active()) {
-                launch(); cycles_left=100;
+                diagnostics=true; launch(); cycles_left=100;
             }
             command_len=0;
         } else if (c!='\r') {
@@ -254,7 +281,8 @@ void receive_command()
     }
 }
 }
-bool busy() { return active || pending || cycles_left || store::managing() || app_store::active(); }
+bool trace_enabled(){return diagnostics;}
+bool busy() { return active || pending || cycles_left || store::managing() || app_store::active() || companion::active(); }
 bool running(const char *id) {return (active||pending||cycles_left)&&selected_id==id;}
 void launch_id(const char *id) {
     if(!busy()&&native_launcher_is_active()&&id&&valid_app_id(id)){selected_id=id;pending=true;}
@@ -264,6 +292,7 @@ void launch_iss() { launch_id("native-iss"); }
 void poll()
 {
     receive_command();
+    companion::poll();
     store::poll();
     app_store::poll();
     if (pending) open_now();
@@ -271,7 +300,7 @@ void poll()
         bool delivered=active && !session.error && session.http_delivery.deliver(
             r->generation,session.gate,r->status,r->body,r->size);
         if (delivered) ++session.callbacks;
-        Serial.printf("[NATIVE HTTP] generation=%u phase=complete status=%ld bytes=%u elapsed_ms=%u delivered=%u\n",
+        NATIVE_TRACE("[NATIVE HTTP] generation=%u phase=complete status=%ld bytes=%u elapsed_ms=%u delivered=%u\n",
             r->generation,(long)r->status,r->size,r->elapsed_ms,delivered?1:0);
         r.reset();
         sample(delivered?"http-delivered":"http-discarded");
