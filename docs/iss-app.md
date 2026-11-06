@@ -1,5 +1,9 @@
 # Where is the ISS?
 
+App-enabled firmware now uses the [installable ISS app](iss-installable.md).
+The implementation below remains the parity reference and the bundled version
+for firmware without an app loader.
+
 The ISS home-screen tile opens a 320 × 480 LVGL app with **Next pass** and
 **Passes** tabs. It uses Pollux Labs' public, keyless API:
 https://iss-api.polluxlabs.io/

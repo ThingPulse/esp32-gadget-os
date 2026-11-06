@@ -63,6 +63,7 @@ jobs:
         if: matrix.env == 'native'
         run: |
           python scripts/test-native-ui.py
+          python scripts/test-iss-installable.py
           python scripts/test-companion.py
 
       - name: Test device check-in policy
@@ -119,7 +120,7 @@ jobs:
       - name: Build standalone fixtures
         run: |
           for chip in esp32 esp32s3; do
-            for app in counter iss; do
+            for app in counter iss iss_tracker; do
               python experiments/native-app/build.py --chip "$chip" --app "$app" --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
             done
             python experiments/native-app/build.py --chip "$chip" --app agent_usage --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
@@ -129,6 +130,7 @@ jobs:
         run: |
           python scripts/test-agent-usage.py
           python scripts/test-system-monitor.py
+          python scripts/test-iss-package.py
           python scripts/test-native-app.py
           python scripts/test-native-install.py
           python scripts/test-native-signing.py

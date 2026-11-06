@@ -1,5 +1,6 @@
 #if GADGET_OS_NATIVE_APP_LOADER
 #include "experimental/NativeStore.h"
+#include "experimental/NativeServices.h"
 #include "experimental/NativeApp.h"
 #include "AppRegistry.h"
 #include "services/UpdateService.h"
@@ -68,7 +69,7 @@ void scan() {
     std::sort(entries,entries+count,[](const Entry&a,const Entry&b){return a.manifest.name<b.manifest.name;});
 }
 void list() {
-    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=4;
+    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=5;
     auto apps=d["apps"].to<JsonArray>();
     for(unsigned i=0;i<count;++i){auto a=apps.add<JsonObject>();auto &m=entries[i].manifest;
         a["trusted"]=entries[i].trusted;a["id"]=m.id;a["name"]=m.name;a["version"]=m.version;a["running"]=native_app::running(m.id.c_str());}
@@ -125,6 +126,7 @@ void parse_headers() {
         if(!LittleFS.remove(path(id).c_str())){error(507,"Could not remove app.");return;}
         LittleFS.remove((std::string("/apps/settings/")+id+".json").c_str());
         LittleFS.remove((std::string("/apps/settings/")+id+".json.tmp").c_str());
+        services::erase_cache(id.c_str());
         dirty=true;respond(200,"{\"ok\":true}");return;
     }
     if(method!="POST"||route!="/api/install"){error(405,"Unsupported request.");return;}

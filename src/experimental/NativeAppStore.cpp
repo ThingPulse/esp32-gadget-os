@@ -208,13 +208,19 @@ void show(){
 }
 void create_tile(lv_obj_t *grid){
     auto *tile=lv_button_create(grid);lv_obj_set_size(tile,88,112);lv_obj_set_style_bg_opa(tile,LV_OPA_TRANSP,0);
-    lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
+    lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_border_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
     auto *icon_box=lv_obj_create(tile);lv_obj_set_size(icon_box,68,68);lv_obj_align(icon_box,LV_ALIGN_TOP_MID,0,0);
     lv_obj_set_style_bg_color(icon_box,lv_color_hex(0x237e77),0);lv_obj_set_style_radius(icon_box,18,0);lv_obj_set_style_border_width(icon_box,0,0);
     lv_obj_remove_flag(icon_box,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(icon_box,LV_OBJ_FLAG_SCROLLABLE);
     auto *icon=lv_label_create(icon_box);lv_label_set_text(icon,LV_SYMBOL_DOWNLOAD);lv_obj_set_style_text_font(icon,i18n::font24(),0);lv_obj_center(icon);
-    auto *label=lv_label_create(tile);lv_label_set_text(label,i18n::tr("Add apps"));lv_obj_set_style_text_font(label,i18n::font14(),0);lv_obj_align(label,LV_ALIGN_BOTTOM_MID,0,0);
+    auto *label=lv_label_create(tile);lv_label_set_text(label,i18n::tr("Add apps"));
+    // Match the bundled launcher tiles' two-line label area and first baseline.
+    lv_obj_set_style_text_font(label,i18n::font14(),0);
+    lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_set_size(label,lv_pct(100),2*i18n::font14()->line_height);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
+    lv_obj_align(label,LV_ALIGN_TOP_MID,0,76);
     badge=lv_label_create(tile);lv_label_set_text(badge,i18n::tr("New"));lv_obj_set_style_text_font(badge,i18n::font14(),0);lv_obj_set_style_text_color(badge,lv_color_hex(0x67e6c3),0);lv_obj_align(badge,LV_ALIGN_TOP_RIGHT,0,0);update_badge();
     lv_obj_add_event_cb(badge,[](lv_event_t*){badge=nullptr;},LV_EVENT_DELETE,nullptr);
     lv_obj_add_event_cb(tile,[](lv_event_t*){if(native_launcher_is_active()&&!native_app::busy())requested=true;},LV_EVENT_CLICKED,nullptr);

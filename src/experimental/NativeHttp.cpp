@@ -6,6 +6,8 @@
 #include <WiFiClientSecure.h>
 #include <freertos/task.h>
 #include <new>
+#include "services/UpdateService.h"
+#include "services/DeviceCheckInPolicy.h"
 #include <cstring>
 namespace native_app::http {
 namespace {
@@ -39,11 +41,13 @@ void request(Result &r,uint32_t began)
     http.addHeader("Accept","application/json");
     http.addHeader("User-Agent","GadgetOS-NativeExperiment/0.2");
     Serial.printf("[NATIVE HTTP] generation=%u phase=request\n",r.generation);
+    const char *headers[]={"Retry-After"};http.collectHeaders(headers,1);
     int status=http.GET();
+    r.retry_seconds=DeviceCheckInPolicy::retry_after_ms(http.header("Retry-After").c_str())/1000;
     if (status<=0) status=GADGET_HTTP_TRANSPORT;
     if (status==200 && !r.cancelled.load()) {
         Body sink(r,began);
-        if (http.getSize()>int(max_http_body)) status=GADGET_HTTP_TOO_LARGE;
+        if (http.getSize()>int(r.capacity)) status=GADGET_HTTP_TOO_LARGE;
         else if (http.writeToStream(&sink)<0) status=sink.oversized?GADGET_HTTP_TOO_LARGE:GADGET_HTTP_TRANSPORT;
     }
     r.status=status>0?status:(status==GADGET_HTTP_TOO_LARGE?status:GADGET_HTTP_TRANSPORT);
@@ -62,15 +66,19 @@ void worker(void *arg)
     vTaskDelete(nullptr);
 }
 }
-int32_t start(const char *url,uint32_t generation)
+int32_t start(const char *url,uint32_t generation,uint32_t capacity)
 {
+    if (capacity<1||capacity>49152)return GADGET_HTTP_INVALID;
+    auto update=UpdateService::instance().state();
+    if(update==UpdateService::State::Downloading||update==UpdateService::State::Checking||update==UpdateService::State::ReadyToReboot)return GADGET_HTTP_BUSY;
     if (pending) return GADGET_HTTP_BUSY;
     if (!url || strlen(url)>=sizeof(Result::url) || strncmp(url,"https://",8) || !url[8]) return GADGET_HTTP_INVALID;
     for (const char *c=url;*c;++c) if (static_cast<unsigned char>(*c)<=32 || *c==127) return GADGET_HTTP_INVALID;
     if (WiFi.status()!=WL_CONNECTED) return GADGET_HTTP_OFFLINE;
     if (started && uint32_t(millis()-last_start)<5000) return GADGET_HTTP_RATE_LIMIT;
-    auto *r=new(std::nothrow) Result;
+    auto *r=new(std::nothrow) Result(capacity);
     if (!r) return GADGET_HTTP_MEMORY;
+    if(!r->body){delete r;return GADGET_HTTP_MEMORY;}
     strcpy(r->url,url); r->generation=generation;
     pending=r;
     if (xTaskCreate(worker,"native-http",8192,r,1,nullptr)!=pdPASS) {

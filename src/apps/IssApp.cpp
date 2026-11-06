@@ -1,3 +1,5 @@
+// Retained as the simulator parity reference and for firmware without the app loader.
+#if !GADGET_OS_NATIVE_APP_LOADER
 #include "apps/IssApp.h"
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"
@@ -162,3 +164,5 @@ void iss_app_launch(){ctx={};ctx.home=lv_screen_active();ctx.screen=lv_obj_creat
  ctx.tabs[0]=button(ctx.screen,0,432,160,48,"Next pass",tab,nullptr,true);ctx.tabs[1]=button(ctx.screen,160,432,160,48,"Passes",tab,reinterpret_cast<void*>(1));
  IssService::instance().resume();render();ctx.timer=lv_timer_create(tick,500,nullptr);ui_load_screen(ctx.screen,false);UiSessionState::set_route("iss");
 }
+
+#endif

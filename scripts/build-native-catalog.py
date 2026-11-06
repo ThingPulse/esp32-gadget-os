@@ -24,8 +24,10 @@ def build(packages, site, base, public):
     index=folder/'catalog.json'
     catalog=json.loads(index.read_text()) if index.exists() else {'schema':1,'apps':[]}
     if catalog.get('schema')!=1 or not isinstance(catalog.get('apps'),list):raise ValueError('Unsupported existing catalog')
-    entries={(a['id'],a['chip']):a for a in catalog['apps']}
-    descriptions={a['id']:a.get('description','') for a in json.loads((ROOT/'experiments/native-app/apps.json').read_text())['apps']}
+    metadata=json.loads((ROOT/'experiments/native-app/apps.json').read_text())
+    retired=set(metadata.get('retired_ids',[]))
+    entries={(a['id'],a['chip']):a for a in catalog['apps'] if a['id'] not in retired}
+    descriptions={a['id']:a.get('description','') for a in metadata['apps']}
     files=sorted(packages.glob('*/*.gapp'))
     if not files:raise ValueError('No packages found')
     with tempfile.TemporaryDirectory() as temporary:
@@ -33,7 +35,9 @@ def build(packages, site, base, public):
             data=source.read_bytes();m,icon=inspect_signed(data,public,temporary)
             if not re.fullmatch(r'[a-z][a-z0-9-]{0,31}',m['id']) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?',m['version']) or m['chip'] not in ('esp32','esp32s3'):
                 raise ValueError('Invalid catalog identity/version/chip')
-            if m['api_major']!=1 or m['api_minor'] not in (0,1,2,3,4):raise ValueError('Unsupported host API')
+            if m['api_major']!=1 or m['api_minor'] not in (0,1,2,3,4,5):raise ValueError('Unsupported host API')
+            # Retain immutable historical files, but never advertise retired apps.
+            if m['id'] in retired:continue
             relative=f"apps/packages/{m['id']}/{m['version']}/{m['chip']}.gapp"
             target=site/relative;target.parent.mkdir(parents=True,exist_ok=True)
             if target.exists():

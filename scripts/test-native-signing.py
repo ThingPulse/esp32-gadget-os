@@ -9,8 +9,8 @@ catalog=importlib.util.module_from_spec(spec);spec.loader.exec_module(catalog)
 with tempfile.TemporaryDirectory() as folder:
     temp=pathlib.Path(folder)
     toolchain=pathlib.Path.home()/'.platformio/packages/toolchain-xtensa-esp-elf/bin'
-    subprocess.run([sys.executable,str(ROOT/'experiments/native-app/build.py'),'--chip','esp32s3','--app','counter','--toolchain',str(toolchain),'--output',str(temp/'unsigned')],check=True,stdout=subprocess.DEVNULL)
-    unsigned=(temp/'unsigned/esp32s3/native-demo.gapp').read_bytes()
+    subprocess.run([sys.executable,str(ROOT/'experiments/native-app/build.py'),'--chip','esp32s3','--app','counter','--id','signing-probe','--toolchain',str(toolchain),'--output',str(temp/'unsigned')],check=True,stdout=subprocess.DEVNULL)
+    unsigned=(temp/'unsigned/esp32s3/signing-probe.gapp').read_bytes()
     keys=[]
     for name in ('trusted','other'):
         key=temp/(name+'.pem');pub=temp/(name+'.pub')
@@ -24,11 +24,23 @@ with tempfile.TemporaryDirectory() as folder:
     binary=temp/'verify';crypto=subprocess.check_output(['pkg-config','--cflags','--libs','openssl'],text=True).split()
     subprocess.run(['c++','-std=c++17','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-DGADGET_OS_NATIVE_APP_LOADER=1','-Iinclude','-I.pio/libdeps/esp32-color-kit-native-app/ArduinoJson/src','src/experimental/NativePackage.cpp','src/experimental/NativeSignature.cpp','test/native_app/signing.cpp',*crypto,'-o',str(binary)],cwd=ROOT,check=True)
     subprocess.run([str(binary),str(keys[0][1]),*[str(temp/name) for name in fixtures]],check=True)
-    packages=temp/'packages/esp32s3';packages.mkdir(parents=True);(packages/'native-demo.gapp').write_bytes(signed)
+    packages=temp/'packages/esp32s3';packages.mkdir(parents=True);(packages/'signing-probe.gapp').write_bytes(signed)
     site=temp/'site';first=catalog.build(packages.parent,site,'https://example.com',keys[0][1]);assert len(first['apps'])==1
-    (packages/'native-demo.gapp').write_bytes(sign_package(unsigned,*keys[0]))
+    (packages/'signing-probe.gapp').write_bytes(sign_package(unsigned,*keys[0]))
     assert catalog.build(packages.parent,site,'https://example.com',keys[0][1])==first
-    (packages/'native-demo.gapp').write_bytes(fixtures['bad-untrusted'])
+    # Previously published demos disappear even though the catalogue merges history.
+    index=site/'apps/catalog.json'
+    existing=json.loads(index.read_text())
+    existing['apps'] += [dict(first['apps'][0],id=retired) for retired in ('native-demo','native-iss')]
+    index.write_text(json.dumps(existing))
+    assert catalog.build(packages.parent,site,'https://example.com',keys[0][1])==first
+    # Stale build artifacts must not reintroduce a retired app.
+    for retired in ('native-demo','native-iss'):
+        subprocess.run([sys.executable,str(ROOT/'experiments/native-app/build.py'),'--chip','esp32s3','--app','counter','--id',retired,'--toolchain',str(toolchain),'--output',str(temp/'retired')],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        raw=(temp/'retired/esp32s3'/f'{retired}.gapp').read_bytes()
+        (packages/f'{retired}.gapp').write_bytes(sign_package(raw,*keys[0]))
+    assert catalog.build(packages.parent,site,'https://example.com',keys[0][1])==first
+    (packages/'signing-probe.gapp').write_bytes(fixtures['bad-untrusted'])
     try:catalog.build(packages.parent,site,'https://example.com',keys[0][1]);raise AssertionError('Untrusted catalog package accepted')
     except ValueError:pass
-    print('PASS: catalog generation, immutable rebuild reuse, untrusted publication rejected')
+    print('PASS: catalog generation, immutable rebuild reuse, demo retirement, untrusted publication rejected')

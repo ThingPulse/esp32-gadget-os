@@ -381,3 +381,9 @@ pairing, a dedicated allowlisted system snapshot, string decoding, opacity and
 bounded 60-point line charts. The SDK additions are append-only; existing 1.3
 Agent Usage binaries remain supported. Installer and catalogue compatibility
 advertise minor version 4. Build with `--app system_monitor` for either chip.
+
+## SDK 1.5 and the full ISS app
+
+The installable `iss-tracker` replaces the bundled ISS app in app-enabled builds.
+It uses reusable drawing, scrolling, environment, JSON, HTTP and cache APIs.
+See [implementation and validation](../../docs/iss-installable.md).

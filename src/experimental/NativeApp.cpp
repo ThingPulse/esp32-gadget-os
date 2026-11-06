@@ -4,6 +4,8 @@
 #include "experimental/Companion.h"
 #include "experimental/NativeUi.h"
 #include "experimental/NativeSettings.h"
+#include "experimental/NativeServices.h"
+#include "apps/SettingsApp.h"
 #include "services/AppUsage.h"
 #include "experimental/NativePackage.h"
 #include "experimental/NativeHttp.h"
@@ -42,7 +44,9 @@ struct Session {
     size_t sampled_min_internal=SIZE_MAX;
     unsigned callbacks=0;
 } session;
-bool active=false, pending=false;
+bool active=false, pending=false,location_requested=false;
+std::string resume_after_settings;
+uint32_t retry_seconds=0;
 std::string selected_id="native-demo";
 unsigned cycle=0, cycles_left=0;
 uint32_t next_cycle_ms=0;
@@ -146,10 +150,13 @@ int32_t companion_read(char *v,uint32_t n){return session.gate.closing||selected
 int32_t system_read(char *v,uint32_t n){return session.gate.closing||selected_id!="system-monitor"?-1:companion::read_system(v,n);}
 int32_t system_refresh(){return session.gate.closing||selected_id!="system-monitor"?-1:companion::refresh_system();}
 int32_t json_string(const char *s,uint32_t n,const char *key,char *out,uint32_t cap){if(!s||!n||n>2048||!key||strlen(key)>48||!out||!cap||cap>2049)return -1;JsonDocument d;if(deserializeJson(d,s,n)||!d[key].is<const char*>())return -1;const char *v=d[key];size_t len=strlen(v);if(len>=cap)return -1;memcpy(out,v,len+1);return len;}
-const gadget_host_api api={sizeof(api),1,4,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string};
+int32_t extended_http(const char*url,uint32_t cap,gadget_http_callback cb,void*user){if(!active||session.gate.closing||!cb)return GADGET_HTTP_INVALID;int32_t r=http::start(url,cycle,cap);if(!r)session.http_delivery={cycle,cb,user};return r;}
+void open_location(){if(active&&!session.gate.closing){location_requested=true;request_close();}}
+const gadget_services_api service_api={sizeof(service_api),services::environment,services::format_time,services::parse_time,services::json_open,services::json_get,services::json_count,services::json_close,services::cache_read,services::cache_write,open_location,extended_http,[]()->uint32_t{return retry_seconds;},services::json_number};
+const gadget_host_api api={sizeof(api),1,5,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string,&service_api};
 void resources_clear()
 {
-    ui::end(); settings::end();
+    ui::end(); settings::end();services::end();
     session.http_delivery.clear(); http::cancel(cycle);
     for (auto &t:session.timers) { if (t.obj) lv_timer_delete(t.obj); t={}; }
     // Only host trampoline pointers are registered with LVGL. Destroy their
@@ -220,14 +227,14 @@ void open_now()
     NATIVE_TRACE("[NATIVE] text_psram=%u data_psram=%u\n",
         esp_ptr_external_ram(session.elf.ptext)?1:0,esp_ptr_external_ram(session.elf.pdata)?1:0);
     sample("executable-loaded");
-    ui::begin(session.screen,invoke); settings::begin(selected_id.c_str());
+    ui::begin(session.screen,invoke); settings::begin(selected_id.c_str());services::begin(selected_id.c_str());
     session.app={sizeof(session.app),1,2,nullptr};
     char *args[]={reinterpret_cast<char *>(const_cast<gadget_host_api *>(&api)),reinterpret_cast<char *>(&session.app)};
     session.initialized=true;
     session.gate.enter();
     result=session.elf.entry(2,args);
     session.gate.leave();
-    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>4 || !session.app.shutdown) {
+    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>5 || !session.app.shutdown) {
         show_error("App initialization/API handshake failed"); return;
     }
     AppUsage::native_start(package.manifest.id.c_str(),package.manifest.version.c_str(),package.trusted);
@@ -243,6 +250,7 @@ void finish()
     NATIVE_TRACE("[NATIVE] cycle=%u unload_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
     sample("shutdown-unloaded");
     native_launcher_restore(); active=false; session.screen=nullptr;
+    if(location_requested){location_requested=false;resume_after_settings=selected_id;settings_launch_with_route("settings_weather");}
     sample("launcher-restored");
     NATIVE_TRACE("[NATIVE] cycle=%u unload_restore_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
     if (cycles_left) {
@@ -295,8 +303,10 @@ void poll()
     companion::poll();
     store::poll();
     app_store::poll();
+    if(!resume_after_settings.empty()&&native_launcher_is_active()&&!busy()){auto id=resume_after_settings;resume_after_settings.clear();launch_id(id.c_str());}
     if (pending) open_now();
     if (std::unique_ptr<http::Result> r{http::take_completed()}; r) {
+        retry_seconds=r->retry_seconds;
         bool delivered=active && !session.error && session.http_delivery.deliver(
             r->generation,session.gate,r->status,r->body,r->size);
         if (delivered) ++session.callbacks;

@@ -129,7 +129,11 @@ One-time repository setup, **not performed by merely building this branch**:
 
 A missing catalog returns an explanatory message; local signed uploads still
 work. The release workflow is separate from the existing firmware release job.
-The initial metadata publishes Native Counter 0.1.0 and ISS Position 0.2.0.
+The release metadata publishes Agent Usage and System Monitor. Native Counter
+and ISS Position are retired: `retired_ids` removes their existing catalogue
+entries and prevents old package artifacts from adding them again. Historical
+package URLs remain intact. Their sources remain as loader regression fixtures.
+Already installed copies can be uninstalled through the app manager.
 
 On-device store validation (2026-11-05): simulator and both experimental firmware
 profiles compile. Sanitized catalog tests cover chip/API filtering, malformed

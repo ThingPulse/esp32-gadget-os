@@ -22,7 +22,7 @@ bool parse_manifest(const std::string &json, const char *chip, Manifest &out, st
         if (!d[key].is<const char *>() || !d[key].as<const char *>()[0]) return fail(e, "Missing manifest field");
     if (d["chip"].as<std::string>() != chip) return fail(e, "Package is for a different chip");
     if (!d["api_major"].is<unsigned>() || !d["api_minor"].is<unsigned>() ||
-        d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 4)
+        d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 5)
         return fail(e, "Unsupported host API version");
     out = {d["id"].as<std::string>(), d["version"].as<std::string>(), d["executable"].as<std::string>()};
     out.name=d["name"] | out.id;

@@ -3,6 +3,10 @@
 #include "experimental/NativePackage.h"
 #include <atomic>
 #include <cstring>
+#include <cstdlib>
+#ifdef ARDUINO
+#include <esp_heap_caps.h>
+#endif
 namespace native_app {
 constexpr uint32_t max_http_body=2048;
 /* UI-thread ownership. Worker results carry only a generation, never code or
@@ -26,14 +30,23 @@ struct Result {
     std::atomic<bool> done{false}, cancelled{false};
     uint32_t generation=0, size=0, elapsed_ms=0;
     int32_t status=GADGET_HTTP_TRANSPORT;
-    char url[256]{}, body[max_http_body+1]{};
+    char url[256]{};char *body=nullptr;uint32_t capacity=max_http_body,retry_seconds=0;
+    explicit Result(uint32_t limit=max_http_body):capacity(limit){
+#ifdef ARDUINO
+        body=(char*)heap_caps_calloc(limit+1,1,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+#else
+        body=(char*)calloc(limit+1,1);
+#endif
+    }
+    ~Result(){free(body);}
+    Result(const Result&)=delete;Result&operator=(const Result&)=delete;
     bool append(const uint8_t *bytes,size_t count) {
         if (cancelled.load()) return false;
-        if (count>max_http_body-size) {status=GADGET_HTTP_TOO_LARGE; return false;}
+        if (!body || count>capacity-size) {status=GADGET_HTTP_TOO_LARGE; return false;}
         memcpy(body+size,bytes,count); size+=count; body[size]=0; return true;
     }
 };
-int32_t start(const char *url,uint32_t generation);
+int32_t start(const char *url,uint32_t generation,uint32_t capacity=max_http_body);
 void cancel(uint32_t generation);
 Result *take_completed(); // UI owns/deletes result; worker no longer accesses it.
 }

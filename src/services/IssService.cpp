@@ -1,3 +1,5 @@
+// Retained as the simulator parity reference and for firmware without the app loader.
+#if !GADGET_OS_NATIVE_APP_LOADER
 #include "services/IssService.h"
 #include "services/TransitProvider.h"
 #include "services/DeviceCheckInPolicy.h"
@@ -189,3 +191,5 @@ void IssService::loop(){
 #endif
 }
 SERVICE_REGISTER(IssService);
+
+#endif

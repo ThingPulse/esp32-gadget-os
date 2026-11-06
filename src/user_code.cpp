@@ -986,7 +986,16 @@ static void launch_route(const std::string &route)
     return;
   }
 
-  if (route == "iss") { iss_app_launch(); return; }
+  if (route == "iss") {
+#if GADGET_OS_NATIVE_APP_LOADER
+    // An old bundled-app route must not open a missing package after migration.
+    for(const auto &app:native_app::store::installed())if(app.manifest.id=="iss-tracker"){native_app::launch_id("iss-tracker");return;}
+    UiSessionState::set_route("home");
+#else
+    iss_app_launch();
+#endif
+    return;
+  }
 
   if (route == "planes") {
     UI_TRACE("Route", "launch planes");
@@ -1254,6 +1263,7 @@ bool native_launcher_is_active()
          state != UpdateService::State::Downloading &&
          state != UpdateService::State::ReadyToReboot;
 }
+static int native_return_page=0;
 void native_launcher_release()
 {
   // These dialogs live on lv_layer_top(), outside the launcher tree. Suspend
@@ -1266,6 +1276,7 @@ void native_launcher_release()
     native_update_notes_hidden = true;
     lv_obj_add_flag(update_notes_dialog, LV_OBJ_FLAG_HIDDEN);
   }
+  if(home_pager) { lv_obj_update_layout(home_pager); int w=lv_obj_get_width(home_pager); native_return_page=w>0?(lv_obj_get_scroll_x(home_pager)+w/2)/w:0; }
   lv_obj_t *old = lv_screen_active();
   lv_screen_load(lv_obj_create(nullptr));
   home_screen = nullptr;
@@ -1278,6 +1289,7 @@ void native_launcher_restore()
   lv_obj_t *old = lv_screen_active();
   lv_screen_load(lv_obj_create(nullptr));
   create_home_screen();
+  if(home_pager) { lv_obj_update_layout(home_pager); lv_obj_scroll_to_x(home_pager,native_return_page*lv_obj_get_width(home_pager),LV_ANIM_OFF); }
   lv_obj_delete(old);
   UiSessionState::set_route("home");
 }

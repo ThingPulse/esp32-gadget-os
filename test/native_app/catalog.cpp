@@ -13,7 +13,7 @@ int main(){
  std::vector<catalog::Item> items;std::string error;
  auto parse=[&](const char *chip="esp32"){std::string json;serializeJson(d,json);return catalog::parse(json.data(),json.size(),chip,base,items,error);};
  assert(parse()&&items.size()==1&&!items[0].description.empty());assert(parse("esp32s3")&&items.empty());
- a["api_minor"]=2;assert(parse()&&items.size()==1);a["api_minor"]=3;assert(parse()&&items.size()==1);a["api_minor"]=4;assert(parse()&&items.size()==1);a["api_minor"]=5;assert(parse()&&items.empty());a["api_minor"]=-1;assert(!parse());a["api_minor"]=0;
+ a["api_minor"]=2;assert(parse()&&items.size()==1);a["api_minor"]=3;assert(parse()&&items.size()==1);a["api_minor"]=4;assert(parse()&&items.size()==1);a["api_minor"]=5;assert(parse()&&items.size()==1);a["api_minor"]=6;assert(parse()&&items.empty());a["api_minor"]=-1;assert(!parse());a["api_minor"]=0;
  a["url"]="https://evil.test/x";assert(!parse()&&items.empty());a["url"]=good;
  a["bytes"]=80000;assert(!parse());a["bytes"]=4000;
  a["description"]=std::string(241,'x');assert(!parse());a["description"]="Count things.";assert(parse());

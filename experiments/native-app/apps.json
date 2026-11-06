@@ -2,18 +2,6 @@
   "schema": 1,
   "apps": [
     {
-      "source": "counter",
-      "id": "native-demo",
-      "version": "0.1.0",
-      "description": "A simple counter to try out installable apps. Watch it count and tap Reset to start again."
-    },
-    {
-      "source": "iss",
-      "id": "native-iss",
-      "version": "0.2.0",
-      "description": "Find the International Space Station. See its current position and tap Refresh for an update."
-    },
-    {
       "source": "agent_usage",
       "id": "agent-usage",
       "version": "0.5.0",
@@ -24,6 +12,16 @@
       "id": "system-monitor",
       "version": "0.1.0",
       "description": "Monitor your Mac: CPU, memory, network, top processes and startup disk. Uses your existing Gadget Companion pairing."
+    },
+    {
+      "source": "iss_tracker",
+      "id": "iss-tracker",
+      "version": "0.1.0",
+      "description": "Find upcoming visible ISS passes for your device location, with a compass, countdowns and offline forecasts. No computer companion required."
     }
+  ],
+  "retired_ids": [
+    "native-demo",
+    "native-iss"
   ]
 }

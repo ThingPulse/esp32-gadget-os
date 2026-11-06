@@ -1,3 +1,4 @@
+#include <stddef.h>
 #ifndef GADGET_APP_H
 #include "gadget_app.h"
 #endif
@@ -56,7 +57,7 @@ static gadget_handle make(gadget_handle p,unsigned kind,const char*t,int x,int y
 static gadget_handle label(gadget_handle p,const char*t,int x,int y,int w,int h,unsigned style){return make(p,GADGET_UI_LABEL,t,x,y,w,h,style,0,0);}
 __attribute__((visibility("default"))) int gadget_app_entry(int argc,char**argv){
  if(argc!=2||!argv)return -1;host=(const gadget_host_api*)argv[0];gadget_app_lifecycle*app=(gadget_app_lifecycle*)argv[1];
- if(!host||host->struct_size<sizeof(*host)||host->major!=1||host->minor<4||!host->system_read||!host->system_refresh||!host->json_string||!host->ui||!app||app->struct_size<sizeof(*app))return -1;ui=host->ui;if(ui->struct_size<sizeof(*ui)||!ui->chart||!ui->opacity)return -1;
+ if(!host||host->struct_size<offsetof(gadget_host_api,services)||host->major!=1||host->minor<4||!host->system_read||!host->system_refresh||!host->json_string||!host->ui||!app||app->struct_size<sizeof(*app))return -1;ui=host->ui;if(ui->struct_size<offsetof(gadget_ui_api,reserve)||!ui->chart||!ui->opacity)return -1;
  app->major=1;app->minor=4;app->shutdown=shutdown;page=sort=elapsed=received=refresh_wait=0;paired=1;age=0;computer[0]=volume[0]=0;cpu=ram=cores=mem=total=down=up=battery=power=uptime=disk_total=disk_avail=-1;for(unsigned k=0;k<2;++k)for(unsigned i=0;i<5;++i){names[k][i][0]=0;proc_val[k][i]=-1;}
  gadget_handle root=ui->create(0,GADGET_UI_ROOT,0,0,0);if(!root)return -1;
  gadget_handle header=make(root,GADGET_UI_CONTAINER,0,0,0,320,44,GADGET_STYLE_HEADER,0,0);
