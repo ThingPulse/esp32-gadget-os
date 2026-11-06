@@ -254,7 +254,16 @@ void create_tile(lv_obj_t *grid){
     lv_obj_set_size(label,lv_pct(100),2*i18n::font14()->line_height);
     lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
     lv_obj_align(label,LV_ALIGN_TOP_MID,0,76);
-    badge=lv_label_create(tile);lv_label_set_text(badge,i18n::tr("New"));lv_obj_set_style_text_font(badge,i18n::font14(),0);lv_obj_set_style_text_color(badge,lv_color_hex(0x67e6c3),0);lv_obj_align(badge,LV_ALIGN_TOP_RIGHT,0,0);update_badge();
+    badge=lv_label_create(tile);lv_label_set_text(badge,i18n::tr("New"));
+    lv_obj_set_style_text_font(badge,i18n::font14(),0);
+    lv_obj_set_style_text_color(badge,lv_color_white(),0);
+    lv_obj_set_style_bg_color(badge,lv_color_hex(0xc62828),0);
+    lv_obj_set_style_bg_opa(badge,LV_OPA_COVER,0);
+    lv_obj_set_style_radius(badge,LV_RADIUS_CIRCLE,0);
+    lv_obj_set_style_pad_hor(badge,8,0);
+    lv_obj_set_style_pad_ver(badge,3,0);
+    lv_obj_remove_flag(badge,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(badge,LV_ALIGN_TOP_RIGHT,0,0);update_badge();
     lv_obj_add_event_cb(badge,[](lv_event_t*){badge=nullptr;},LV_EVENT_DELETE,nullptr);
     lv_obj_add_event_cb(tile,[](lv_event_t*){if(native_launcher_is_active()&&!native_app::busy())requested=true;},LV_EVENT_CLICKED,nullptr);
 }
