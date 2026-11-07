@@ -3,7 +3,7 @@
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
-build=root/'.pio/build/native'
+build=root/Path(os.environ.get('PLATFORMIO_BUILD_DIR','.pio/build'))/'native'
 objects=[p for p in (build/'src').rglob('*.o') if p.name not in ('sdl_main.o','sdl_main.cpp.o')]
 for lib in build.glob('lib*'):
     objects.extend(list(lib.glob('*.a')) or list(lib.rglob('*.o')))

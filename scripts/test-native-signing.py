@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory() as folder:
     invalid=bytearray(unsigned);invalid[-100:]=b'x'*100;invalid[20:52]=hashlib.sha256(invalid[:20]+invalid[52:]).digest();fixtures['bad-signed-elf']=sign_package(invalid,*keys[0])
     for name,data in fixtures.items():(temp/name).write_bytes(data)
     binary=temp/'verify';crypto=subprocess.check_output(['pkg-config','--cflags','--libs','openssl'],text=True).split()
-    subprocess.run(['c++','-std=c++17','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-DGADGET_OS_NATIVE_APP_LOADER=1','-Iinclude','-I.pio/libdeps/esp32-color-kit-native-app/ArduinoJson/src','src/experimental/NativePackage.cpp','src/experimental/NativeSignature.cpp','test/native_app/signing.cpp',*crypto,'-o',str(binary)],cwd=ROOT,check=True)
+    subprocess.run(['c++','-std=c++17','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-DGADGET_OS_NATIVE_APP_LOADER=1','-Iinclude','-I.pio/libdeps/esp32-color-kit/ArduinoJson/src','src/experimental/NativePackage.cpp','src/experimental/NativeSignature.cpp','test/native_app/signing.cpp',*crypto,'-o',str(binary)],cwd=ROOT,check=True)
     subprocess.run([str(binary),str(keys[0][1]),*[str(temp/name) for name in fixtures]],check=True)
     packages=temp/'packages/esp32s3';packages.mkdir(parents=True);(packages/'signing-probe.gapp').write_bytes(signed)
     site=temp/'site';first=catalog.build(packages.parent,site,'https://example.com',keys[0][1]);assert len(first['apps'])==1

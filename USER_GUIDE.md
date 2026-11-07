@@ -10,7 +10,7 @@ Tap an app icon to open it. Use the arrow at the upper left to return to the pre
 
 The status bar shows the current time, weather summary when available, and Wi-Fi status. While Gadget OS is trying to connect, the amber Wi-Fi symbol pulses. It becomes steady white when connected and steady gray when disconnected.
 
-The home screen has multiple pages. Swipe horizontally to the Labs page to reveal experimental apps such as Dice Score. Experimental apps can use more memory or depend on external services and may be less reliable than the primary apps.
+The home screen has two pages. Open **Add apps** on the first page to browse and install apps. Swipe horizontally to **Installed apps** to open them. To remove an app, open **Add apps → Installed apps**, select it, and confirm **Remove**. The desktop simulator uses the same screens with offline simulated installations.
 
 ## Initial setup
 

@@ -987,7 +987,7 @@ static void launch_route(const std::string &route)
   }
 
   if (route == "iss") {
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
     // An old bundled-app route must not open a missing package after migration.
     for(const auto &app:native_app::store::installed())if(app.manifest.id=="iss-tracker"){native_app::launch_id("iss-tracker");return;}
     UiSessionState::set_route("home");
@@ -1221,11 +1221,11 @@ static void create_home_screen(void)
                         LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
   lv_obj_t *stable_grid = create_app_page(pager, nullptr);
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
   native_app::app_store::create_tile(stable_grid);
 #endif
   const AppRegistry &reg = AppRegistry::instance();
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
   lv_obj_t *installed_grid = create_app_page(pager, i18n::tr("Installed apps"));
   {
     lv_obj_t *indicator = lv_label_create(scr);
@@ -1240,12 +1240,12 @@ static void create_home_screen(void)
     const App &app = reg.apps()[i];
     create_app_tile(stable_grid, app, i);
   }
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
   native_app::store::create_tiles(installed_grid);
 #endif
 }
 
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
 static bool native_update_dialog_hidden = false;
 static bool native_update_notes_hidden = false;
 static void native_restore_update_overlays()
@@ -1338,7 +1338,7 @@ static uint32_t get_tick_ms(void)
 
 void setup(void)
 {
-#if GADGET_OS_NATIVE_APP_LOADER
+#if defined(ARDUINO) && GADGET_OS_NATIVE_APP_LOADER
   Serial.begin(115200);
 #if defined(COLOR_KIT_PRO) && ARDUINO_USB_MODE == 1 && ARDUINO_USB_CDC_ON_BOOT
   // HWCDC can otherwise wait ~2 seconds per write when a USB host is connected
@@ -1513,7 +1513,7 @@ void loop(void)
   prev_ms = cur_ms;
 #endif
   if (
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
       !native_app::busy() &&
 #endif
       i18n::take_reload_request()) {
@@ -1527,7 +1527,7 @@ void loop(void)
   }
   ServiceRegistry::instance().loop_all();
   if (update_dialog_pending
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
       && !native_app::busy()
 #endif
   ) { update_dialog_pending=false; show_update_dialog(); }
@@ -1535,7 +1535,7 @@ void loop(void)
   native_run_tutorial();
 #endif
   lv_task_handler();
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
   native_app::poll();
   if (!native_app::busy()) native_restore_update_overlays();
 #endif

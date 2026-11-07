@@ -72,8 +72,8 @@ python3 experiments/native-app/build.py --app agent_usage --usage-demo --version
 | Color Kit Grande | `.pio/native-app-packages/esp32/agent-usage.gapp` |
 | Color Kit Pro | `.pio/native-app-packages/esp32s3/agent-usage.gapp` |
 
-1. Use firmware built with `esp32-color-kit-native-app` or
-   `esp32-color-kit-pro-native-app`. **Update this firmware once to include API 1.3** before installing the new
+1. Use firmware built with `esp32-color-kit` or
+   `esp32-color-kit-pro`. **Update this firmware once to include API 1.3** before installing the new
    app. Older firmware rejects the package as incompatible. Older installed
    Counter/ISS packages still run on the new firmware. Subsequent compatible
    app updates do not need a firmware reflash.

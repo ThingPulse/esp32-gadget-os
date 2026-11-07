@@ -5,7 +5,7 @@ from native_test_fixtures import build_fixtures
 root=pathlib.Path(__file__).resolve().parents[1]
 os.chdir(root)
 arduino_json=root/'.pio/libdeps/esp32-color-kit/ArduinoJson/src'
-if not arduino_json.exists(): arduino_json=root/'.pio/libdeps/esp32-color-kit-native-app/ArduinoJson/src'
+if not arduino_json.exists(): arduino_json=root/'.pio/libdeps/esp32-color-kit/ArduinoJson/src'
 if not arduino_json.exists(): raise SystemExit('Install the experimental PlatformIO dependencies first')
 with tempfile.TemporaryDirectory() as temp:
     temp=pathlib.Path(temp)

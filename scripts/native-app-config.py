@@ -1,4 +1,4 @@
-"""Configure experiment flags before PlatformIO clones source environments."""
+"""Configure native app loader flags before PlatformIO clones source environments."""
 from pathlib import Path
 Import("env")
 root = Path(env.subst('$PROJECT_DIR'))

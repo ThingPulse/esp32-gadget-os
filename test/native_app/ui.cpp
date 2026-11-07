@@ -7,6 +7,8 @@
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
+void agent_usage_simulator_launch();
+void system_monitor_simulator_launch();
 namespace ui=native_app::ui;
 namespace settings=native_app::settings;
 static uint8_t frame[320*480*3],buffer[320*48*4];
@@ -43,7 +45,7 @@ int main(int argc,char **argv){assert(argc==2);lv_init();lv_tick_set_cb([](){ret
  ui::begin(screen,dispatch);auto root=ui::api.create(nullptr,GADGET_UI_ROOT,nullptr,nullptr,nullptr);for(int i=0;i<63;++i)assert(ui::api.create(root,GADGET_UI_LABEL,"",nullptr,nullptr));assert(!ui::api.create(root,GADGET_UI_LABEL,"",nullptr,nullptr));ui::end();
  settings::begin("test-app");assert(settings::set("mode","used")==0);char value[256];assert(settings::get("mode",value,3)==-1);assert(settings::get("mode",value,sizeof value)==4&&!strcmp(value,"used"));assert(settings::set("../bad","x")==-1);assert(settings::set("large",std::string(256,'x').c_str())==-1);
  for(int i=0;i<7;++i)assert(settings::set(("key"+std::to_string(i)).c_str(),"v")==0);assert(settings::set("overflow","v")==-1);settings::end();assert(settings::get("mode",value,sizeof value)==-1);settings::begin("other-app");assert(settings::get("mode",value,sizeof value)==-1);settings::begin("test-app");assert(settings::get("mode",value,sizeof value)==4);settings::end();
- const auto &registry=AppRegistry::instance();AppLaunchFn launch=nullptr;for(int i=0;i<registry.count();++i)if(strstr(registry.apps()[i].name,"Agent Usage"))launch=registry.apps()[i].on_launch;assert(launch);launch();capture(argv[1],"agent-usage-remaining");assert(find(lv_screen_active(),"72%"));
+ auto launch=agent_usage_simulator_launch;launch();capture(argv[1],"agent-usage-remaining");assert(find(lv_screen_active(),"72%"));
  auto *codex=find(lv_screen_active(),"Codex >");assert(codex);lv_obj_send_event(lv_obj_get_parent(codex),LV_EVENT_CLICKED,nullptr);
  capture(argv[1],"agent-usage-codex-details");assert(find(lv_screen_active(),"12.4M"));assert(find(lv_screen_active(),"8d"));assert(!find(lv_screen_active(),"Remaining"));
  auto *today=find(lv_screen_active(),"Today");assert(today);lv_obj_send_event(lv_obj_get_parent(today),LV_EVENT_CLICKED,nullptr);capture(argv[1],"agent-usage-today");assert(find(lv_screen_active(),"66K tokens / UTC"));
@@ -59,7 +61,7 @@ int main(int argc,char **argv){assert(argc==2);lv_init();lv_tick_set_cb([](){ret
  back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();
  {std::ofstream f("snapshot.json");f<<"{}";}launch();capture(argv[1],"agent-usage-error");assert(find(lv_screen_active(),"Refresh failed - tap refresh"));
  back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();
- AppLaunchFn system_launch=nullptr;for(int i=0;i<registry.count();++i)if(strstr(registry.apps()[i].name,"System Monitor"))system_launch=registry.apps()[i].on_launch;assert(system_launch);system_launch();capture(argv[1],"system-monitor-overview");assert(find(lv_screen_active(),"38%"));
+ auto system_launch=system_monitor_simulator_launch;system_launch();capture(argv[1],"system-monitor-overview");assert(find(lv_screen_active(),"38%"));
  auto click_text=[&](const char*t){auto*l=find(lv_screen_active(),t);assert(l);lv_obj_send_event(lv_obj_get_parent(l),LV_EVENT_CLICKED,nullptr);};
  click_text("Processes");capture(argv[1],"system-monitor-processes");assert(find(lv_screen_active(),"14.2%"));click_text("Memory");capture(argv[1],"system-monitor-memory");assert(find(lv_screen_active(),"1.6 GB"));
  click_text("Storage");capture(argv[1],"system-monitor-storage");assert(find(lv_screen_active(),"184 GB free"));click_text(LV_SYMBOL_LEFT);lv_timer_handler();

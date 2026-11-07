@@ -1,8 +1,8 @@
-# Experimental native app loader
+# Native app loader
 
-Opt-in native app experiment with local browser installation; not a sandbox.
+The regular Grande and Pro firmware includes the app store and local browser installation; not a sandbox.
 External native code has the same privileges as firmware. Only use trusted
-packages. Manifest, ELF and SHA-256 checks do not authenticate executable code.
+packages. Published packages are signature-verified; unsigned developer packages require explicit developer mode.
 
 Current browser-installation results are in [INSTALLREPORT.md](INSTALLREPORT.md).
 The earlier feasibility/HTTP reports describe the preceding stages.
@@ -41,13 +41,13 @@ shared renderer and produce `.pio/ui-previews/agent-usage-*.png` screenshots.
 
 The existing PlatformIO/pioarduino 55.03.312-1 setup uses Arduino-ESP32 3.3.12,
 ESP-IDF 5.5.5 and Xtensa GCC 14.2.0 (esp-14.2.0_20260121). The baseline resolved
-LVGL version is 9.5.0. Original library ranges are untouched; experimental
-profiles pin LVGL 9.5.0, ArduinoJson 7.4.3 and the baseline's LovyanGFX version
-(Grande 1.2.26, Pro 1.2.19) so size comparisons don't include dependency upgrades.
+LVGL version is 9.5.0. Regular firmware profiles pin LVGL 9.5.0, ArduinoJson 7.4.3 and the baseline's LovyanGFX version
+(Grande 1.2.26, Pro 1.2.19) to the versions validated with the loader.
 
 Profiles: `esp32-color-kit` (classic ESP32, 8 MiB flash, PSRAM enabled) and
 `esp32-color-kit-pro` (ESP32-S3 N16R2, 16 MiB flash, 2 MiB quad PSRAM).
-Native SDL remains a development simulator, not a Xtensa execution backend.
+Native SDL shares the store UI and simulates installs locally. Installed apps open
+the desktop adapters on the same launcher page as hardware; it does not execute Xtensa code.
 There was no AGENTS.md in this checkout or its ancestor directories when reviewed.
 
 LVGL runs synchronously in `loop()` through `lv_task_handler()`. Built-in apps
@@ -62,9 +62,9 @@ firmware download/reboot preparation.
 
 LittleFS uses the existing partition named `spiffs`: Grande 0x510000/0x2e0000,
 Pro 0xc10000/0x3e0000. Both retain dual OTA slots (2.5 MiB / 6 MiB respectively).
-The filesystem label does not imply SPIFFS format. Experimental profiles specify
+The filesystem label does not imply SPIFFS format. Regular ESP32 profiles specify
 `board_build.filesystem=littlefs` for PlatformIO's existing uploadfs mechanism.
-No partition offsets or normal profiles were changed.
+Partition offsets are unchanged.
 
 ## Build
 
@@ -72,7 +72,7 @@ From the repository root, with the project's build environment installed:
 
 ```sh
 source .venv-build/bin/activate
-pio run -e esp32-color-kit-native-app -e esp32-color-kit-pro-native-app
+pio run -e esp32-color-kit -e esp32-color-kit-pro
 
 # Use the installed toolchain used by the firmware build; adjust if your
 # PLATFORMIO_CORE_DIR differs from ~/.platformio.
@@ -122,8 +122,8 @@ python3 experiments/native-app/audit-builds.py \
 Flash the experimental firmware once for the matching board:
 
 ```sh
-pio run -e esp32-color-kit-native-app -t upload --upload-port /dev/cu.YOUR_PORT
-# Pro: replace the environment with esp32-color-kit-pro-native-app.
+pio run -e esp32-color-kit -t upload --upload-port /dev/cu.YOUR_PORT
+# Pro: replace the environment with esp32-color-kit-pro.
 ```
 
 1. Connect the device and browser to the same trusted local network.

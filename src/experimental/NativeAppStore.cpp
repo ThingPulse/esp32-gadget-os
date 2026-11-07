@@ -1,4 +1,4 @@
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
 #include "experimental/NativeAppStore.h"
 #include "experimental/NativeCatalog.h"
 #include "experimental/NativeStore.h"
@@ -6,6 +6,7 @@
 #include "experimental/Companion.h"
 #include "services/UpdateService.h"
 #include "ui/I18n.h"
+#if defined(ARDUINO)
 #include "NativeTrust.h"
 #include <Arduino.h>
 #include <HTTPClient.h>
@@ -14,6 +15,9 @@
 #include <Preferences.h>
 #include <esp_heap_caps.h>
 #include <freertos/task.h>
+#else
+#include "experimental/NativeSimulator.h"
+#endif
 #include <atomic>
 #include <algorithm>
 #include <new>
@@ -27,7 +31,9 @@ struct Transfer {
     bool package=false;catalog::Item item;
     std::string url,error;size_t limit=65536,size=0;
     uint8_t *bytes=nullptr;
+#if defined(ARDUINO)
     ~Transfer(){heap_caps_free(bytes);}
+#endif
 };
 Transfer *transfer=nullptr;
 bool requested=false,visible=false,closing=false,loaded=false,has_new=false;
@@ -44,6 +50,7 @@ bool installed_view=false;
 lv_obj_t *content=nullptr,*status_label=nullptr,*progress=nullptr,*badge=nullptr,*refresh_button=nullptr;
 
 bool ota_busy(){auto s=UpdateService::instance().state();return s==UpdateService::State::Downloading||s==UpdateService::State::ReadyToReboot;}
+#if defined(ARDUINO)
 class Sink:public Stream {
     Transfer &t;uint32_t began=millis();
 public:
@@ -79,10 +86,12 @@ void worker(void *arg){
     auto *t=(Transfer*)arg;fetch(*t);
     t->done.store(true,std::memory_order_release);vTaskDelete(nullptr);
 }
+#endif
 void update_badge(){if(badge){if(has_new)lv_obj_remove_flag(badge,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(badge,LV_OBJ_FLAG_HIDDEN);}}
 void remember_catalog(bool mark_seen){
-    Preferences prefs;std::string seen="|";
     installed_apps=store::installed();
+#if defined(ARDUINO)
+    Preferences prefs;std::string seen="|";
     if(prefs.begin("app-store",false)){
         const size_t length=prefs.getBytesLength("seen-ids");
         if(length&&length<=4352){seen.resize(length);prefs.getBytes("seen-ids",seen.data(),length);}
@@ -93,10 +102,12 @@ void remember_catalog(bool mark_seen){
         if(mark_seen){std::string current="|";for(auto &i:items)current+=i.id+"|";prefs.putBytes("seen-ids",current.data(),current.size());}
         prefs.end();
     }
+#endif
     has_new=!mark_seen&&!new_ids.empty();update_badge();
 }
 void start(bool package=false){
     if(transfer)return;
+#if defined(ARDUINO)
     if(WiFi.status()!=WL_CONNECTED){message="Connect to Wi-Fi, then tap Refresh.";redraw=true;return;}
     if(ota_busy()){message="Wait for the OS update to finish.";redraw=true;return;}
     auto *t=new(std::nothrow) Transfer;
@@ -109,6 +120,15 @@ void start(bool package=false){
     transfer=t;last_check=millis();background_started=true;
     if(xTaskCreate(worker,"app-store",8192,t,1,nullptr)!=pdPASS){transfer=nullptr;delete t;message="Not enough memory. Please try again.";}
     else message=package?"Downloading app…":"Checking for apps…";
+#else
+    if(package){
+        if(selection<0||size_t(selection)>=items.size())return;
+        if(simulator::install(items[selection],message)){
+            message="Installed. Find it on the Installed apps screen.";
+            installed_apps=store::installed();
+        }
+    }else{items=simulator::catalog();loaded=true;message.clear();remember_catalog(true);}
+#endif
     redraw=true;
 }
 const store::Installed *find_installed(const std::string &id){
@@ -205,10 +225,12 @@ void render(){
         if(page)button(content,"Previous apps",[](lv_event_t*){--page;redraw=true;});
         if((page+1)*PageSize<items.size())button(content,"More apps",[](lv_event_t*){++page;redraw=true;});
     }
+#if defined(ARDUINO)
     button(content,"Pair computer",[](lv_event_t*){pair_requested=true;closing=true;});
     auto *browser=button(content,"Browser installation",[](lv_event_t*){browser_requested=true;closing=true;});
     lv_obj_set_style_bg_opa(browser,LV_OPA_TRANSP,0);
     lv_obj_set_style_shadow_width(browser,0,0);
+#endif
 }
 void show(){
     requested=false;visible=true;selection=-1;page=0;installed_view=false;remove_id.clear();native_launcher_release();
@@ -274,10 +296,13 @@ void poll(){
     if(closing){
         closing=false;requested=false;visible=false;if(transfer)transfer->cancelled.store(true);
         content=status_label=progress=refresh_button=nullptr;native_launcher_restore();
+#if defined(ARDUINO)
         if(pair_requested){pair_requested=false;companion::request_pairing();}
         if(browser_requested){browser_requested=false;store::request_manager();}
+#endif
         if(!open_id.empty()){auto id=open_id;open_id.clear();native_app::launch_id(id.c_str());}
     }
+#if defined(ARDUINO)
     if(transfer&&!visible&&(!native_launcher_is_active()||native_app::busy()||ota_busy()))transfer->cancelled.store(true);
     if(transfer&&transfer->done.load(std::memory_order_acquire)){
         auto *t=transfer;transfer=nullptr;
@@ -299,10 +324,13 @@ void poll(){
         }
         delete t;redraw=true;
     }
+#endif
     if(visible&&redraw)render();
+#if defined(ARDUINO)
     if(progress&&transfer&&transfer->package)lv_bar_set_value(progress,int(transfer->received.load()*100/transfer->limit),LV_ANIM_OFF);
     if(!visible&&!transfer&&!native_app::busy()&&native_launcher_is_active()&&WiFi.status()==WL_CONNECTED&&!ota_busy()&&
        (!background_started?millis()>10000:millis()-last_check>(loaded?86400000U:900000U)))start();
+#endif
 }
 }
 #endif

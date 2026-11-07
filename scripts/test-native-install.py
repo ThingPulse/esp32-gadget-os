@@ -4,7 +4,7 @@ import pathlib,subprocess,tempfile,json,struct,hashlib
 from native_test_fixtures import build_fixtures
 root=pathlib.Path(__file__).resolve().parents[1]
 arduino_json=root/'.pio/libdeps/esp32-color-kit/ArduinoJson/src'
-if not arduino_json.exists():arduino_json=root/'.pio/libdeps/esp32-color-kit-native-app/ArduinoJson/src'
+if not arduino_json.exists():arduino_json=root/'.pio/libdeps/esp32-color-kit/ArduinoJson/src'
 with tempfile.TemporaryDirectory() as source:
  build_fixtures(pathlib.Path(source), ('iss',), ('esp32s3',))
  elf=(pathlib.Path(source)/'esp32s3/native-iss/app.elf').read_bytes()

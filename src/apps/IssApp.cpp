@@ -1,5 +1,5 @@
 // Retained as the simulator parity reference and for firmware without the app loader.
-#if !GADGET_OS_NATIVE_APP_LOADER
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "apps/IssApp.h"
 #include "apps/SettingsApp.h"
 #include "AppRegistry.h"

@@ -1,5 +1,5 @@
 #pragma once
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
 namespace native_app {
 void launch();
 void launch_iss();
@@ -9,7 +9,7 @@ void poll(); // after lv_task_handler returns, UI thread only
 bool busy();
 bool trace_enabled();
 }
-// Implemented by the launcher, only linked in experimental builds.
+// Implemented by the launcher, shared by firmware and the desktop store.
 bool native_launcher_is_active();
 void native_launcher_release();
 void native_launcher_restore();

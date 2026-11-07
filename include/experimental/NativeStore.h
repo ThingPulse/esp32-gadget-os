@@ -1,6 +1,6 @@
 #pragma once
 #include <ArduinoJson.h>
-#if GADGET_OS_NATIVE_APP_LOADER
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
 #include "experimental/NativePackage.h"
 #include <lvgl.h>
 #include <memory>

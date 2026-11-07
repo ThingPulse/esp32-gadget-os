@@ -39,7 +39,7 @@ changes do not publish releases or install firmware automatically.
 For a developer installation before release:
 
 ```sh
-.venv-build/bin/pio run -e esp32-color-kit-pro-native-app
+.venv-build/bin/pio run -e esp32-color-kit-pro
 python3 experiments/native-app/build.py --app agent_usage --version 0.5.0 \
   --chip esp32s3 --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
 ```
@@ -48,7 +48,7 @@ Flash that firmware using your normal workflow. Install the resulting
 `.pio/native-app-packages/esp32s3/agent-usage.gapp` using the existing browser or
 `scripts/install-native-app.py`. This unsigned developer build needs Developer
 mode; release builds are signed normally. For Grande use the
-`esp32-color-kit-native-app` environment and `--chip esp32`. The firmware still
+`esp32-color-kit` environment and `--chip esp32`. The firmware still
 supports older API 1.0–1.2 apps. Packages contain no user-specific URLs or tokens.
 
 ## Options and recovery

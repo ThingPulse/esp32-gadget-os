@@ -4,7 +4,7 @@
 
 Gadget OS is an LVGL-based application shell for ThingPulse Color Kit devices. It provides a touch-oriented home screen, persistent settings, background network services, and a native SDL simulator for developing the UI without flashing hardware.
 
-The project is under active development. The main launcher contains the bundled apps. App-enabled experimental builds also include Add apps and a separate Installed apps page.
+The project is under active development. The main launcher contains the bundled apps. All regular builds include Add apps and a separate Installed apps page.
 
 For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 
@@ -16,10 +16,18 @@ For device setup and everyday operation, see the [User Guide](USER_GUIDE.md).
 | `esp32-color-kit` | ThingPulse Color Kit Grande | ESP32 |
 | `esp32-color-kit-pro` | ThingPulse Color Kit Pro | ESP32-S3 |
 
-For the opt-in native app loading feasibility experiment, see
-[build/upload instructions](experiments/native-app/README.md) and the
-[experiment report](experiments/native-app/REPORT.md). It is disabled in normal
-builds and is not a production app platform.
+The regular ESP32 profiles include the app store and signed native app loader.
+See [build/upload instructions](experiments/native-app/README.md). The former
+`esp32-color-kit-native-app` and `esp32-color-kit-pro-native-app` profiles have
+been merged into the regular profiles.
+
+The desktop simulator uses the same **Add apps** screens and **Installed apps**
+launcher page. Install and remove actions are simulated offline and persist in
+`.pio/simulator-apps.json`; installed apps open their desktop adapters. No ESP32
+binaries are downloaded or executed. Delete that file to reset installed apps.
+Computer pairing and browser installation remain hardware-only.
+Run `python3 scripts/test-native-store-simulator.py` after building `native` to
+check install/remove, desktop launching, and persistence across restarts.
 
 ## Features
 

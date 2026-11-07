@@ -35,6 +35,9 @@ void launch(){home=lv_screen_active();auto*screen=lv_obj_create(nullptr);closing
  static gadget_host_api api{};api.struct_size=sizeof(api);api.major=1;api.minor=5;api.ui=&native_app::ui::api;api.services=&s;api.timer_create=timer_create;api.request_close=stop;lifecycle={sizeof(lifecycle)};char*args[]={(char*)&api,(char*)&lifecycle};ui_load_screen(screen,false);iss_tracker_source::iss_tracker_preview_entry(2,args);
  poller=lv_timer_create([](lv_timer_t*){if(request&&request->done.load()&&!closing){auto r=request;request.reset();auto cb=callback;auto*u=callback_user;callback=nullptr;if(cb)cb(r->status,r->body.data(),r->body.size(),u);}},50,nullptr);
 }
+#if !GADGET_OS_APP_STORE_SIMULATOR
 APP_REGISTER_COLOR_RANK("ISS\nPreview",LV_SYMBOL_GPS,launch,0x237e77,92);
+#endif
 }
+void iss_tracker_simulator_launch(){launch();}
 #endif

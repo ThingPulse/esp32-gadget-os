@@ -62,6 +62,9 @@ void launch(){
  ui_load_screen(screen_obj,false);system_source::system_monitor_preview_entry(2,args);
 
 }
+#if !GADGET_OS_APP_STORE_SIMULATOR
 APP_REGISTER_COLOR_RANK("System Monitor\nPreview",LV_SYMBOL_LIST,launch,0x237e77,91);
+#endif
 }
+void system_monitor_simulator_launch(){launch();}
 #endif

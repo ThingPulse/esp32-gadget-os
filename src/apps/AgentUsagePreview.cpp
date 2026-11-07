@@ -88,6 +88,9 @@ void launch(){
  ui_load_screen(screen_obj,false);usage_source::agent_usage_preview_entry(2,args);
 
 }
+#if !GADGET_OS_APP_STORE_SIMULATOR
 APP_REGISTER_COLOR_RANK("Agent Usage\nPreview",LV_SYMBOL_CHARGE,launch,0x237e77,90);
+#endif
 }
+void agent_usage_simulator_launch(){launch();}
 #endif
