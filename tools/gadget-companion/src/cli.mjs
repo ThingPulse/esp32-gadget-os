@@ -3,14 +3,17 @@ import {parseArgs} from 'node:util';
 import {hostname} from 'node:os';
 import {createInterface} from 'node:readline/promises';
 import {setTimeout as delay} from 'node:timers/promises';
-import {discover,request,newToken,pairingCode} from './protocol.mjs';
+import {snapshotRoute,discover,request,newToken,pairingCode} from './protocol.mjs';
 import {collectCodex,snapshot} from './codex.mjs';
+import {ActivityCollector} from './activity.mjs';
+import {configureActivity} from './activity-setup.mjs';
 import {SystemCollector} from './system.mjs';
 import {defaultState,loadState,saveState} from './state.mjs';
 
 const help=`Gadget Companion — Codex usage on your Gadget, over local Wi-Fi.
 
-First: open Add apps > Pair computer on the Gadget. Then run this command.
+First: open Add apps > Pair computer on the Gadget, then tap Pair computer
+on the setup screen. Then run this command.
 Confirm the matching six-digit code on its screen. Subsequent runs reconnect.
 
 Options:
@@ -21,6 +24,9 @@ Options:
   --snapshot <file>   Write simulator JSON instead of connecting to a Gadget
   --once              Collect and send once, then exit
   --system-snapshot <file>  Write System Monitor simulator data (macOS)
+  --enable-activity <codex|claude>   Set up read-only session hooks
+  --disable-activity <codex|claude>  Remove companion hooks
+  --activity-snapshot <file>        Write Activity simulator data
   --no-codex          Run system monitoring without Codex collection
   --help              Show this help
 
@@ -48,14 +54,16 @@ async function pair(device,statePath){
   while(!stopped&&Date.now()<deadline){
     await pause(1000);if(stopped)break;
     const result=await request(device.address,'/v1/status',{token});
-    if(result.status===200){const state={id:device.id,address:device.address,name:device.name,token};await saveState(statePath,state);console.log('Paired. Open Agent Usage on the Gadget.');return state;}
+    if(result.status===200){const state={id:device.id,address:device.address,name:device.name,token};await saveState(statePath,state);console.log('Paired. Open Agent Dashboard on the Gadget.');return state;}
     if(result.status!==202)break;
   }
   throw new Error('Pairing cancelled or timed out. Open Pair computer and try again.');
 }
 async function main(){
-  const {values:o}=parseArgs({options:{help:{type:'boolean'},pair:{type:'boolean'},once:{type:'boolean'},device:{type:'string'},codex:{type:'string'},state:{type:'string'},snapshot:{type:'string'},'system-snapshot':{type:'string'},'no-codex':{type:'boolean'}}});
+  const {values:o}=parseArgs({options:{help:{type:'boolean'},pair:{type:'boolean'},once:{type:'boolean'},device:{type:'string'},codex:{type:'string'},state:{type:'string'},snapshot:{type:'string'},'system-snapshot':{type:'string'},'activity-snapshot':{type:'string'},'enable-activity':{type:'string'},'disable-activity':{type:'string'},'no-codex':{type:'boolean'}}});
   if(o.help){console.log(help);return;}
+  if(o['enable-activity']||o['disable-activity']){console.log(await configureActivity(o['enable-activity']||o['disable-activity'],!!o['enable-activity']));return;}
+  if(o['activity-snapshot']){const collector=new ActivityCollector();while(!stopped){await saveState(o['activity-snapshot'],{...await collector.sample(),generated_at:Math.floor(Date.now()/1000)});if(o.once)break;await pause(2000);}return;}
   if(Number(process.versions.node.split('.')[0])<22)throw new Error('Install Node.js 22 or newer.');
   console.log('Gadget Companion — Codex usage and system monitoring. Ctrl+C to stop.');
   if(o['system-snapshot']){const collector=new SystemCollector();while(!stopped){const began=Date.now(),data=await collector.sample();if(!data)throw new Error('System metrics currently require macOS.');await saveState(o['system-snapshot'],{...data,generated_at:Math.floor(Date.now()/1000)});if(o.once)break;await pause(Math.max(0,2000-(Date.now()-began)));}return;}
@@ -78,7 +86,7 @@ async function main(){
     else if(o.device)throw new Error('That address did not identify the paired Gadget. Use --pair to select another.');
   }
   let summary=null,failed=false,nextCodex=0,codexTask=null,codexReady=false,lastRefresh=-1,systemAnnounced=false;
-  const collector=new SystemCollector();
+  const collector=new SystemCollector(),activityCollector=new ActivityCollector();
   const collect=()=>{nextCodex=Date.now()+60000;codexTask=collectCodex({executable:o.codex||'codex',signal:stop.signal}).then(next=>{if(!next.details&&summary?.details)next.details=summary.details;summary=next;codexReady=true;}).catch(e=>{if(!stopped)console.log(e.message+' System monitoring continues.');}).finally(()=>{codexTask=null;});return codexTask;};
   while(!stopped){const began=Date.now();
     try{
@@ -86,13 +94,14 @@ async function main(){
       if(check.status===403)throw Object.assign(new Error('Pairing was removed. Run again with --pair.'),{fatal:true});
       if(check.status!==200)throw new Error('Device is not ready.');
       if(!o['no-codex']&&!codexTask&&Date.now()>=nextCodex){const task=collect();if(o.once)await task;}
-      if(check.body.system===1){
+      if((check.body.appChannels===1||check.body.system===1)){
         const force=lastRefresh!==check.body.systemRefresh;lastRefresh=check.body.systemRefresh;
         const data=await collector.sample(force);
-        if(data){const result=await request(state.address,'/v1/system',{token:state.token,data});if(result.status!==200)throw new Error('System snapshot was refused.');if(!systemAnnounced){console.log('System monitoring active — updates every 2 seconds.');systemAnnounced=true;}}
+        if(data){const result=await request(state.address,snapshotRoute(check.body,'system-monitor','system','/v1/system'),{token:state.token,data});if(result.status!==200)throw new Error('System snapshot was refused.');if(!systemAnnounced){console.log('System monitoring active — updates every 2 seconds.');systemAnnounced=true;}}
       }
+      if((check.body.appChannels===1||check.body.activity===1)){const result=await request(state.address,snapshotRoute(check.body,'agent-usage','activity','/v1/activity'),{token:state.token,data:await activityCollector.sample()});if(result.status!==200)throw new Error('Activity snapshot was refused.');}
       if(stopped)break;
-      if(codexReady&&summary){const result=await request(state.address,'/v1/agent-usage',{token:state.token,data:snapshot(summary)});if(result.status!==200)throw new Error('Codex snapshot was refused.');codexReady=false;console.log(`${new Date().toLocaleTimeString()}: Codex summary sent.`);}
+      if(codexReady&&summary){const result=await request(state.address,snapshotRoute(check.body,'agent-usage','usage','/v1/agent-usage'),{token:state.token,data:snapshot(summary)});if(result.status!==200)throw new Error('Codex snapshot was refused.');codexReady=false;console.log(`${new Date().toLocaleTimeString()}: Codex summary sent.`);}
       if(failed)console.log('Device reconnected.');failed=false;
     }catch(e){
       if(e.fatal||o.once){stop.abort();throw e;}

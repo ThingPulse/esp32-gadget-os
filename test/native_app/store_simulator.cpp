@@ -20,7 +20,7 @@ static lv_obj_t *find(lv_obj_t *obj,const char *text){
 static void click(const char *text){
     auto *label=find(lv_screen_active(),text);assert(label);
     lv_obj_send_event(lv_obj_get_parent(label),LV_EVENT_CLICKED,nullptr);
-    native_app::poll();lv_obj_update_layout(lv_screen_active());
+    native_app::poll();native_app::poll();lv_obj_update_layout(lv_screen_active());
 }
 bool native_launcher_is_active(){return home&&lv_screen_active()==home;}
 void native_launcher_release(){auto *old=lv_screen_active();home=nullptr;lv_screen_load(lv_obj_create(nullptr));lv_obj_delete(old);}
@@ -51,8 +51,11 @@ int main(int argc,char **argv){
         assert(!find(home,"System Monitor"));std::cout<<"PASS: persistence across processes and removal\n";return 0;
     }
     assert(native_app::store::installed().empty());
-    click("Add apps");assert(find(lv_screen_active(),"Agent Usage"));capture(argv[1],"store-catalog");
-    click("System Monitor");assert(find(lv_screen_active(),"Install app"));capture(argv[1],"store-details");
+    click("Add apps");assert(find(lv_screen_active(),"Agent Dashboard"));capture(argv[1],"store-catalog");
+    click("System Monitor");assert(find(lv_screen_active(),"Install app"));
+    assert(find(lv_screen_active(),"Requires Gadget Companion on your computer"));capture(argv[1],"store-details");
+    click("Set up computer");assert(find(lv_screen_active(),"Connect computer"));capture(argv[1],"companion-setup");
+    click("Back");assert(native_launcher_is_active());click("Add apps");click("System Monitor");
     click("Install app");assert(native_app::store::installed().size()==1);assert(find(lv_screen_active(),"Open app"));
     capture(argv[1],"store-installed");click("Open app");assert(native_app::running("system-monitor"));
     assert(find(lv_screen_active(),"Overview"));click(LV_SYMBOL_LEFT);lv_timer_handler();native_app::poll();

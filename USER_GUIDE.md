@@ -12,6 +12,22 @@ The status bar shows the current time, weather summary when available, and Wi-Fi
 
 The home screen has two pages. Open **Add apps** on the first page to browse and install apps. Swipe horizontally to **Installed apps** to open them. To remove an app, open **Add apps → Installed apps**, select it, and confirm **Remove**. The desktop simulator uses the same screens with offline simulated installations.
 
+## Connect your computer
+
+System Monitor and Agent Dashboard require **Gadget Companion** on your computer;
+the app store marks this requirement. ISS works standalone.
+
+The first time you open a companion app on an unpaired Gadget, it shows a setup
+screen with a QR code and download address. Install and open the macOS companion,
+then tap **Pair computer** on the Gadget. Click **Find my Gadget** on the Mac,
+choose the device, and confirm the matching code on the Gadget. One pairing
+works for both apps. You can also start setup from **Add apps → Pair computer**.
+
+The companion stays in the Mac’s menu bar when you close its window. System
+Monitor needs no extra account. Agent Dashboard is optional and checks for a signed-in
+Codex CLI. If updates stop, make sure the computer is awake, the companion is
+running, and both devices are on the same Wi-Fi.
+
 ## Initial setup
 
 Open **Settings** from the home screen. The setup areas are collected on one page:
@@ -497,3 +513,31 @@ To regenerate the embedded page after editing its source, run
 `python3 scripts/generate-home-setup.py`. After a native build,
 `python3 scripts/test-home-assistant.py` (with Jinja2 from `requirements-build.txt` installed in that Python environment) tests against a local fake Home Assistant;
 it does not use real credentials or operate real devices.
+
+Agent Dashboard also shows live **Activity** for Codex and Claude Code. Enable
+activity for each agent in Gadget Companion, then review the hooks in your agent
+(`/hooks`; Codex also offers Settings → Hooks) and start a new turn. Tap a session
+for details. Amber status means it needs your attention; approve requests on your
+computer. The **Usage** tab keeps the allowance cards and history. Activity needs
+updated Gadget OS firmware and Agent Dashboard 0.6.0. Older installations may
+still show the name Agent Usage.
+
+The Mac companion's **Task history** keeps individual turns across restarts,
+including project, provider, start time, duration and outcome. Expand a task to
+see attributable **reported tokens**, when available. Codex reports input and
+output tokens, with cached input and reasoning output included in those totals.
+Missing usage is shown as **Not reported**, including Claude Code usage; task
+allowance consumption is not estimated. The Gadget shows reported tokens in task
+details after updating its firmware and Agent Dashboard app.
+
+History starts with newly observed tasks and retains the latest 500 turns per
+session on your Mac. To enable the new Codex usage hooks after updating the
+companion, turn **Codex activity** off and on, then review and trust the updated
+hooks in `/hooks`. This requires a Codex version supporting model-request hooks.
+
+Agent Dashboard **0.7.0** and System Monitor **0.2.0** use app-owned companion data
+channels. Install firmware supporting **SDK 1.7** once before installing these
+versions. Later additions to their data payloads can be delivered as companion
+and app updates without a firmware update. Older installed app versions continue
+to work on the new firmware. See [companion data channels](docs/companion-channels.md)
+for the transport contract and compatibility details.

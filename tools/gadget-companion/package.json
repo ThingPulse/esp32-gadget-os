@@ -1,11 +1,41 @@
 {
   "name": "@thingpulse/gadget-companion",
-  "version": "0.4.0",
-  "description": "Pair a Gadget OS device and report local Codex allowance summaries",
+  "version": "0.7.0",
+  "description": "Connect your Gadget to your computer from the menu bar",
   "type": "module",
-  "bin": {"gadget-companion": "src/cli.mjs"},
-  "engines": {"node": ">=22"},
-  "scripts": {"start": "node src/cli.mjs", "test": "node --test test/*.test.mjs"},
-  "files": ["src", "README.md"],
-  "license": "MIT"
+  "bin": {
+    "gadget-companion": "src/cli.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/cli.mjs",
+    "test": "node --test test/*.test.mjs",
+    "desktop": "electron-forge start",
+    "package": "electron-forge package --platform=darwin",
+    "make": "node desktop/make.mjs",
+    "test:desktop": "node desktop/smoke.mjs",
+    "postinstall": "node -e \"try { require.resolve('electron/install.js'); } catch { process.exit(0); } require('electron/install.js');\""
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "license": "MIT",
+  "productName": "Gadget Companion",
+  "main": "desktop/main.mjs",
+  "author": "ThingPulse",
+  "config": {
+    "forge": "./forge.config.cjs"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "@electron-forge/cli": "8.0.1",
+    "@electron-forge/maker-zip": "8.0.1"
+  },
+  "overrides": {
+    "glob": "^14.0.2",
+    "minimatch": "^11.0.1"
+  }
 }

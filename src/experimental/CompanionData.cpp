@@ -91,3 +91,31 @@ int SystemSnapshot::read(char *out,uint32_t cap,uint64_t now)const{
  const size_t n=measureJson(d);if(n>=cap)return -1;serializeJson(d,out,cap);return n;
 }
 }
+
+namespace native_app::companion {
+bool ActivitySnapshot::update(const char *s,size_t n,uint64_t now){
+ if(!s||!n||n>2048)return false;
+ JsonDocument d,c;if(deserializeJson(d,s,n)||!d.is<JsonObject>())return false;
+ auto integer=[&](const std::string &k,int lo,int hi){return d[k].is<int>()&&d[k].as<int>()>=lo&&d[k].as<int>()<=hi;};
+ if(!integer("schema",1,1)||!integer("age",0,604800)||!integer("count",0,6)||!integer("total",0,10000)||!integer("attention",0,10000)||!integer("enabled",0,1))return false;
+ int count=d["count"];if(d["total"].as<int>()<count||d["attention"].as<int>()>d["total"].as<int>())return false;
+ for(auto k:{"schema","age","count","total","attention","enabled"})c[k]=d[k].as<int>();
+ for(int i=0;i<count;++i){auto p="s"+std::to_string(i)+"_";
+  for(auto k:{"state","provider","elapsed","age"}){std::string key=p+k;int hi=std::strcmp(k,"state")==0?3:std::strcmp(k,"provider")==0?1:604800;if(!integer(key,0,hi))return false;c[key]=d[key].as<int>();}
+  if(!d[p+"tokens_v"].isNull()||!d[p+"tokens_u"].isNull()){
+   if(!integer(p+"tokens_v",0,9999)||!integer(p+"tokens_u",0,4))return false;
+   c[p+"tokens_v"]=d[p+"tokens_v"].as<int>();c[p+"tokens_u"]=d[p+"tokens_u"].as<int>();
+  }
+  for(auto k:{"id","project","event"}){auto key=p+k;if(!d[key].is<const char*>())return false;std::string v=d[key].as<std::string>();if(v.empty()||v.size()>48)return false;for(unsigned char ch:v)if(ch<32||ch>126)return false;c[key]=v;}
+ }
+ std::string next;serializeJson(c,next);if(next.size()>2048)return false;payload=std::move(next);received_at=now;return true;
+}
+int ActivitySnapshot::read(char *out,uint32_t cap,uint64_t now)const{
+ if(payload.empty()||!out||!cap||now<received_at)return -1;
+ JsonDocument d;if(deserializeJson(d,payload))return -1;
+ unsigned delta=(unsigned)std::min<uint64_t>(604800,(now-received_at)/1000);
+ d["age"]=std::min(604800,d["age"].as<int>()+(int)delta);
+ for(int i=0;i<d["count"].as<int>();++i){auto p="s"+std::to_string(i)+"_";d[p+"age"]=std::min(604800,d[p+"age"].as<int>()+(int)delta);if(d[p+"state"].as<int>()<2)d[p+"elapsed"]=std::min(604800,d[p+"elapsed"].as<int>()+(int)delta);}
+ auto n=measureJson(d);if(n>=cap)return -1;serializeJson(d,out,cap);return n;
+}
+}

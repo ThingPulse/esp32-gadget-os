@@ -20,8 +20,9 @@ static void decimal(Text*t,unsigned v){num(t,v/10);add(t,".");num(t,v%10);}
 static void memory_text(Text*t,int32_t v){if(v<0){add(t,"--");return;}if(v>=1048576){decimal(t,(unsigned)v/1048576*10+((unsigned)v%1048576*10+524288)/1048576);add(t," TB");}else if(v<1024){num(t,v);add(t," MB");}else{if(v%1024)decimal(t,(unsigned)v/1024*10+((unsigned)v%1024*10+512)/1024);else num(t,(unsigned)v/1024);add(t," GB");}}
 static void rate(Text*t,int32_t v){if(v<0){add(t,"--");return;}if(v>=1000000){decimal(t,(unsigned)v/100000);add(t," MB/s");}else if(v>=1000){num(t,(unsigned)v/1000);add(t," KB/s");}else{num(t,v);add(t," B/s");}}
 static int32_t number(const char*j,unsigned n,const char*k){int32_t v=-1;if(host->json_number_scaled(j,n,k,1,&v))return -1;return v;}
+static int32_t bounded(int32_t v,int32_t maximum){return v>=0&&v<=maximum?v:-1;}
 static unsigned hex(char c){return c>='0'&&c<='9'?c-'0':c>='a'&&c<='f'?c-'a'+10:255;}
-static void string(const char*j,unsigned n,const char*k,char*v,unsigned cap){if(host->json_string(j,n,k,v,cap)<0)v[0]=0;}
+static void string(const char*j,unsigned n,const char*k,char*v,unsigned cap){if(host->json_string(j,n,k,v,cap)<0)v[0]=0;for(unsigned i=0;v[i];++i)if((unsigned char)v[i]<32||(unsigned char)v[i]>126){v[0]=0;break;}}
 static void render(void){
  unsigned offline=received&&((unsigned)age+elapsed>=10);for(unsigned i=0;i<3;++i){ui->visible(panels[i],page==i);ui->selected(nav[i],page==i);ui->opacity(panels[i],offline?45:100);}for(unsigned i=0;i<2;++i)ui->selected(sorts[i],sort==i);
  ui->text(host_name,computer[0]?computer:"Computer");ui->text(connection,offline?"Offline":received?"Live":"Waiting");
@@ -39,12 +40,13 @@ static void render(void){
  if(disk_total>0&&disk_avail>=0&&disk_avail<=disk_total){memory_text(&d,disk_total-disk_avail);add(&d," / ");memory_text(&d,disk_total);add(&d," used");unsigned used=(unsigned)(disk_total-disk_avail),capacity=(unsigned)disk_total;while(capacity>20000000){used/=2;capacity/=2;}unsigned percentage=(used*100+capacity/2)/capacity;ui->value(disk_bar,percentage);num(&p,percentage);add(&p,"% used");ui->visible(disk_bar,1);}else{add(&d,"Unavailable");ui->visible(disk_bar,0);}
  ui->text(disk_free,f.s);ui->text(disk_used,d.s);ui->text(disk_percent,p.s);
 }
-static void read_snapshot(void){char json[2049];int32_t n=host->system_read(json,sizeof json);paired=n!=-2;if(n<=0){render();return;}if(number(json,n,"schema")!=1)return;
- int32_t new_age=number(json,n,"age");if(new_age<0)return;received=1;age=new_age;elapsed=0;
+static void read_snapshot(void){char json[2049];uint32_t age_ms=0;int32_t n=host->companion_channel_read("system",json,sizeof json,&age_ms);paired=n!=-2;if(n<=0){render();return;}if(n>2048||number(json,n,"schema")!=1)return;
+ int32_t new_age=number(json,n,"age");if(new_age<0||new_age>3600)return;received=1;age=new_age+(int32_t)(age_ms/1000);elapsed=0;
  string(json,n,"host",computer,sizeof computer);string(json,n,"volume",volume,sizeof volume);
  cpu=number(json,n,"cpu");ram=number(json,n,"ram");cores=number(json,n,"cores");mem=number(json,n,"mem_mib");total=number(json,n,"total_mib");down=number(json,n,"down_bps");up=number(json,n,"up_bps");battery=number(json,n,"battery");power=number(json,n,"power");uptime=number(json,n,"uptime");disk_total=number(json,n,"disk_total_mib");disk_avail=number(json,n,"disk_free_mib");
- for(unsigned k=0;k<2;++k){char data[121];string(json,n,k?"ram_hist":"cpu_hist",data,sizeof data);unsigned count=0;while(data[count])++count;count/=2;if(count>60)count=60;chart_count[k]=count;for(unsigned i=0;i<count;++i){unsigned a=hex(data[i*2]),b=hex(data[i*2+1]),v=a*16+b;chart_data[k][i]=(a<16&&b<16&&v<=100)?(int32_t)v:-1;}ui->chart(graphs[k],chart_data[k],count);
-  for(unsigned i=0;i<5;++i){Text key={{0},0};add(&key,k?"mt":"ct");num(&key,i);unsigned prefix=key.n;add(&key,"_name");string(json,n,key.s,names[k][i],sizeof names[k][i]);key.n=prefix;key.s[prefix]=0;add(&key,"_value");proc_val[k][i]=number(json,n,key.s);}
+ cpu=bounded(cpu,100);ram=bounded(ram,100);cores=bounded(cores,4096);battery=bounded(battery,100);power=bounded(power,3);
+ for(unsigned k=0;k<2;++k){char data[121];string(json,n,k?"ram_hist":"cpu_hist",data,sizeof data);unsigned count=0;while(data[count])++count;count=count%2?0:count/2;if(count>60)count=60;chart_count[k]=count;for(unsigned i=0;i<count;++i){unsigned a=hex(data[i*2]),b=hex(data[i*2+1]),v=a*16+b;chart_data[k][i]=(a<16&&b<16&&v<=100)?(int32_t)v:-1;}ui->chart(graphs[k],chart_data[k],count);
+  for(unsigned i=0;i<5;++i){Text key={{0},0};add(&key,k?"mt":"ct");num(&key,i);unsigned prefix=key.n;add(&key,"_name");string(json,n,key.s,names[k][i],sizeof names[k][i]);key.n=prefix;key.s[prefix]=0;add(&key,"_value");proc_val[k][i]=bounded(number(json,n,key.s),k?2147483647:1000);}
  }render();
 }
 static void choose(void*u){page=(unsigned)(uintptr_t)u;render();}
@@ -57,8 +59,8 @@ static gadget_handle make(gadget_handle p,unsigned kind,const char*t,int x,int y
 static gadget_handle label(gadget_handle p,const char*t,int x,int y,int w,int h,unsigned style){return make(p,GADGET_UI_LABEL,t,x,y,w,h,style,0,0);}
 __attribute__((visibility("default"))) int gadget_app_entry(int argc,char**argv){
  if(argc!=2||!argv)return -1;host=(const gadget_host_api*)argv[0];gadget_app_lifecycle*app=(gadget_app_lifecycle*)argv[1];
- if(!host||host->struct_size<offsetof(gadget_host_api,services)||host->major!=1||host->minor<4||!host->system_read||!host->system_refresh||!host->json_string||!host->ui||!app||app->struct_size<sizeof(*app))return -1;ui=host->ui;if(ui->struct_size<offsetof(gadget_ui_api,reserve)||!ui->chart||!ui->opacity)return -1;
- app->major=1;app->minor=4;app->shutdown=shutdown;page=sort=elapsed=received=refresh_wait=0;paired=1;age=0;computer[0]=volume[0]=0;cpu=ram=cores=mem=total=down=up=battery=power=uptime=disk_total=disk_avail=-1;for(unsigned k=0;k<2;++k)for(unsigned i=0;i<5;++i){names[k][i][0]=0;proc_val[k][i]=-1;}
+ if(!host||host->struct_size<sizeof(gadget_host_api)||host->major!=1||host->minor<7||!host->companion_channel_read||!host->system_refresh||!host->json_string||!host->ui||!app||app->struct_size<sizeof(*app))return -1;ui=host->ui;if(ui->struct_size<offsetof(gadget_ui_api,reserve)||!ui->chart||!ui->opacity)return -1;
+ app->major=1;app->minor=7;app->shutdown=shutdown;page=sort=elapsed=received=refresh_wait=0;paired=1;age=0;computer[0]=volume[0]=0;cpu=ram=cores=mem=total=down=up=battery=power=uptime=disk_total=disk_avail=-1;for(unsigned k=0;k<2;++k)for(unsigned i=0;i<5;++i){names[k][i][0]=0;proc_val[k][i]=-1;}
  gadget_handle root=ui->create(0,GADGET_UI_ROOT,0,0,0);if(!root)return -1;
  gadget_handle header=make(root,GADGET_UI_CONTAINER,0,0,0,320,44,GADGET_STYLE_HEADER,0,0);
  make(header,GADGET_UI_BUTTON,0,0,0,44,44,GADGET_STYLE_BACK,close_app,0);make(header,GADGET_UI_BUTTON,0,276,0,44,44,GADGET_STYLE_REFRESH,refresh,0);gadget_handle title=label(header,"System Monitor",44,8,232,30,GADGET_STYLE_TITLE);ui->align(title,1);

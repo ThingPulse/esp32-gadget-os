@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 #define GADGET_APP_API_MAJOR 1
-#define GADGET_APP_API_MINOR 5
+#define GADGET_APP_API_MINOR 6
 /* All calls and callbacks run synchronously on the UI thread. Handles expire
  * at shutdown. No tasks, interrupts, exceptions, or background callbacks. */
 typedef void *gadget_handle;
@@ -114,6 +114,17 @@ typedef struct gadget_host_api {
     int32_t (*system_refresh)(void);
     int32_t (*json_string)(const char *json,uint32_t size,const char *key,char *out,uint32_t capacity);
     const gadget_services_api *services; /* API 1.5 */
+    /* API 1.6: independent activity snapshot; -2 means no computer paired. */
+    int32_t (*activity_read)(char *json,uint32_t capacity);
+    /* API 1.7: opaque JSON channel in the running app's namespace. Channel name
+     * [a-z][a-z0-9-]{0,31}, payload <=2048 bytes, capacity includes NUL.
+     * Returns byte length, -1 unavailable/invalid/too small, -2 unpaired.
+     * Payload bytes are unchanged. age_ms is monotonic time since receipt;
+     * the app owns schema validation, observation ages and expiry. RAM-only,
+     * bounded cache: absence/eviction is normal. Older readers above are frozen
+     * compatibility adapters, not interfaces for new payload development. */
+    int32_t (*companion_channel_read)(const char *channel,char *json,
+                                      uint32_t capacity,uint32_t *age_ms);
 } gadget_host_api;
 typedef struct gadget_app_lifecycle {
     uint32_t struct_size;

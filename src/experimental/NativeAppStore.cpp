@@ -1,5 +1,6 @@
 #if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
 #include "experimental/NativeAppStore.h"
+#include "experimental/CompanionSetup.h"
 #include "experimental/NativeCatalog.h"
 #include "experimental/NativeStore.h"
 #include "experimental/NativeApp.h"
@@ -190,6 +191,10 @@ void render(){
     if(selection>=0&&size_t(selection)<items.size()){
         const auto &item=items[selection];text(content,item.name.c_str());text(content,item.description.c_str(),true);
         text(content,("Version "+item.version).c_str(),true);
+        if(companion_setup::required(item.id)){
+            text(content,"Requires Gadget Companion on your computer",true);
+            button(content,"Set up computer",[](lv_event_t*){pair_requested=true;closing=true;});
+        }else text(content,"Works standalone",true);
         const auto *old=find_installed(item.id);
         const bool same=old&&old->trusted&&old->manifest.version==item.version;
         button(content,same?"Open app":old?"Update app":"Install app",[](lv_event_t*){
@@ -225,8 +230,8 @@ void render(){
         if(page)button(content,"Previous apps",[](lv_event_t*){--page;redraw=true;});
         if((page+1)*PageSize<items.size())button(content,"More apps",[](lv_event_t*){++page;redraw=true;});
     }
-#if defined(ARDUINO)
     button(content,"Pair computer",[](lv_event_t*){pair_requested=true;closing=true;});
+#if defined(ARDUINO)
     auto *browser=button(content,"Browser installation",[](lv_event_t*){browser_requested=true;closing=true;});
     lv_obj_set_style_bg_opa(browser,LV_OPA_TRANSP,0);
     lv_obj_set_style_shadow_width(browser,0,0);
@@ -296,8 +301,8 @@ void poll(){
     if(closing){
         closing=false;requested=false;visible=false;if(transfer)transfer->cancelled.store(true);
         content=status_label=progress=refresh_button=nullptr;native_launcher_restore();
+        if(pair_requested){pair_requested=false;companion_setup::request();}
 #if defined(ARDUINO)
-        if(pair_requested){pair_requested=false;companion::request_pairing();}
         if(browser_requested){browser_requested=false;store::request_manager();}
 #endif
         if(!open_id.empty()){auto id=open_id;open_id.clear();native_app::launch_id(id.c_str());}

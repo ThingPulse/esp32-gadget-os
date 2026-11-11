@@ -1,0 +1,91 @@
+name: Gadget Companion desktop
+on:
+  workflow_dispatch:
+  push:
+    tags: ['companion-v*']
+    paths: ['tools/gadget-companion/**', '.github/workflows/gadget-companion-desktop.yml']
+  pull_request:
+    paths: ['tools/gadget-companion/**', '.github/workflows/gadget-companion-desktop.yml']
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [arm64, x64]
+    defaults:
+      run:
+        working-directory: tools/gadget-companion
+    env:
+      GADGET_COMPANION_RELEASE: ${{ startsWith(github.ref, 'refs/tags/companion-v') && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: tools/gadget-companion/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: Prepare Apple signing (release tags only)
+        if: startsWith(github.ref, 'refs/tags/companion-v')
+        env:
+          CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          test -n "$CERTIFICATE" && test -n "$CERTIFICATE_PASSWORD" && test -n "$NOTARY_KEY"
+          keychain="$RUNNER_TEMP/companion-signing.keychain-db"
+          password="$(openssl rand -hex 32)"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/companion.p12"
+          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          chmod 600 "$RUNNER_TEMP/companion.p12" "$RUNNER_TEMP/notary.p8"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/companion.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          echo "APPLE_API_KEY=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+      - name: Make app and disk image
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: npm run make -- --arch=${{ matrix.arch }}
+      - name: Test packaged app on matching architecture
+        if: (runner.arch == 'ARM64' && matrix.arch == 'arm64') || (runner.arch == 'X64' && matrix.arch == 'x64')
+        env:
+          GADGET_COMPANION_BINARY: ${{ github.workspace }}/tools/gadget-companion/out/Gadget Companion-darwin-${{ matrix.arch }}/Gadget Companion.app/Contents/MacOS/Gadget Companion
+        run: npm run test:desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gadget-companion-${{ matrix.arch }}
+          path: tools/gadget-companion/out/downloads/*.dmg
+      - name: Remove temporary signing material
+        if: always() && startsWith(github.ref, 'refs/tags/companion-v')
+        run: |
+          security delete-keychain "$RUNNER_TEMP/companion-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/companion.p12" "$RUNNER_TEMP/notary.p8"
+  publish:
+    if: startsWith(github.ref, 'refs/tags/companion-v')
+    needs: macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gadget-companion-*
+          merge-multiple: true
+          path: downloads
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: gadget-companion
+          name: Gadget Companion for macOS
+          make_latest: false
+          fail_on_unmatched_files: true
+          body: 'Install Gadget Companion by dragging it to Applications. Open Add apps → Pair computer on your Gadget, then use Find my Gadget on your Mac. Choose arm64 for Apple silicon or x64 for Intel. These downloads are signed and notarized.'
+          files: downloads/*.dmg

@@ -36,11 +36,12 @@ void close_app(){if(closing)return;closing=true;native_app::ui::suspend();lv_asy
 void dispatch(gadget_callback cb,void *user){if(!closing&&cb)cb(user);}
 int32_t setting_get(const char *k,char *v,uint32_t n){return closing?-1:native_app::settings::get(k,v,n);}
 int32_t setting_set(const char *k,const char *v){return closing?-1:native_app::settings::set(k,v);}
-int32_t system_read(char *out,uint32_t cap){
+int32_t channel_read(const char *channel,char *out,uint32_t cap,uint32_t *age_ms){
+ if(!channel||strcmp(channel,"system")||!age_ms)return -1;*age_ms=0;
  std::string body=sample;const char *path=getenv("GADGET_SYSTEM_SNAPSHOT");
  if(path){std::ifstream f(path);body.clear();char c;while(body.size()<=2048&&f.get(c))body+=c;if(body.empty())return -1;}
  JsonDocument d;if(body.size()>2048||deserializeJson(d,body))return -1;
- if(d["generated_at"].is<int64_t>())d["age"]=std::min<int64_t>(2147483647,d["age"].as<int>()+std::max<int64_t>(0,std::time(nullptr)-d["generated_at"].as<int64_t>()));
+ if(d["generated_at"].is<int64_t>()){auto delta=std::max<int64_t>(0,std::time(nullptr)-d["generated_at"].as<int64_t>());if(delta>=604800)return -1;*age_ms=static_cast<uint32_t>(delta*1000);}
  size_t n=measureJson(d);if(n>=cap)return -1;serializeJson(d,out,cap);return n;
 }
 int32_t json_string(const char*s,uint32_t n,const char*k,char*out,uint32_t cap){JsonDocument d;if(!s||n>2048||deserializeJson(d,s,n)||!d[k].is<const char*>())return -1;const char*v=d[k];size_t len=strlen(v);if(len>=cap)return -1;memcpy(out,v,len+1);return len;}
@@ -57,7 +58,7 @@ void launch(){
  lv_obj_set_flex_flow(screen_obj,LV_FLEX_FLOW_COLUMN);
  lv_obj_set_flex_align(screen_obj,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
  native_app::ui::begin(screen_obj,dispatch);native_app::settings::begin("system-monitor-preview");
- static const gadget_host_api api={sizeof(api),1,4,log_message,nullptr,nullptr,nullptr,nullptr,timer_create,close_app,nullptr,json_number,&native_app::ui::api,setting_get,setting_set,nullptr,system_read,[]()->int32_t{return 0;},json_string};
+ static const gadget_host_api api={sizeof(api),1,7,log_message,nullptr,nullptr,nullptr,nullptr,timer_create,close_app,nullptr,json_number,&native_app::ui::api,setting_get,setting_set,nullptr,nullptr,[]()->int32_t{return 0;},json_string,nullptr,nullptr,channel_read};
  lifecycle={sizeof(lifecycle),1,2,nullptr};char *args[]={(char*)&api,(char*)&lifecycle};
  ui_load_screen(screen_obj,false);system_source::system_monitor_preview_entry(2,args);
 

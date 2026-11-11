@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
+#include <ctime>
 void agent_usage_simulator_launch();
 void system_monitor_simulator_launch();
 namespace ui=native_app::ui;
@@ -45,22 +46,33 @@ int main(int argc,char **argv){assert(argc==2);lv_init();lv_tick_set_cb([](){ret
  ui::begin(screen,dispatch);auto root=ui::api.create(nullptr,GADGET_UI_ROOT,nullptr,nullptr,nullptr);for(int i=0;i<63;++i)assert(ui::api.create(root,GADGET_UI_LABEL,"",nullptr,nullptr));assert(!ui::api.create(root,GADGET_UI_LABEL,"",nullptr,nullptr));ui::end();
  settings::begin("test-app");assert(settings::set("mode","used")==0);char value[256];assert(settings::get("mode",value,3)==-1);assert(settings::get("mode",value,sizeof value)==4&&!strcmp(value,"used"));assert(settings::set("../bad","x")==-1);assert(settings::set("large",std::string(256,'x').c_str())==-1);
  for(int i=0;i<7;++i)assert(settings::set(("key"+std::to_string(i)).c_str(),"v")==0);assert(settings::set("overflow","v")==-1);settings::end();assert(settings::get("mode",value,sizeof value)==-1);settings::begin("other-app");assert(settings::get("mode",value,sizeof value)==-1);settings::begin("test-app");assert(settings::get("mode",value,sizeof value)==4);settings::end();
- auto launch=agent_usage_simulator_launch;launch();capture(argv[1],"agent-usage-remaining");assert(find(lv_screen_active(),"72%"));
+ auto launch=agent_usage_simulator_launch;
+ auto usage_tab=[&](){auto *label=find(lv_screen_active(),"Usage");assert(label);lv_obj_send_event(lv_obj_get_parent(label),LV_EVENT_CLICKED,nullptr);};
+ launch();capture(argv[1],"agent-dashboard-activity");assert(find(lv_screen_active(),"Needs attention"));
+ auto *session=find(lv_screen_active(),"gadget-os");assert(session);lv_obj_send_event(lv_obj_get_parent(session),LV_EVENT_CLICKED,nullptr);capture(argv[1],"agent-dashboard-session");assert(find(lv_screen_active(),"Task details"));
+ usage_tab();capture(argv[1],"agent-usage-remaining");assert(find(lv_screen_active(),"72%"));
  auto *codex=find(lv_screen_active(),"Codex >");assert(codex);lv_obj_send_event(lv_obj_get_parent(codex),LV_EVENT_CLICKED,nullptr);
  capture(argv[1],"agent-usage-codex-details");assert(find(lv_screen_active(),"12.4M"));assert(find(lv_screen_active(),"8d"));assert(!find(lv_screen_active(),"Remaining"));
  auto *today=find(lv_screen_active(),"Today");assert(today);lv_obj_send_event(lv_obj_get_parent(today),LV_EVENT_CLICKED,nullptr);capture(argv[1],"agent-usage-today");assert(find(lv_screen_active(),"66K tokens / UTC"));
  auto *month=find(lv_screen_active(),"Month");assert(month);lv_obj_send_event(lv_obj_get_parent(month),LV_EVENT_CLICKED,nullptr);capture(argv[1],"agent-usage-month");assert(find(lv_screen_active(),"750K tokens / UTC"));
  auto *details_back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(details_back),LV_EVENT_CLICKED,nullptr);assert(find(lv_screen_active(),"Remaining"));assert(!find(lv_screen_active(),"Used"));assert(find(lv_screen_active(),"72%"));
- auto *back=find(lv_screen_active(),LV_SYMBOL_LEFT);assert(back);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();launch();lv_obj_update_layout(lv_screen_active());assert(find(lv_screen_active(),"72%"));
+ auto *back=find(lv_screen_active(),LV_SYMBOL_LEFT);assert(back);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();launch();usage_tab();lv_obj_update_layout(lv_screen_active());assert(find(lv_screen_active(),"72%"));
  back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();
  {std::ofstream f("snapshot.json");f<<R"({"schema":1,"codex_enabled":1,"claude_enabled":0,"codex_age":600,"claude_age":-1,"codex_primary_used":35,"codex_primary_minutes":300,"codex_primary_reset":600,"codex_secondary_used":-1})";}
- setenv("GADGET_USAGE_SNAPSHOT","snapshot.json",1);launch();capture(argv[1],"agent-usage-single-stale");assert(find(lv_screen_active(),"65%")&&find(lv_screen_active(),"Stale"));assert(!find(lv_screen_active(),"Claude"));
+ setenv("GADGET_USAGE_SNAPSHOT","snapshot.json",1);launch();usage_tab();capture(argv[1],"agent-usage-single-stale");assert(find(lv_screen_active(),"65%")&&find(lv_screen_active(),"Stale"));assert(!find(lv_screen_active(),"Claude"));
  back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();
  {std::ofstream f("snapshot.json");f<<R"({"schema":1,"generated_at":1,"codex_enabled":1,"claude_enabled":0,"codex_age":0,"claude_age":-1,"codex_primary_used":35,"codex_primary_minutes":300,"codex_primary_reset":600,"codex_secondary_used":-1})";}
- launch();lv_obj_update_layout(lv_screen_active());assert(find(lv_screen_active(),"--")&&find(lv_screen_active(),"Stale"));assert(!find(lv_screen_active(),"65%"));
+ launch();usage_tab();lv_obj_update_layout(lv_screen_active());assert(find(lv_screen_active(),"--")&&find(lv_screen_active(),"Stale"));assert(!find(lv_screen_active(),"65%"));
  back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();
- {std::ofstream f("snapshot.json");f<<"{}";}launch();capture(argv[1],"agent-usage-error");assert(find(lv_screen_active(),"Refresh failed - tap refresh"));
+ {std::ofstream f("snapshot.json");f<<"{}";}launch();usage_tab();capture(argv[1],"agent-usage-error");assert(find(lv_screen_active(),"Refresh failed - tap refresh"));
  back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();
+ {std::ofstream f("activity.json");f<<"{\"schema\":1,\"generated_at\":"<<std::time(nullptr)<<",\"age\":0,\"enabled\":1,\"count\":0,\"total\":0,\"attention\":0}";}
+ setenv("GADGET_ACTIVITY_SNAPSHOT","activity.json",1);launch();
+ auto *activity=find(lv_screen_active(),"Activity");assert(activity);lv_obj_send_event(lv_obj_get_parent(activity),LV_EVENT_CLICKED,nullptr);capture(argv[1],"agent-dashboard-empty");assert(find(lv_screen_active(),"Companion connected"));
+ back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();
+ {std::ofstream f("activity.json");f<<R"({"schema":1,"generated_at":1,"age":0,"enabled":1,"count":0,"total":0,"attention":0})";}
+ launch();activity=find(lv_screen_active(),"Activity");lv_obj_send_event(lv_obj_get_parent(activity),LV_EVENT_CLICKED,nullptr);capture(argv[1],"agent-dashboard-offline");assert(find(lv_screen_active(),"Waiting for companion"));
+ back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();unsetenv("GADGET_ACTIVITY_SNAPSHOT");
  auto system_launch=system_monitor_simulator_launch;system_launch();capture(argv[1],"system-monitor-overview");assert(find(lv_screen_active(),"38%"));
  auto click_text=[&](const char*t){auto*l=find(lv_screen_active(),t);assert(l);lv_obj_send_event(lv_obj_get_parent(l),LV_EVENT_CLICKED,nullptr);};
  click_text("Processes");capture(argv[1],"system-monitor-processes");assert(find(lv_screen_active(),"14.2%"));click_text("Memory");capture(argv[1],"system-monitor-memory");assert(find(lv_screen_active(),"1.6 GB"));

@@ -28,9 +28,10 @@ static void call(gadget_callback cb) { if (gate.enter()) { cb(nullptr); gate.lea
 int main(int argc,char **argv) {
  assert(argc==4); std::string e; Manifest m;
  assert(parse_manifest(manifest(),"esp32",m,e));
+ assert(parse_manifest(manifest("esp32",1,7),"esp32",m,e));
  auto iss=manifest("esp32",1,1); iss.replace(iss.find("native-demo"),11,"native-iss");
  assert(parse_manifest(iss,"esp32",m,e) && m.id=="native-iss");
- for (auto s:{std::string(""),std::string("{"),std::string("[]"),std::string("{}"),manifest("esp32s3"),manifest("esp32",2),manifest("esp32",1,6),std::string(2049,' ')})
+ for (auto s:{std::string(""),std::string("{"),std::string("[]"),std::string("{}"),manifest("esp32s3"),manifest("esp32",2),manifest("esp32",1,8),std::string(2049,' ')})
   assert(!parse_manifest(s,"esp32",m,e));
  auto path=manifest(); path.replace(path.find("app.elf"),7,"../app.elf"); assert(!parse_manifest(path,"esp32",m,e));
  for (int target=1;target<=2;++target) {

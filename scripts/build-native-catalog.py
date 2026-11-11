@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Merge verified packages into a static Pages site; preserve immutable versions."""
-import argparse, hashlib, json, pathlib, re, struct, sys, tempfile, zlib
+import argparse, hashlib, json, pathlib, re, shutil, struct, sys, tempfile, zlib
 from urllib.parse import urlparse
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'experiments/native-app'))
@@ -20,6 +20,7 @@ def build(packages, site, base, public):
     url=urlparse(base)
     if url.scheme!='https' or not url.hostname or url.username or url.password or url.query or url.fragment:
         raise ValueError('Public base URL must be HTTPS without credentials, query or fragment')
+    shutil.copytree(ROOT/'tools/gadget-companion/site',site/'companion',dirs_exist_ok=True)
     folder=site/'apps';folder.mkdir(parents=True,exist_ok=True)
     index=folder/'catalog.json'
     catalog=json.loads(index.read_text()) if index.exists() else {'schema':1,'apps':[]}
@@ -35,7 +36,7 @@ def build(packages, site, base, public):
             data=source.read_bytes();m,icon=inspect_signed(data,public,temporary)
             if not re.fullmatch(r'[a-z][a-z0-9-]{0,31}',m['id']) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?',m['version']) or m['chip'] not in ('esp32','esp32s3'):
                 raise ValueError('Invalid catalog identity/version/chip')
-            if m['api_major']!=1 or m['api_minor'] not in (0,1,2,3,4,5):raise ValueError('Unsupported host API')
+            if m['api_major']!=1 or m['api_minor'] not in (0,1,2,3,4,5,6,7):raise ValueError('Unsupported host API')
             # Retain immutable historical files, but never advertise retired apps.
             if m['id'] in retired:continue
             relative=f"apps/packages/{m['id']}/{m['version']}/{m['chip']}.gapp"

@@ -1,5 +1,6 @@
 #if GADGET_OS_NATIVE_APP_LOADER
 #include "experimental/NativeAppStore.h"
+#include "experimental/CompanionSetup.h"
 #include "experimental/NativeApp.h"
 #include "experimental/Companion.h"
 #include "experimental/NativeUi.h"
@@ -146,6 +147,11 @@ int32_t http_get(const char *url,gadget_http_callback callback,void *user)
 }
 int32_t setting_get(const char *k,char *v,uint32_t n){return session.gate.closing?-1:settings::get(k,v,n);}
 int32_t setting_set(const char *k,const char *v){return session.gate.closing?-1:settings::set(k,v);}
+int32_t companion_channel_read(const char *channel,char *json,uint32_t capacity,uint32_t *age_ms){
+    if(session.gate.closing||selected_id.empty())return -1;
+    return companion::read_channel(selected_id.c_str(),channel,json,capacity,age_ms);
+}
+int32_t activity_read(char *v,uint32_t n){return session.gate.closing||selected_id!="agent-usage"?-1:companion::read_activity(v,n);}
 int32_t companion_read(char *v,uint32_t n){return session.gate.closing||selected_id!="agent-usage"?-1:companion::read_usage(v,n);}
 int32_t system_read(char *v,uint32_t n){return session.gate.closing||selected_id!="system-monitor"?-1:companion::read_system(v,n);}
 int32_t system_refresh(){return session.gate.closing||selected_id!="system-monitor"?-1:companion::refresh_system();}
@@ -153,7 +159,7 @@ int32_t json_string(const char *s,uint32_t n,const char *key,char *out,uint32_t 
 int32_t extended_http(const char*url,uint32_t cap,gadget_http_callback cb,void*user){if(!active||session.gate.closing||!cb)return GADGET_HTTP_INVALID;int32_t r=http::start(url,cycle,cap);if(!r)session.http_delivery={cycle,cb,user};return r;}
 void open_location(){if(active&&!session.gate.closing){location_requested=true;request_close();}}
 const gadget_services_api service_api={sizeof(service_api),services::environment,services::format_time,services::parse_time,services::json_open,services::json_get,services::json_count,services::json_close,services::cache_read,services::cache_write,open_location,extended_http,[]()->uint32_t{return retry_seconds;},services::json_number};
-const gadget_host_api api={sizeof(api),1,5,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string,&service_api};
+const gadget_host_api api={sizeof(api),1,7,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string,&service_api,activity_read,companion_channel_read};
 void resources_clear()
 {
     ui::end(); settings::end();services::end();
@@ -234,7 +240,7 @@ void open_now()
     session.gate.enter();
     result=session.elf.entry(2,args);
     session.gate.leave();
-    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>5 || !session.app.shutdown) {
+    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>7 || !session.app.shutdown) {
         show_error("App initialization/API handshake failed"); return;
     }
     AppUsage::native_start(package.manifest.id.c_str(),package.manifest.version.c_str(),package.trusted);
@@ -290,10 +296,13 @@ void receive_command()
 }
 }
 bool trace_enabled(){return diagnostics;}
-bool busy() { return active || pending || cycles_left || store::managing() || app_store::active() || companion::active(); }
+bool busy() { return active || pending || cycles_left || store::managing() || app_store::active() || companion::active() || companion_setup::active(); }
 bool running(const char *id) {return (active||pending||cycles_left)&&selected_id==id;}
 void launch_id(const char *id) {
-    if(!busy()&&native_launcher_is_active()&&id&&valid_app_id(id)){selected_id=id;pending=true;}
+    if(!busy()&&native_launcher_is_active()&&id&&valid_app_id(id)){
+        if(companion_setup::required(id)&&!companion::paired()){companion_setup::request(id);return;}
+        selected_id=id;pending=true;
+    }
 }
 void launch() { launch_id("native-demo"); }
 void launch_iss() { launch_id("native-iss"); }
@@ -301,6 +310,7 @@ void poll()
 {
     receive_command();
     companion::poll();
+    companion_setup::poll();
     store::poll();
     app_store::poll();
     if(!resume_after_settings.empty()&&native_launcher_is_active()&&!busy()){auto id=resume_after_settings;resume_after_settings.clear();launch_id(id.c_str());}

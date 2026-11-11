@@ -4,6 +4,7 @@
 #include "AppRegistry.h"
 #include "experimental/NativeUi.h"
 #include "experimental/NativeSettings.h"
+#include "experimental/CompanionData.h"
 #include "ui/I18n.h"
 #include "ui/UiNav.h"
 #include <ArduinoJson.h>
@@ -75,6 +76,18 @@ int32_t json_number(const char *s,uint32_t n,const char *key,int32_t scale,int32
  if(deserializeJson(doc,s,n) || !doc.is<JsonObject>() || !doc[key].is<double>())return -1;
  double v=std::round(doc[key].as<double>()*scale);if(!std::isfinite(v)||v<INT32_MIN||v>INT32_MAX)return -1;*out=(int32_t)v;return 0;
 }
+int32_t channel_read(const char *channel,char *out,uint32_t cap,uint32_t *age_ms){
+ if(!channel||strcmp(channel,"activity")||!age_ms)return -1;*age_ms=0;
+ const char *path=getenv("GADGET_ACTIVITY_SNAPSHOT");std::string body;
+ if(path){std::ifstream f(path);char c;while(body.size()<=2048&&f.get(c))body+=c;if(body.empty()||body.size()>2048)return -1;
+  JsonDocument d;if(deserializeJson(d,body)||!d["generated_at"].is<int64_t>())return -1;
+  auto delta=std::max<int64_t>(0,std::time(nullptr)-d["generated_at"].as<int64_t>());
+  if(delta>=604800)return -1;*age_ms=static_cast<uint32_t>(delta*1000);
+ }else body=R"({"schema":1,"age":0,"enabled":1,"count":3,"total":3,"attention":1,"s0_id":"sample-codex","s0_project":"gadget-os","s0_event":"Approval requested","s0_state":1,"s0_provider":0,"s0_elapsed":252,"s0_age":0,"s1_id":"sample-claude","s1_project":"website","s1_event":"Using Bash","s1_state":0,"s1_provider":1,"s1_elapsed":98,"s1_age":0,"s2_id":"sample-docs","s2_project":"docs","s2_event":"Ready to review","s2_state":2,"s2_provider":0,"s2_elapsed":168,"s2_age":120})";
+ if(!path){JsonDocument d;deserializeJson(d,body);d["sample"]=1;body.clear();serializeJson(d,body);}
+ if(body.size()>=cap)return -1;memcpy(out,body.c_str(),body.size()+1);return body.size();
+}
+int32_t json_string(const char *s,uint32_t n,const char *key,char *out,uint32_t cap){JsonDocument d;if(deserializeJson(d,s,n)||!d[key].is<const char*>())return -1;const char *v=d[key];if(strlen(v)>=cap)return -1;strcpy(out,v);return strlen(v);}
 void launch(){
  home=lv_screen_active();screen_obj=lv_obj_create(nullptr);closing=false;
  lv_obj_set_style_bg_color(screen_obj,lv_color_hex(0x172131),0);
@@ -83,13 +96,13 @@ void launch(){
  lv_obj_set_flex_flow(screen_obj,LV_FLEX_FLOW_COLUMN);
  lv_obj_set_flex_align(screen_obj,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
  native_app::ui::begin(screen_obj,dispatch);native_app::settings::begin("agent-usage-preview");
- static const gadget_host_api api={sizeof(api),1,3,log_message,nullptr,nullptr,nullptr,nullptr,timer_create,close_app,get_json,json_number,&native_app::ui::api,setting_get,setting_set,[](char*,uint32_t)->int32_t{return -1;}};
+ static const gadget_host_api api={sizeof(api),1,7,log_message,nullptr,nullptr,nullptr,nullptr,timer_create,close_app,get_json,json_number,&native_app::ui::api,setting_get,setting_set,[](char*,uint32_t)->int32_t{return -1;},nullptr,nullptr,json_string,nullptr,nullptr,channel_read};
  lifecycle={sizeof(lifecycle),1,2,nullptr};char *args[]={(char*)&api,(char*)&lifecycle};
  ui_load_screen(screen_obj,false);usage_source::agent_usage_preview_entry(2,args);
 
 }
 #if !GADGET_OS_APP_STORE_SIMULATOR
-APP_REGISTER_COLOR_RANK("Agent Usage\nPreview",LV_SYMBOL_CHARGE,launch,0x237e77,90);
+APP_REGISTER_COLOR_RANK("Agent Dashboard\nPreview",LV_SYMBOL_CHARGE,launch,0x237e77,90);
 #endif
 }
 void agent_usage_simulator_launch(){launch();}

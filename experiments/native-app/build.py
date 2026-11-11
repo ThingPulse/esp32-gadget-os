@@ -47,8 +47,8 @@ subprocess.run([str(cc), '-Os', '-fPIC', '-fvisibility=hidden', '-ffreestanding'
 subprocess.run([str(strip), '--strip-unneeded', '--remove-section=.comment',
     '--remove-section=.got.loc', '--remove-section=.dynamic', '--remove-section=.xt.lit',
     '--remove-section=.xt.prop', '--remove-section=.xtensa.info', str(elf)], check=True)
-manifest = dict(id=app_id, version=a.version, name={'counter':'Native Counter','iss':'ISS Position','iss_tracker':'ISS','system_monitor':'System Monitor','agent_usage':'Agent Usage Demo' if a.usage_demo else 'Agent Usage'}[a.app], chip=a.chip,
-    api_major=1, api_minor={'counter':0,'iss':1,'iss_tracker':5,'agent_usage':3,'system_monitor':4}[a.app], executable='app.elf')
+manifest = dict(id=app_id, version=a.version, name={'counter':'Native Counter','iss':'ISS Position','iss_tracker':'ISS','system_monitor':'System Monitor','agent_usage':'Agent Dashboard Demo' if a.usage_demo else 'Agent Dashboard'}[a.app], chip=a.chip,
+    api_major=1, api_minor={'counter':0,'iss':1,'iss_tracker':5,'agent_usage':7,'system_monitor':7}[a.app], executable='app.elf')
 (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 print(subprocess.check_output([str(readelf), '-hSWr', str(elf)], text=True))
 print(json.dumps(dict(chip=a.chip, executable_bytes=elf.stat().st_size,

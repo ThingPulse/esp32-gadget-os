@@ -1,5 +1,6 @@
 #if GADGET_OS_APP_STORE_SIMULATOR
 #include "experimental/NativeSimulator.h"
+#include "experimental/CompanionSetup.h"
 #include "experimental/NativeStore.h"
 #include "experimental/NativeApp.h"
 #include "experimental/NativeAppStore.h"
@@ -101,9 +102,10 @@ void launch_id(const char *id){
     for(const auto &app:store::installed())if(app.manifest.id==id){pending_id=id;break;}
 }
 bool running(const char *id){return id&&running_id==id&&preview_home&&lv_screen_active()!=preview_home;}
-bool busy(){return app_store::active()||!pending_id.empty()||(preview_home&&lv_screen_active()!=preview_home);}
+bool busy(){return app_store::active()||companion_setup::active()||!pending_id.empty()||(preview_home&&lv_screen_active()!=preview_home);}
 void poll(){
     if(preview_home&&lv_screen_active()==preview_home){preview_home=nullptr;running_id.clear();}
+    companion_setup::poll();
     app_store::poll();
     if(!pending_id.empty()){
         auto id=pending_id;pending_id.clear();preview_home=lv_screen_active();running_id=id;

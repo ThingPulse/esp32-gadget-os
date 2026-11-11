@@ -1,9 +1,107 @@
-# Gadget Companion (command-line preview)
+# Gadget Companion
 
-Pair your computer once and show its Codex allowance in the installable
-**Agent Usage** app. No tunnel, browser link, API-key copying or custom app URL.
+## App data channels (0.7.0)
 
-## Run it
+With Gadget OS SDK 1.7, companion payloads travel unchanged through app-scoped
+channels. Agent Dashboard 0.7.0 and System Monitor 0.2.0 validate their own fields
+and handle freshness; new metrics no longer require firmware field allowlists.
+The companion detects the new transport and falls back to legacy URLs on older
+firmware. Existing apps and companions remain supported on the new firmware.
+See the [channel contract and migration guide](../../docs/companion-channels.md).
+
+Update firmware once before installing the SDK 1.7 apps. Payload changes after
+that need only companion/app updates, provided they fit the transport limits.
+
+A macOS menu-bar app that connects your Gadget to your computer. The desktop
+app bundles its own runtime: users do not install Node.js or keep a terminal open.
+The command-line version remains available for development and Linux/Windows usage feeds.
+
+## Install on a Mac
+
+The [download and setup page](https://thingpulse.github.io/esp32-gadget-os/companion/)
+links to Apple silicon and Intel disk images when a signed release is published.
+The source change alone does not publish a release or deploy that page.
+
+1. Open the DMG and drag **Gadget Companion** to **Applications**.
+2. Open it and allow local network access when macOS asks.
+3. Use the same Wi-Fi as your Gadget. On the Gadget, open **Add apps → Pair computer**,
+   follow the setup screen, and tap **Pair computer**.
+4. Click **Find my Gadget** on the Mac, select it, compare the code, and confirm on the Gadget.
+5. Install **System Monitor** or **Agent Usage** from **Add apps** and open it from
+   **Installed apps**. Both apps share the same pairing.
+
+Close the window to leave the companion in the menu bar. Its menu can reopen the
+window, reconnect, or quit. **Start at login** is optional and off by default;
+it is available in packaged apps. The app reconnects after sleep and IP changes.
+If discovery fails, expand **Can’t find it automatically?** and enter the Gadget’s IP.
+**Forget Gadget** removes the local pairing; revoke it on the Gadget too via
+**Pair computer → Forget computer** if the computer should no longer have access.
+
+## Agent Usage setup
+
+**System Monitor does not require Codex.** Agent Usage is optional and off by default.
+Enable it in the companion to check whether the Codex CLI is installed and signed in.
+The existing collector uses the CLI’s login; installing or signing in to the
+Codex desktop app alone is not sufficient for this integration.
+
+If setup is required, install and sign in to the [Codex CLI](https://developers.openai.com/codex/cli/),
+then click **Check setup**. **Choose Codex…** selects an executable in a custom
+location. Common Homebrew, local, Volta and nvm installations are detected without
+launching a login shell. The companion does not read credential files or perform
+an automatic sign-in. Missing Codex or a collection error does not stop System Monitor.
+
+## Build the desktop app
+
+Development requires macOS and Node.js 24. End users do not need Node.js.
+
+```sh
+cd tools/gadget-companion
+npm ci
+npm test
+npm run desktop
+npm run make                     # host architecture
+npm run make -- --arch=x64        # Intel Mac download
+npm run test:desktop             # isolated real Electron UI test
+```
+
+`npm run make` produces `out/downloads/Gadget-Companion-arm64.dmg` or
+`Gadget-Companion-x64.dmg`, with a drag-to-Applications layout, plus a ZIP.
+The `.app` is in `out/Gadget Companion-darwin-<arch>/`.
+The smoke test uses an isolated profile, simulated discovery/pairing, and no
+personal usage data. To test a packaged executable, set `GADGET_COMPANION_BINARY`
+to its `Contents/MacOS/Gadget Companion` executable. Screenshots go to `out/screenshots/`.
+
+Local builds are **unsigned development builds**. They are suitable for local
+validation, but they are not the public download. Never instruct users to disable
+Gatekeeper. Public builds require Developer ID signing and Apple notarization.
+The Forge configuration follows [Electron’s macOS signing guidance](https://www.electronforge.io/guides/code-signing/code-signing-macos).
+
+### Release configuration
+
+The `Gadget Companion desktop` workflow creates macOS arm64/x64 artifacts on PRs,
+pushes and manual dispatches. Tags matching `companion-v*` additionally require
+signing and publish the two disk images to the stable `gadget-companion` release.
+Unsigned builds cannot pass the release configuration check.
+
+Configure these GitHub Actions secrets before creating a release tag:
+
+- `APPLE_CERTIFICATE_P12`: base64-encoded Developer ID Application certificate and key.
+- `APPLE_CERTIFICATE_PASSWORD`: password for that export.
+- `APPLE_SIGNING_IDENTITY`: the installed Developer ID Application identity.
+- `APPLE_NOTARY_KEY_P8`: App Store Connect API private key contents.
+- `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`: notarization API identity.
+
+For a local signed build, set `GADGET_COMPANION_RELEASE=1`,
+`APPLE_SIGNING_IDENTITY`, `APPLE_API_KEY` (path to the `.p8` file),
+`APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`. The identity must already be installed.
+The workflow uses a temporary keychain and removes signing material afterward.
+Both the app and the DMG are notarized; the DMG ticket is stapled.
+
+The companion download page lives in `site/index.html`. The existing native-app
+catalog build copies it to `/companion/`, matching the firmware QR code. Deploy
+that catalog site as part of the release so the QR code has a destination.
+
+## Command-line development
 
 Requirements: **Node.js 22 or newer**, a **signed-in Codex CLI**, and both the
 computer and Gadget on the same trusted local network. This uses the CLI login,
@@ -19,7 +117,7 @@ node tools/gadget-companion/src/cli.mjs
 There are **no npm dependencies to install**. With a downloaded companion-only
 archive, run `node src/cli.mjs` from its extracted folder.
 
-1. On the Gadget, open **Add apps → Pair computer**.
+1. On the Gadget, open **Add apps → Pair computer**, then tap **Pair computer** on the setup screen.
 2. Run the command above. Choose a device if several are discovered.
 3. Compare the six-digit code on the computer and Gadget. Tap **Confirm pairing**
    on the Gadget, then **Back**.
@@ -28,7 +126,7 @@ archive, run `node src/cli.mjs` from its extracted folder.
 Leave the terminal open. Usage updates every minute; the app checks the device's
 local snapshot every five seconds. Press **Ctrl+C** to stop. The next run
 reconnects using the saved pairing, including after a device reboot or IP change.
-There is no login-at-startup integration in this first phase.
+For login-at-startup integration, use the macOS desktop app.
 
 **Firmware prerequisite:** this needs the new native-app host **API 1.3** and
 Agent Usage **0.3.0**. Existing 1.2 firmware/demo apps do not gain this connection
@@ -96,7 +194,7 @@ In a second terminal:
 GADGET_USAGE_SNAPSHOT="$PWD/.pio/agent-usage/live.json" .pio/build/native/program
 ```
 
-Open **Agent Usage Preview**. The snapshot mode does not pair or contact a
+Install **Agent Usage** from **Add apps**, then open it from **Installed apps**. The snapshot mode does not pair or contact a
 Gadget. `--once` also works with `--snapshot`. The normal preview continues to
 use clearly labelled sample values when this environment variable is absent.
 
@@ -121,8 +219,8 @@ use clearly labelled sample values when this environment variable is absent.
   unavailable rather than claiming a full allowance. Collector failures retain
   the last successful summary while this process is running.
 - First service: **Codex allowance and token statistics**. Cost estimates, Claude integration,
-  Windows/Linux system collectors, multiple simultaneous hosts, tray UI,
-  standalone executables and automatic startup remain later steps. The independent
+  Windows/Linux system collectors and desktop packaging, and multiple simultaneous hosts
+  remain later steps. The macOS app includes a tray UI, standalone packaging and optional automatic startup. The independent
   companion endpoint and append-only SDK form their shared connection foundation.
 
 ## Package and test
@@ -134,7 +232,7 @@ mkdir -p .pio/gadget-companion
 npm pack ./tools/gadget-companion --pack-destination .pio/gadget-companion
 ```
 
-The npm package definition is ready for a future `npx @thingpulse/gadget-companion`
+The command-line npm package definition is ready for a future `npx @thingpulse/gadget-companion`
 installation, but **nothing has been published to npm**. Until publication, use
 the direct Node command or a local package archive. It runs without a transpiler,
 package download or third-party runtime dependencies.
@@ -174,3 +272,94 @@ See [setup, metric definitions and privacy](../../docs/system-monitor.md).
 No process arguments are collected; basename, PID and resource counters are sent.
 Only the five leaders in each CPU/memory ranking are forwarded. History stays
 in memory. No additional pairing or companion process is required.
+
+## Agent Dashboard activity (0.6.0)
+
+Agent Usage is now displayed as **Agent Dashboard**, retaining the `agent-usage`
+package ID and existing quota/history views. Update Gadget OS (host API **1.6**)
+and install app version **0.6.0**. In Gadget Companion, enable **Codex activity**
+and/or **Claude Code activity**. This adds observational lifecycle hooks, preserves
+existing settings/hooks and saves a backup beside the configuration file. Turning
+a provider off removes only companion hooks. After moving/reinstalling the
+companion, toggle activity off/on to update the executable path.
+
+For Codex, open `/hooks` (or desktop Settings → Hooks) to review and trust the new
+hooks, then start a turn. For Claude Code, review `/hooks` or restart the agent.
+Managed environments may disallow user hooks. Only local sessions that execute
+these hooks are visible; remote/cloud sessions are not collected automatically.
+The desktop setup uses Electron's bundled Node runtime; no terminal or separate
+Node installation is needed. Automatic hook setup supports macOS and Linux;
+the downloadable desktop companion currently targets macOS.
+
+Activity is independent of the optional Codex quota collector. Hooks observe
+`UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `Stop` and
+`SessionEnd`. They cannot approve, reject, continue or stop an agent. Only the
+project folder name, provider, hashed session ID, status, elapsed time and a
+short event description are retained. Prompts, command arguments, tool output,
+responses, full paths and credentials are discarded. Approvals happen in the
+agent client on the computer.
+
+The Gadget shows six prioritized sessions (three per page), with attention first,
+then working, finished and disconnected; projects sort together within each
+status. The badge counts all sessions needing attention. Sessions without events
+for 15 minutes become disconnected, not finished: hooks provide no heartbeat.
+Legacy live-session records expire after 24 hours; durable task history is retained
+as described below. If the companion stops sending, active tasks show disconnected
+after 15 seconds; finished tasks remain finished. The Activity view opens by default when active
+sessions are present on the first update, and never interrupts manual navigation.
+
+CLI equivalents (Node 22+):
+
+```sh
+node tools/gadget-companion/src/cli.mjs --enable-activity codex
+node tools/gadget-companion/src/cli.mjs --enable-activity claude
+node tools/gadget-companion/src/cli.mjs --activity-snapshot /tmp/gadget-activity.json
+GADGET_ACTIVITY_SNAPSHOT=/tmp/gadget-activity.json .pio/build/native/program
+```
+
+Use `--disable-activity codex` or `--disable-activity claude` to remove hooks.
+Native preview without `GADGET_ACTIVITY_SNAPSHOT` uses three sample sessions.
+An explicit snapshot path never falls back to sample data. Session data is pushed
+to the authenticated `/v1/activity` endpoint every two seconds, separately from
+`/v1/agent-usage`, with its own 2 KiB allowlisted snapshot.
+
+Hook references: [Codex](https://learn.chatgpt.com/docs/hooks) and
+[Claude Code](https://code.claude.com/docs/en/hooks).
+
+## Durable task history and reported tokens
+
+The Mac companion's **Task history** lists individual agent turns, newest first,
+with project, provider, start time, duration and outcome. Expand a task for usage
+details; Previous/Next browse the full retained history. The Gadget prioritizes
+active tasks, then recent finished tasks, up to six, and shows **reported tokens**
+in task details. Viewing those new fields requires the updated firmware and Agent
+Dashboard app; older versions ignore the optional fields.
+
+History survives companion and computer restarts. It lives in
+`~/.gadget-companion/activity/history/`, with owner-only files, retaining the most
+recent **500 turns per session** without a time expiry. Disabling activity stops
+collection but preserves history. Collection starts with observed hooks; it does
+not backfill old conversations. A task means a submitted prompt/turn, not a
+semantic project milestone. Hooks that lack turn IDs use observed prompt boundaries.
+Missing start events are labelled, and silence or interruption never means success.
+
+For existing installations, switch **Codex activity** off and on after installing
+the updated companion, then review and trust the changed hooks in `/hooks`.
+The new Codex hooks are `PreModelRequest`, `PostModelRequest` and `Interrupt`;
+they require a Codex version supporting those events. No automatic trust changes
+are made. Claude Code retains task history but displays **Tokens: Not reported**.
+
+Codex usage comes directly from the documented
+[model-request hooks](https://learn.chatgpt.com/docs/hooks#premodelrequest-and-postmodelrequest),
+correlated by session, turn and agent. Each paired pre/post request contributes
+its reported input and output tokens; duplicate post events are ignored.
+Cached input is included in input, and reasoning output is included in output;
+neither is added again. Agent-scoped requests are kept separate from the parent's
+turn. The display deliberately says **reported tokens**, because missing hooks,
+unsupported versions, failed requests without usage or collection enabled mid-turn
+can leave gaps. These counts cover observed requests, not a guaranteed complete
+billable task total. Known zero is distinguished from missing usage.
+
+No task allowance percentage or cost estimate is calculated. Account-level usage
+remains separate. The collector does not read transcripts, prompts, credentials
+or model responses. Only sanitized task metadata and numeric usage are retained.

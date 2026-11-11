@@ -1,6 +1,7 @@
 #if GADGET_OS_NATIVE_APP_LOADER
 #include "experimental/Companion.h"
 #include "experimental/CompanionData.h"
+#include "experimental/CompanionChannels.h"
 #include "experimental/CompanionRequest.h"
 #include "experimental/NativeApp.h"
 #include "AppRegistry.h"
@@ -20,12 +21,12 @@
 namespace native_app::companion {
 namespace {
 WiFiServer server(8082);WiFiUDP discovery;WiFiClient client;
-UsageSnapshot usage;SystemSnapshot system_data;uint32_t system_refresh_id=0,last_system_request=0;
+ChannelStore channels;uint32_t system_refresh_id=0;
 bool initialized=false,listening=false,requested=false,visible=false,closing=false,connected=false,approved=false;
 std::string paired_token,paired_name,pending_token,pending_name,headers,output,body;
 size_t sent=0,content_length=0;
 bool parsed=false;std::string method,route,supplied;
-uint32_t deadline=0,pair_deadline=0,last_discovery=0,last_request=0;
+uint32_t deadline=0,pair_deadline=0,last_discovery=0;
 lv_obj_t *message=nullptr,*accept_button=nullptr;
 std::string id(){auto s=std::string(WiFi.macAddress().c_str());s.erase(std::remove(s.begin(),s.end(),':'),s.end());return s;}
 bool equal(const std::string&a,const std::string&b){if(a.size()!=64||b.size()!=64)return false;unsigned d=0;for(size_t i=0;i<64;++i)d|=a[i]^b[i];return d==0;}
@@ -42,8 +43,8 @@ bool save(const std::string &token,const std::string &name){
 void pair_message(){
     if(!message)return;
     if(approved)lv_label_set_text(message,("Connected to "+paired_name+".\nOpen an app on Installed apps.").c_str());
-    else if(!pending_token.empty())lv_label_set_text(message,("Pair with "+pending_name+"?\n\nCode: "+code(pending_token)+"\n\nConfirm only if the terminal shows the same code.").c_str());
-    else lv_label_set_text(message,("Run Gadget Companion on your computer.\n\nWaiting for 2 minutes…"+std::string(paired_name.empty()?"":"\n\nCurrently paired: "+paired_name)).c_str());
+    else if(!pending_token.empty())lv_label_set_text(message,("Pair with "+pending_name+"?\n\nCode: "+code(pending_token)+"\n\nConfirm only if Gadget Companion shows the same code.").c_str());
+    else lv_label_set_text(message,("Open Gadget Companion on your computer, then click Find my Gadget.\n\nWaiting for 2 minutes…"+std::string(paired_name.empty()?"":"\n\nCurrently paired: "+paired_name)).c_str());
     if(accept_button){if(!pending_token.empty()&&!approved)lv_obj_remove_flag(accept_button,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(accept_button,LV_OBJ_FLAG_HIDDEN);}
 }
 void handle(){
@@ -56,20 +57,20 @@ void handle(){
         pending_token=t;pending_name=name;pair_message();reply(202,"{\"pending\":true}");return;
     }
     if(method=="GET"&&route=="/v1/status"){
-        if(equal(supplied,paired_token)){std::string response="{\"paired\":true,\"protocol\":1,\"system\":1,\"systemRefresh\":"+std::to_string(system_refresh_id)+"}";reply(200,response.c_str());return;}
+        if(equal(supplied,paired_token)){std::string response="{\"paired\":true,\"protocol\":1,\"appChannels\":1,\"maxPayload\":2048,\"system\":1,\"activity\":1,\"systemRefresh\":"+std::to_string(system_refresh_id)+"}";reply(200,response.c_str());return;}
         if(visible&&!approved&&equal(supplied,pending_token)){reply(202,"{\"pending\":true}");return;}
         reply(403,"{\"error\":\"Pairing required\"}");return;
     }
     if(!equal(supplied,paired_token)){reply(403,"{\"error\":\"Pairing required\"}");return;}
-    if(method=="POST"&&route=="/v1/system"){
-        if(millis()-last_system_request<500){reply(429,"{}");return;}last_system_request=millis();
-        if(!system_data.update(body.data(),body.size(),esp_timer_get_time()/1000)){reply(422,"{}");return;}reply(200,"{\"ok\":true}");return;
-    }
-    if(method=="POST"&&route=="/v1/agent-usage"){
-        if(millis()-last_request<500){reply(429,"{\"error\":\"Too frequent\"}");return;}
-        last_request=millis();
-        if(!usage.update(body.data(),body.size(),esp_timer_get_time()/1000)){reply(422,"{\"error\":\"Invalid usage summary\"}");return;}
-        reply(200,"{\"ok\":true}");return;
+    if(method=="POST"){
+        std::string app,channel;
+        // Legacy URLs are transport aliases. New applications use app-scoped routes.
+        if(route=="/v1/activity"){app="agent-usage";channel="activity";}
+        else if(route=="/v1/agent-usage"){app="agent-usage";channel="usage";}
+        else if(route=="/v1/system"){app="system-monitor";channel="system";}
+        else if(!channel_route(route,app,channel)){reply(404,"{}");return;}
+        int result=channels.publish(app,channel,body.data(),body.size(),esp_timer_get_time()/1000);
+        reply(result,result==200?"{\"ok\":true}":"{}");return;
     }
     reply(404,"{\"error\":\"Unknown endpoint\"}");
 }
@@ -112,17 +113,35 @@ void show(){
     accept_button=button("Confirm pairing",[](lv_event_t*){
         if(pending_token.empty()||int32_t(millis()-pair_deadline)>=0)return;
         if(!save(pending_token,pending_name)){lv_label_set_text(message,"Could not save pairing. Try again.");return;}
-        paired_token=pending_token;paired_name=pending_name;usage.clear();system_data.clear();approved=true;pair_message();
+        paired_token=pending_token;paired_name=pending_name;channels.clear();approved=true;pair_message();
     });
-    button("Forget computer",[](lv_event_t*){if(save("","")){paired_token.clear();paired_name.clear();usage.clear();system_data.clear();clear_pending();pair_message();}});
+    button("Forget computer",[](lv_event_t*){if(save("","")){paired_token.clear();paired_name.clear();channels.clear();clear_pending();pair_message();}});
     button("Back",[](lv_event_t*){closing=true;});pair_message();
 }
 }
 void request_pairing(){if(!native_app::busy()&&native_launcher_is_active())requested=true;}
+bool paired(){return !paired_token.empty();}
 bool active(){return requested||visible;}
-int32_t read_system(char *out,uint32_t n){return paired_token.empty()?-2:system_data.read(out,n,esp_timer_get_time()/1000);}
+int32_t read_channel(const char *app,const char *channel,char *out,uint32_t n,uint32_t *age_ms){
+    if(paired_token.empty())return -2;
+    if(!app||!channel||strnlen(app,33)>32||strnlen(channel,33)>32)return -1;
+    return channels.read(app,channel,out,n,age_ms,esp_timer_get_time()/1000);
+}
+// Frozen SDK 1.3–1.6 adapters preserve old apps' sanitized, age-adjusted views.
+// The SDK 1.7 path above never interprets application fields.
+namespace {
+template<class Legacy> int legacy_read(const char *app,const char *channel,char *out,uint32_t n){
+    char raw[channel_payload_limit+1];uint32_t age_ms=0;
+    int size=read_channel(app,channel,raw,sizeof raw,&age_ms);if(size<=0)return size;
+    const uint64_t now=esp_timer_get_time()/1000;Legacy adapter;
+    if(!adapter.update(raw,size,now-age_ms))return -1;
+    return adapter.read(out,n,now);
+}
+}
+int32_t read_system(char *out,uint32_t n){return legacy_read<SystemSnapshot>("system-monitor","system",out,n);}
 int32_t refresh_system(){if(paired_token.empty())return -2;++system_refresh_id;return 0;}
-int32_t read_usage(char *out,uint32_t capacity){return usage.read(out,capacity,esp_timer_get_time()/1000);}
+int32_t read_activity(char *out,uint32_t n){return legacy_read<ActivitySnapshot>("agent-usage","activity",out,n);}
+int32_t read_usage(char *out,uint32_t n){int result=legacy_read<UsageSnapshot>("agent-usage","usage",out,n);return result==-2?-1:result;}
 void poll(){
     if(!initialized){initialized=true;Preferences p;if(p.begin("companion",true)){JsonDocument d;if(!deserializeJson(d,p.getString("pair","{}"))){std::string t=d["token"]|"";if(token_valid(t)){paired_token=t;paired_name=d["name"]|"Computer";}}p.end();}}
     if(requested)show();

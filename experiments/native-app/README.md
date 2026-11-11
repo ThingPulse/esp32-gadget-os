@@ -387,3 +387,16 @@ advertise minor version 4. Build with `--app system_monitor` for either chip.
 The installable `iss-tracker` replaces the bundled ISS app in app-enabled builds.
 It uses reusable drawing, scrolling, environment, JSON, HTTP and cache APIs.
 See [implementation and validation](../../docs/iss-installable.md).
+
+### Agent Dashboard (API 1.7)
+
+The `agent-usage` package is now Agent Dashboard 0.7.0. It uses SDK 1.7's
+`companion_channel_read` for its `usage` and `activity` channels. The firmware
+preserves JSON bytes and supplies receipt age; the app validates fields and ages
+its own observations/countdowns. System Monitor 0.2.0 uses the same interface
+for its `system` channel. See the [channel contract](../../docs/companion-channels.md)
+for routing, transport limits and migration. Existing API 1.0–1.6 apps remain
+compatible via frozen legacy readers. The dashboard reserves 128 widgets using the existing API 1.5 quota
+extension. Activity and quota feeds refresh independently; existing private HTTPS
+quota endpoints continue to work. See the companion README for hook setup and
+the stale/disconnected behavior.
