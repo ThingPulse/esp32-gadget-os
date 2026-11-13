@@ -16,7 +16,7 @@
     {
       "source": "iss_tracker",
       "id": "iss-tracker",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Find upcoming visible ISS passes for your device location, with a compass, countdowns and offline forecasts. No computer companion required."
     },
     {
