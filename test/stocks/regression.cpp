@@ -12,6 +12,7 @@
 #include "services/StockService.h"
 #undef private
 #include "../../src/apps/StockTickerApp.cpp"
+#include "src/widgets/buttonmatrix/lv_buttonmatrix_private.h"
 
 static uint8_t frame[320*480*3];
 static uint32_t tick;
@@ -167,10 +168,40 @@ int main(int argc,char **argv) {
     for(int i=0;i<50;++i) {tick+=20;lv_timer_handler();}
     for(size_t i=0;i<s.count();++i) assert(s.entry(i).refresh_pending);
     assert(!ctx.scrolling && !ctx.pull_armed);
-    lv_indev_delete(input);
     edit(nullptr);capture("stocks-editor");
+    auto *keyboard=lv_obj_get_child(ctx.body,-1);
+    auto press_key=[&](const char *text) {
+        uint32_t id=0;
+        while(const char *key=lv_buttonmatrix_get_button_text(keyboard,id)) {
+            if(std::string(key)==text)break;
+            ++id;
+        }
+        assert(lv_buttonmatrix_get_button_text(keyboard,id));
+        lv_obj_update_layout(keyboard);
+        const auto area=reinterpret_cast<lv_buttonmatrix_t *>(keyboard)->button_areas[id];
+        lv_area_t box;lv_obj_get_coords(keyboard,&box);
+        pointer.point={box.x1+(area.x1+area.x2)/2,box.y1+(area.y1+area.y2)/2};
+        pointer.state=LV_INDEV_STATE_PRESSED;tick+=30;lv_indev_read(input);
+        pointer.state=LV_INDEV_STATE_RELEASED;tick+=30;lv_indev_read(input);
+    };
+    // Enter must insert a newline after switching through every text layout.
+    lv_textarea_set_text(ctx.input,"BTC-USD");
+    press_key(LV_SYMBOL_NEW_LINE);
+    press_key("ABC");press_key(LV_SYMBOL_NEW_LINE);
+    press_key("1#");press_key(LV_SYMBOL_NEW_LINE);
+    assert(std::string(lv_textarea_get_text(ctx.input))=="BTC-USD\n\n\n");
+    capture("stocks-editor-symbols");
+    lv_indev_delete(input);
     lv_textarea_set_text(ctx.input,"AAPL\nAAPL");save(nullptr);assert(ctx.view==2);
     lv_textarea_set_text(ctx.input,"AAPL\nNESN.SW");save(nullptr);assert(ctx.view==0 && s.count()==2);
     auto *screen=ctx.screen;back(nullptr);lv_obj_delete(screen);assert(!s._active && !ctx.timer);
+    // Opening a single-line keyboard after Stocks must reset all shared maps.
+    auto *single=lv_keyboard_create(lv_screen_active());configure_touch_keyboard(single);
+    for(auto mode:{LV_KEYBOARD_MODE_TEXT_LOWER,LV_KEYBOARD_MODE_TEXT_UPPER,LV_KEYBOARD_MODE_SPECIAL}) {
+        lv_keyboard_set_mode(single,mode);
+        for(uint32_t id=0;const char *key=lv_buttonmatrix_get_button_text(single,id);++id)
+            assert(std::string(key)!=LV_SYMBOL_NEW_LINE);
+    }
+    lv_obj_delete(single);
     std::puts("Stock provider, persistence, worker and UI regressions passed");
 }
