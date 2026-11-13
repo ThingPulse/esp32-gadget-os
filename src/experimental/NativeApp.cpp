@@ -2,6 +2,7 @@
 #include "experimental/NativeAppStore.h"
 #include "experimental/CompanionSetup.h"
 #include "experimental/NativeApp.h"
+#include "services/UpdateService.h"
 #include "experimental/Companion.h"
 #include "experimental/NativeUi.h"
 #include "experimental/NativeSettings.h"
@@ -45,7 +46,8 @@ struct Session {
     size_t sampled_min_internal=SIZE_MAX;
     unsigned callbacks=0;
 } session;
-bool active=false, pending=false,location_requested=false;
+bool active=false, pending=false,location_requested=false,settings_entry=false;
+bool resume_settings_entry=false;
 std::string resume_after_settings;
 uint32_t retry_seconds=0;
 std::string selected_id="native-demo";
@@ -158,8 +160,8 @@ int32_t system_refresh(){return session.gate.closing||selected_id!="system-monit
 int32_t json_string(const char *s,uint32_t n,const char *key,char *out,uint32_t cap){if(!s||!n||n>2048||!key||strlen(key)>48||!out||!cap||cap>2049)return -1;JsonDocument d;if(deserializeJson(d,s,n)||!d[key].is<const char*>())return -1;const char *v=d[key];size_t len=strlen(v);if(len>=cap)return -1;memcpy(out,v,len+1);return len;}
 int32_t extended_http(const char*url,uint32_t cap,gadget_http_callback cb,void*user){if(!active||session.gate.closing||!cb)return GADGET_HTTP_INVALID;int32_t r=http::start(url,cycle,cap);if(!r)session.http_delivery={cycle,cb,user};return r;}
 void open_location(){if(active&&!session.gate.closing){location_requested=true;request_close();}}
-const gadget_services_api service_api={sizeof(service_api),services::environment,services::format_time,services::parse_time,services::json_open,services::json_get,services::json_count,services::json_close,services::cache_read,services::cache_write,open_location,extended_http,[]()->uint32_t{return retry_seconds;},services::json_number};
-const gadget_host_api api={sizeof(api),1,7,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string,&service_api,activity_read,companion_channel_read};
+const gadget_services_api service_api={sizeof(service_api),services::environment,services::format_time,services::parse_time,services::json_open,services::json_get,services::json_count,services::json_close,services::cache_read,services::cache_write,open_location,extended_http,[]()->uint32_t{return retry_seconds;},services::json_number,services::json_real,services::format_number,services::monotonic_ms,&services::math_api};
+const gadget_host_api api={sizeof(api),1,9,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string,&service_api,activity_read,companion_channel_read,[]()->uint32_t{return settings_entry?GADGET_LAUNCH_SETTINGS:GADGET_LAUNCH_NORMAL;}};
 void resources_clear()
 {
     ui::end(); settings::end();services::end();
@@ -193,7 +195,7 @@ void show_error(const std::string &message)
     lv_obj_set_width(label,lv_pct(95)); lv_label_set_text(label,message.c_str());
     auto *button=lv_button_create(session.screen);
     lv_obj_set_size(button,200,58);
-    auto *caption=lv_label_create(button); lv_label_set_text(caption,"Back to launcher"); lv_obj_center(caption);
+    auto *caption=lv_label_create(button); lv_label_set_text(caption,settings_entry?"Back to app settings":"Back to launcher"); lv_obj_center(caption);
     lv_obj_add_event_cb(button,[](lv_event_t *){session.error=false;},LV_EVENT_CLICKED,nullptr);
 }
 void open_now()
@@ -219,6 +221,7 @@ void open_now()
     lv_obj_delete(loading);
     if(!image){show_error(error);return;}
     if(package.manifest.id!=selected_id){show_error("Package ID mismatch");return;}
+    if(settings_entry&&!package.manifest.settings){show_error("App has no settings entry");return;}
     esp_elf_init(&session.elf);
     int result=esp_elf_relocate(&session.elf,image.get()+package.elf_offset);
     sample("relocated-with-file-buffer");
@@ -240,7 +243,7 @@ void open_now()
     session.gate.enter();
     result=session.elf.entry(2,args);
     session.gate.leave();
-    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>7 || !session.app.shutdown) {
+    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>9 || !session.app.shutdown) {
         show_error("App initialization/API handshake failed"); return;
     }
     AppUsage::native_start(package.manifest.id.c_str(),package.manifest.version.c_str(),package.trusted);
@@ -256,7 +259,8 @@ void finish()
     NATIVE_TRACE("[NATIVE] cycle=%u unload_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
     sample("shutdown-unloaded");
     native_launcher_restore(); active=false; session.screen=nullptr;
-    if(location_requested){location_requested=false;resume_after_settings=selected_id;settings_launch_with_route("settings_weather");}
+    if(location_requested){location_requested=false;resume_after_settings=selected_id;resume_settings_entry=settings_entry;settings_launch_with_route("settings_weather");}
+    else if(settings_entry){settings_entry=false;settings_launch_with_route("settings_apps");}
     sample("launcher-restored");
     NATIVE_TRACE("[NATIVE] cycle=%u unload_restore_us=%lld\n",cycle,(long long)(esp_timer_get_time()-start));
     if (cycles_left) {
@@ -301,8 +305,17 @@ bool running(const char *id) {return (active||pending||cycles_left)&&selected_id
 void launch_id(const char *id) {
     if(!busy()&&native_launcher_is_active()&&id&&valid_app_id(id)){
         if(companion_setup::required(id)&&!companion::paired()){companion_setup::request(id);return;}
-        selected_id=id;pending=true;
+        selected_id=id;settings_entry=false;pending=true;
     }
+}
+bool launch_settings_id(const char *id){
+    const auto update=UpdateService::instance().state();
+    if(update==UpdateService::State::Downloading||update==UpdateService::State::ReadyToReboot)return false;
+    if(!id||busy()||!settings_apps_active())return false;
+    for(const auto &app:store::installed())if(app.launchable&&app.manifest.id==id&&app.manifest.settings){
+        selected_id=id;settings_entry=true;pending=true;return true;
+    }
+    return false;
 }
 void launch() { launch_id("native-demo"); }
 void launch_iss() { launch_id("native-iss"); }
@@ -313,7 +326,7 @@ void poll()
     companion_setup::poll();
     store::poll();
     app_store::poll();
-    if(!resume_after_settings.empty()&&native_launcher_is_active()&&!busy()){auto id=resume_after_settings;resume_after_settings.clear();launch_id(id.c_str());}
+    if(!resume_after_settings.empty()&&native_launcher_is_active()&&!busy()){auto id=resume_after_settings;resume_after_settings.clear();selected_id=id;settings_entry=resume_settings_entry;pending=true;}
     if (pending) open_now();
     if (std::unique_ptr<http::Result> r{http::take_completed()}; r) {
         retry_seconds=r->retry_seconds;

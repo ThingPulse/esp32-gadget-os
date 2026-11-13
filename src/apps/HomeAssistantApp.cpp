@@ -7,7 +7,7 @@
 #include "ui/StatusIcons.h"
 #include <algorithm>
 #include <tuple>
-APP_REGISTER_COLOR_RANK("Home Assistant",LV_SYMBOL_HOME,home_assistant_app_launch,0x26b99a,40);
+APP_REGISTER_ID_COLOR_RANK("home-assistant", "Home Assistant",LV_SYMBOL_HOME,home_assistant_app_launch,0x26b99a,40);
 namespace {
 constexpr uint32_t Bg=0x182131,Card=0x253449,Mint=0x69efca,Muted=0xaab8d2;
 struct TileWidgets{lv_obj_t*button=nullptr,*symbol=nullptr,*value=nullptr,*spinner=nullptr;};

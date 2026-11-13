@@ -5,11 +5,13 @@
 extern "C" {
 #endif
 #define GADGET_APP_API_MAJOR 1
-#define GADGET_APP_API_MINOR 6
+#define GADGET_APP_API_MINOR 9
 /* All calls and callbacks run synchronously on the UI thread. Handles expire
  * at shutdown. No tasks, interrupts, exceptions, or background callbacks. */
 typedef void *gadget_handle;
 typedef void (*gadget_callback)(void *user);
+enum { GADGET_GESTURE_LEFT=1,GADGET_GESTURE_RIGHT,GADGET_GESTURE_PULL };
+typedef void (*gadget_gesture_callback)(uint32_t gesture,void *user);
 /* HTTP status is positive, host errors negative. JSON is borrowed for this
  * callback only. Delivery is on the UI thread and suppressed after closure. */
 typedef void (*gadget_http_callback)(int32_t status, const char *json, uint32_t size, void *user);
@@ -21,7 +23,7 @@ enum { GADGET_HTTP_BUSY=-1, GADGET_HTTP_OFFLINE=-2, GADGET_HTTP_INVALID=-3,
  * handles returned by this table. At most 64 widgets, 160-byte text, depth 8.
  * box dimensions are logical pixels; flow is 0=absolute, 1=row, 2=column.
  * Setters return 0 on success, -1 for invalid/expired handles or arguments. */
-enum { GADGET_UI_ROOT, GADGET_UI_CONTAINER, GADGET_UI_LABEL, GADGET_UI_BUTTON, GADGET_UI_BAR, GADGET_UI_CHART, GADGET_UI_SPINNER };
+enum { GADGET_UI_ROOT, GADGET_UI_CONTAINER, GADGET_UI_LABEL, GADGET_UI_BUTTON, GADGET_UI_BAR, GADGET_UI_CHART, GADGET_UI_SPINNER, GADGET_UI_TEXTAREA, GADGET_UI_KEYBOARD };
 enum { GADGET_STYLE_DEFAULT, GADGET_STYLE_HEADER, GADGET_STYLE_CARD,
        GADGET_STYLE_TITLE, GADGET_STYLE_VALUE, GADGET_STYLE_MUTED,
        GADGET_STYLE_TAB, GADGET_STYLE_BACK, GADGET_STYLE_REFRESH,
@@ -34,6 +36,17 @@ typedef struct gadget_environment {
  int32_t latitude_e6,longitude_e6;
  char location[96];
 } gadget_environment;
+/* API 1.9: numeric operations for freestanding packages on Xtensa, where
+ * the toolchain's non-PIC double helpers cannot be loaded with an app ELF. */
+typedef struct gadget_math_api {
+ uint32_t struct_size;
+ double (*binary)(uint32_t op,double a,double b); /* 0 add, 1 sub, 2 mul, 3 div */
+ int32_t (*compare)(double,double); /* -1,0,1; 2 unordered */
+ double (*from_int)(int32_t);
+ double (*from_uint)(uint32_t);
+ int32_t (*to_int)(double);
+ uint32_t (*to_uint)(double);
+} gadget_math_api;
 typedef struct gadget_services_api {
  uint32_t struct_size;
  int32_t (*environment)(gadget_environment*);
@@ -54,6 +67,13 @@ typedef struct gadget_services_api {
  int32_t (*http_get)(const char*,uint32_t,gadget_http_callback,void*);
  uint32_t (*http_retry_seconds)(void);
  int32_t (*json_number)(const char*,int32_t scale,int32_t*);
+ /* API 1.9: finite JSON number; bounded locale-independent formatting.
+  * decimals 0..8, capacity <=160. format_time mode 2 is a UTC quote timestamp.
+  * Extended HTTPS and JSON documents now allow up to 65536 bytes. */
+ int32_t (*json_real)(const char*,double*);
+ int32_t (*format_number)(double,uint32_t,char*,uint32_t);
+ uint32_t (*monotonic_ms)(void);
+ const gadget_math_api *math;
 } gadget_services_api;
 typedef struct gadget_ui_api {
     uint32_t struct_size;
@@ -79,7 +99,21 @@ typedef struct gadget_ui_api {
     int32_t (*draw)(gadget_handle,const gadget_draw_command*,uint32_t count);
     int32_t (*wrap)(gadget_handle);
 
+    /* API 1.9: bounded text fields, shared touch keyboard. get returns byte
+     * length or -1; never truncates. Config max_chars is 1..255. Clearing the
+     * tree invalidates input/keyboard handles like every other widget. */
+    int32_t (*input_config)(gadget_handle,uint32_t max_chars,uint32_t multiline);
+    int32_t (*input_get)(gadget_handle,char*,uint32_t capacity);
+    int32_t (*keyboard_attach)(gadget_handle keyboard,gadget_handle input);
+    /* -1 reads, 0..4096 sets vertical scroll position. */
+    int32_t (*scroll_y)(gadget_handle,int32_t);
+    int32_t (*gestures)(gadget_handle,gadget_gesture_callback,void*);
+    /* 1..96 normalized samples spread across the full chart width; -1 is a gap. */
+    int32_t (*chart_fit)(gadget_handle,const int32_t*,uint32_t);
+    /* Defer rebuilding a view while a pointer is held or its container scrolls. */
+    int32_t (*interaction_active)(gadget_handle);
 } gadget_ui_api;
+enum { GADGET_LAUNCH_NORMAL, GADGET_LAUNCH_SETTINGS };
 typedef struct gadget_host_api {
     uint32_t struct_size;
     uint16_t major, minor;
@@ -125,6 +159,11 @@ typedef struct gadget_host_api {
      * compatibility adapters, not interfaces for new payload development. */
     int32_t (*companion_channel_read)(const char *channel,char *json,
                                       uint32_t capacity,uint32_t *age_ms);
+    /* API 1.8: settings=true in the manifest opts into a settings entry.
+     * Build the app-owned settings view when this returns SETTINGS. Closing
+     * returns to Settings > Apps. An in-app gear can call the same renderer
+     * directly and handle its local Back action without unloading the app. */
+    uint32_t (*launch_mode)(void);
 } gadget_host_api;
 typedef struct gadget_app_lifecycle {
     uint32_t struct_size;

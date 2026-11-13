@@ -14,7 +14,7 @@
 #include <cstdio>
 #include <ctime>
 
-APP_REGISTER_COLOR_RANK("ISS", LV_SYMBOL_GPS, iss_app_launch, 0x237e77, 27);
+APP_REGISTER_ID_COLOR_RANK("iss", "ISS", LV_SYMBOL_GPS, iss_app_launch, 0x237e77, 27);
 namespace {
 constexpr uint32_t BG=0x1e2030,MINT=0x63e6be,MUTED=0x9aa5bd,WHITE=0xe7eaf4;
 struct Context {

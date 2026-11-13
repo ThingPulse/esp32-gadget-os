@@ -1,3 +1,4 @@
+#include "ui/LauncherOrder.h"
 #include "experimental/NativeApp.h"
 #include "experimental/NativeStore.h"
 #include "experimental/NativeAppStore.h"
@@ -1014,7 +1015,12 @@ static void launch_route(const std::string &route)
   }
 
   if (route == "stocks") {
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+    for(const auto &app:native_app::store::installed())if(app.manifest.id=="stocks"){native_app::launch_id("stocks");return;}
+    UiSessionState::set_route("home");
+#else
     stock_ticker_app_launch();
+#endif
     return;
   }
 
@@ -1173,8 +1179,9 @@ static void home_pager_scrolled(lv_event_t *e)
   lv_obj_t *indicator = (lv_obj_t *)lv_event_get_user_data(e);
   if (!pager || !indicator || !lv_obj_is_valid(indicator)) return;
   const lv_coord_t page_width = lv_obj_get_width(pager);
-  const bool labs_page = page_width > 0 && lv_obj_get_scroll_x(pager) >= page_width / 2;
-  lv_label_set_text(indicator, labs_page ? "2 / 2" : "1 / 2");
+  const int pages=lv_obj_get_child_count(pager);
+  const int page=page_width>0?std::max(0,std::min(pages-1,int((lv_obj_get_scroll_x(pager)+page_width/2)/page_width))):0;
+  lv_label_set_text_fmt(indicator,"%d / %d",page+1,pages);
 }
 
 static void create_home_screen(void)
@@ -1220,29 +1227,45 @@ static void create_home_screen(void)
   lv_obj_set_flex_align(pager, LV_FLEX_ALIGN_START,
                         LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-  lv_obj_t *stable_grid = create_app_page(pager, nullptr);
-#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
-  native_app::app_store::create_tile(stable_grid);
-#endif
   const AppRegistry &reg = AppRegistry::instance();
+  // Display labels and package versions do not affect saved positions.
+  std::vector<std::string> available;
 #if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
-  lv_obj_t *installed_grid = create_app_page(pager, i18n::tr("Installed apps"));
-  {
-    lv_obj_t *indicator = lv_label_create(scr);
-    lv_label_set_text(indicator, "1 / 2");
-    lv_obj_set_style_text_color(indicator, lv_color_hex(0x868e96), 0);
-    lv_obj_align(indicator, LV_ALIGN_BOTTOM_MID, 0, -2);
-    lv_obj_add_event_cb(pager, home_pager_scrolled, LV_EVENT_SCROLL, indicator);
-  }
+  available.push_back("system:add-apps");
 #endif
-
-  for (int i = 0; i < reg.count(); i++) {
-    const App &app = reg.apps()[i];
-    create_app_tile(stable_grid, app, i);
+  for(int i=0;i<reg.count();++i)available.push_back(std::string("builtin:")+reg.apps()[i].id);
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+  const auto installed=native_app::store::installed();
+  for(const auto &app:installed)if(app.launchable)available.push_back("native:"+app.manifest.id);
+#endif
+  auto &cfg=ConfigStoreService::instance();
+  const bool loaded=cfg.load("launcher");
+  const std::string saved=loaded?cfg.get("order",""):"";
+  const auto order=launcher::reconcile(saved,available);
+  const auto serialized=launcher::serialize(order);
+  if(loaded&&serialized!=saved){cfg.set("order",serialized);cfg.save();}
+  lv_obj_t *grid=nullptr;
+  for(size_t index=0;index<order.size();++index){
+    if(index%launcher::page_capacity==0)grid=create_app_page(pager,nullptr);
+    const auto &id=order[index];
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+    if(id=="system:add-apps"){native_app::app_store::create_tile(grid);continue;}
+    if(id.compare(0,7,"native:")==0){for(const auto &app:installed)if(app.manifest.id==id.substr(7)){native_app::store::create_tile(grid,app);break;}continue;}
+#endif
+    for(int i=0;i<reg.count();++i)if(id==std::string("builtin:")+reg.apps()[i].id){create_app_tile(grid,reg.apps()[i],i);break;}
   }
 #if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
-  native_app::store::create_tiles(installed_grid);
+  native_app::store::launcher_ready();
 #endif
+  if(order.empty())create_app_page(pager,nullptr);
+  const auto pages=launcher::page_count(order.size());
+  if(pages>1){
+    auto *indicator=lv_label_create(scr);
+    lv_label_set_text_fmt(indicator,"1 / %u",unsigned(pages));
+    lv_obj_set_style_text_color(indicator,lv_color_hex(0x868e96),0);
+    lv_obj_align(indicator,LV_ALIGN_BOTTOM_MID,0,-2);
+    lv_obj_add_event_cb(pager,home_pager_scrolled,LV_EVENT_SCROLL,indicator);
+  }
 }
 
 #if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
@@ -1279,6 +1302,8 @@ void native_launcher_release()
   if(home_pager) { lv_obj_update_layout(home_pager); int w=lv_obj_get_width(home_pager); native_return_page=w>0?(lv_obj_get_scroll_x(home_pager)+w/2)/w:0; }
   lv_obj_t *old = lv_screen_active();
   lv_screen_load(lv_obj_create(nullptr));
+  // App settings can be opened from the Settings screen, which retains Home.
+  if(home_screen && home_screen!=old)lv_obj_delete(home_screen);
   home_screen = nullptr;
   home_pager = nullptr;
   lv_obj_delete(old);
@@ -1289,7 +1314,7 @@ void native_launcher_restore()
   lv_obj_t *old = lv_screen_active();
   lv_screen_load(lv_obj_create(nullptr));
   create_home_screen();
-  if(home_pager) { lv_obj_update_layout(home_pager); lv_obj_scroll_to_x(home_pager,native_return_page*lv_obj_get_width(home_pager),LV_ANIM_OFF); }
+  if(home_pager) { lv_obj_update_layout(home_pager); lv_obj_scroll_to_x(home_pager,std::max(0,std::min(native_return_page,int(lv_obj_get_child_count(home_pager))-1))*lv_obj_get_width(home_pager),LV_ANIM_OFF); }
   lv_obj_delete(old);
   UiSessionState::set_route("home");
 }

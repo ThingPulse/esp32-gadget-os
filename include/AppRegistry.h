@@ -18,9 +18,9 @@ struct App {
   App(const char *n, const char *s, AppLaunchFn fn, unsigned int color,
       int r = APP_DEFAULT_RANK,
       AppAvailability availability_ = AppAvailability::Stable,
-      AppIconCreateFn icon_create_ = nullptr)
+      AppIconCreateFn icon_create_ = nullptr, const char *id_ = nullptr)
       : name(n), symbol(s), on_launch(fn), button_color(color), rank(r),
-        availability(availability_), icon_create(icon_create_) {}
+        availability(availability_), icon_create(icon_create_), id(id_ ? id_ : n) {}
 
   const char *name;
   const char *symbol;  // LVGL symbol string, e.g. LV_SYMBOL_SETTINGS
@@ -29,6 +29,7 @@ struct App {
   int rank = APP_DEFAULT_RANK;
   AppAvailability availability = AppAvailability::Stable;
   AppIconCreateFn icon_create = nullptr;
+  const char *id = nullptr; // Stable launcher identity, independent of display name.
 };
 
 class AppRegistry {
@@ -65,3 +66,11 @@ private:
 #define APP_REGISTER_CUSTOM_ICON_COLOR_RANK(name_, icon_fn_, fn_, color_, rank_) \
   static bool _app_reg_##__LINE__ = AppRegistry::instance().registerApp(           \
       App{name_, nullptr, fn_, color_, rank_, AppAvailability::Stable, icon_fn_})
+
+#define APP_REGISTER_ID_COLOR_RANK(id_, name_, symbol_, fn_, color_, rank_) \
+  static bool _app_reg_##__LINE__ = AppRegistry::instance().registerApp( \
+      App{name_, symbol_, fn_, color_, rank_, AppAvailability::Stable, nullptr, id_})
+
+#define APP_REGISTER_ID_CUSTOM_ICON_COLOR_RANK(id_, name_, icon_fn_, fn_, color_, rank_) \
+  static bool _app_reg_##__LINE__ = AppRegistry::instance().registerApp( \
+      App{name_, nullptr, fn_, color_, rank_, AppAvailability::Stable, icon_fn_, id_})

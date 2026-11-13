@@ -1,3 +1,5 @@
+// Fallback reference for builds without the installable-app host.
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "ui/I18n.h"
 #include "services/StockDataProvider.h"
 #include "ui/AsciiFold.h"
@@ -164,3 +166,5 @@ Result YahooStockProvider::fetch(const std::string &symbol,Period period) {
     r.retry_after_ms=retry; return r;
 }
 }
+
+#endif

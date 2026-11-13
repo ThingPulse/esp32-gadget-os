@@ -4,6 +4,7 @@ namespace native_app {
 void launch();
 void launch_iss();
 void launch_id(const char *id);
+bool launch_settings_id(const char *id);
 bool running(const char *id);
 void poll(); // after lv_task_handler returns, UI thread only
 bool busy();

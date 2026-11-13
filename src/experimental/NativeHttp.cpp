@@ -68,7 +68,7 @@ void worker(void *arg)
 }
 int32_t start(const char *url,uint32_t generation,uint32_t capacity)
 {
-    if (capacity<1||capacity>49152)return GADGET_HTTP_INVALID;
+    if (capacity<1||capacity>65536)return GADGET_HTTP_INVALID;
     auto update=UpdateService::instance().state();
     if(update==UpdateService::State::Downloading||update==UpdateService::State::Checking||update==UpdateService::State::ReadyToReboot)return GADGET_HTTP_BUSY;
     if (pending) return GADGET_HTTP_BUSY;

@@ -29,7 +29,7 @@ static lv_obj_t *weather_launcher_icon_create(lv_obj_t *parent, lv_coord_t size)
   return icon;
 }
 
-APP_REGISTER_CUSTOM_ICON_COLOR_RANK("Weather", weather_launcher_icon_create,
+APP_REGISTER_ID_CUSTOM_ICON_COLOR_RANK("weather", "Weather", weather_launcher_icon_create,
                                     weather_app_launch, 0x339af0, 10);
 
 namespace {

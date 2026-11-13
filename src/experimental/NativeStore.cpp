@@ -69,7 +69,7 @@ void scan() {
     std::sort(entries,entries+count,[](const Entry&a,const Entry&b){return a.manifest.name<b.manifest.name;});
 }
 void list() {
-    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=7;
+    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=9;
     auto apps=d["apps"].to<JsonArray>();
     for(unsigned i=0;i<count;++i){auto a=apps.add<JsonObject>();auto &m=entries[i].manifest;
         a["trusted"]=entries[i].trusted;a["id"]=m.id;a["name"]=m.name;a["version"]=m.version;a["running"]=native_app::running(m.id.c_str());}
@@ -200,7 +200,7 @@ void usage_inventory(JsonArray apps){
 }
 std::vector<Installed> installed(){
     scan();std::vector<Installed> result;
-    for(unsigned i=0;i<count;++i)result.push_back({entries[i].manifest,entries[i].trusted});
+    for(unsigned i=0;i<count;++i)result.push_back({entries[i].manifest,entries[i].trusted,entries[i].trusted||developer_mode(),entries[i].icon_offset});
     return result;
 }
 bool uninstall(const std::string &id,std::string &why){
@@ -231,32 +231,27 @@ bool install_signed(const uint8_t *data,size_t size,const Manifest &expected,std
     if(!written||!LittleFS.rename(Stage,path(m.id).c_str())){LittleFS.remove(Stage);return fail("Installation failed; the existing app was retained.");}
     dirty=true;AppUsage::installation(m.id.c_str(),m.version.c_str(),true,true);return true;
 }
-void create_tiles(lv_obj_t *grid) {
-    scan();dirty=false;
-    if(!count){
-        auto *empty=lv_label_create(grid);lv_obj_set_width(empty,lv_pct(100));
-        lv_label_set_text(empty,i18n::tr("No apps installed yet. Open Add apps on the first screen."));
-        lv_obj_set_style_text_font(empty,i18n::font14(),0);
-    }
-    for(unsigned i=0;i<count;++i){auto &entry=entries[i];if(!entry.trusted&&!developer_mode())continue;
-        auto *icon=(Icon*)heap_caps_calloc(1,sizeof(Icon),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-        if(!icon)continue;
-        auto f=LittleFS.open(path(entry.manifest.id).c_str());f.seek(entry.icon_offset);
-        if(f.read(icon->pixels,package_icon_bytes)!=package_icon_bytes){heap_caps_free(icon);continue;}
-        strcpy(icon->id,entry.manifest.id.c_str());icon->descriptor.header.magic=LV_IMAGE_HEADER_MAGIC;
-        icon->descriptor.header.cf=LV_COLOR_FORMAT_RGB565;icon->descriptor.header.w=40;icon->descriptor.header.h=40;
-        icon->descriptor.header.stride=80;icon->descriptor.data_size=package_icon_bytes;icon->descriptor.data=icon->pixels;
-        auto *tile=lv_button_create(grid);lv_obj_set_size(tile,88,112);
-        lv_obj_set_style_bg_opa(tile,LV_OPA_TRANSP,0);lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,LV_STATE_PRESSED);lv_obj_set_style_bg_color(tile,lv_color_hex(0x38706f),LV_STATE_PRESSED);lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
-        auto *image=lv_image_create(tile);lv_image_set_src(image,&icon->descriptor);lv_obj_align(image,LV_ALIGN_TOP_MID,0,14);
-        auto *name=lv_label_create(tile);lv_label_set_text(name,entry.manifest.name.c_str());lv_obj_set_width(name,84);
-        lv_obj_set_style_text_font(name,i18n::font14(),0);lv_obj_set_height(name,2*i18n::font14()->line_height);
-        lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);lv_obj_align(name,LV_ALIGN_BOTTOM_MID,0,0);
-        lv_obj_add_event_cb(tile,[](lv_event_t *e){native_app::launch_id(((Icon*)lv_event_get_user_data(e))->id);},LV_EVENT_CLICKED,icon);
-        lv_obj_add_event_cb(image,[](lv_event_t *e){auto*p=(Icon*)lv_event_get_user_data(e);lv_image_set_src((lv_obj_t*)lv_event_get_target(e),nullptr);lv_image_cache_drop(&p->descriptor);heap_caps_free(p);},LV_EVENT_DELETE,icon);
-    }
+void create_tile(lv_obj_t *grid, const Installed &entry) {
+    if(!entry.launchable)return;
+    auto *icon=(Icon*)heap_caps_calloc(1,sizeof(Icon),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(!icon)return;
+    auto f=LittleFS.open(path(entry.manifest.id).c_str());f.seek(entry.icon_offset);
+    if(f.read(icon->pixels,package_icon_bytes)!=package_icon_bytes){heap_caps_free(icon);return;}
+    strcpy(icon->id,entry.manifest.id.c_str());icon->descriptor.header.magic=LV_IMAGE_HEADER_MAGIC;
+    icon->descriptor.header.cf=LV_COLOR_FORMAT_RGB565;icon->descriptor.header.w=40;icon->descriptor.header.h=40;
+    icon->descriptor.header.stride=80;icon->descriptor.data_size=package_icon_bytes;icon->descriptor.data=icon->pixels;
+    auto *tile=lv_button_create(grid);lv_obj_set_size(tile,88,112);
+    lv_obj_set_style_bg_opa(tile,LV_OPA_TRANSP,0);lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,LV_STATE_PRESSED);lv_obj_set_style_bg_color(tile,lv_color_hex(0x38706f),LV_STATE_PRESSED);lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
+    auto *image=lv_image_create(tile);lv_image_set_src(image,&icon->descriptor);lv_obj_align(image,LV_ALIGN_TOP_MID,0,14);
+    auto *name=lv_label_create(tile);lv_label_set_text(name,entry.manifest.name.c_str());lv_obj_set_width(name,84);
+    lv_obj_set_style_text_font(name,i18n::font14(),0);lv_obj_set_height(name,2*i18n::font14()->line_height);
+    lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);lv_obj_align(name,LV_ALIGN_BOTTOM_MID,0,0);
+    lv_obj_add_event_cb(tile,[](lv_event_t *e){native_app::launch_id(((Icon*)lv_event_get_user_data(e))->id);},LV_EVENT_CLICKED,icon);
+    lv_obj_add_event_cb(image,[](lv_event_t *e){auto*p=(Icon*)lv_event_get_user_data(e);lv_image_set_src((lv_obj_t*)lv_event_get_target(e),nullptr);lv_image_cache_drop(&p->descriptor);heap_caps_free(p);},LV_EVENT_DELETE,icon);
 }
+void launcher_ready(){dirty=false;}
+void create_tiles(lv_obj_t *grid){for(const auto &app:installed())create_tile(grid,app);launcher_ready();}
 void request_manager(){if(native_launcher_is_active()&&!native_app::busy())requested=true;}
 void close_manager(){if(visible)close_requested=true;}
 bool managing(){return requested||visible;}

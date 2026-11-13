@@ -22,9 +22,12 @@ bool parse_manifest(const std::string &json, const char *chip, Manifest &out, st
         if (!d[key].is<const char *>() || !d[key].as<const char *>()[0]) return fail(e, "Missing manifest field");
     if (d["chip"].as<std::string>() != chip) return fail(e, "Package is for a different chip");
     if (!d["api_major"].is<unsigned>() || !d["api_minor"].is<unsigned>() ||
-        d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 7)
+        d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 9)
         return fail(e, "Unsupported host API version");
     out = {d["id"].as<std::string>(), d["version"].as<std::string>(), d["executable"].as<std::string>()};
+    if (!d["settings"].isNull() && !d["settings"].is<bool>()) return fail(e,"Invalid settings capability");
+    out.settings=d["settings"] | false;
+    if(out.settings && d["api_minor"].as<unsigned>()<8) return fail(e,"Settings entry requires API 1.8");
     out.name=d["name"] | out.id;
     if (!valid_app_id(out.id) || out.version.size()>32 || out.name.empty() || out.name.size()>32 || out.executable!="app.elf")
         return fail(e,"Invalid app ID, name, version or executable");

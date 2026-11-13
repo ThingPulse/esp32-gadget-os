@@ -1,5 +1,6 @@
 #if GADGET_OS_NATIVE_APP_LOADER || !defined(ARDUINO)
 #include "experimental/NativeSettings.h"
+#include "services/ConfigStoreService.h"
 #include <ArduinoJson.h>
 #include <string>
 #include <cstring>
@@ -30,6 +31,19 @@ void begin(const char *id){path.clear();if(!name(id,32,true))return;
  mkdir(".pio",0700);mkdir(".pio/native-app-settings",0700);path=".pio/native-app-settings/";
 #endif
  path+=std::string(id)+".json";
+ // The sole legacy import bridge. Never expose arbitrary host config to apps,
+ // replace existing app data, or erase the original watchlist. The legacy
+ // marker survives uninstall, so deleted app settings do not resurrect later.
+ if(!strcmp(id,"stocks")||!strcmp(id,"stocks-preview")){
+  JsonDocument doc;if(!load(doc)||!doc["symbols"].isNull())return;
+  auto &cfg=ConfigStoreService::instance();
+  if(!cfg.begin()||!cfg.load("stocks")||cfg.get_bool("package_watchlist_migrated",false))return;
+  auto symbols=cfg.get("symbols","AAPL\nNESN.SW\n7203.T\nSAP.DE\nVOD.L");
+  if(cfg.get("provider","yahoo")!="yahoo"||symbols.size()>255){set("import_error","Legacy watchlist needs review");return;}
+  if(set("symbols",symbols.c_str())==0){
+   if(cfg.load("stocks")){cfg.set("package_watchlist_migrated",true);cfg.save();}
+  }
+ }
 }
 void end(){path.clear();}
 int32_t get(const char *key,char *value,uint32_t cap){if(!name(key,24)||!value||cap<1||cap>256)return -1;JsonDocument doc;if(!load(doc)||!doc[key].is<const char*>())return -1;const char *v=doc[key];size_t n=strlen(v);if(n>=cap)return -1;memcpy(value,v,n+1);return (int32_t)n;}

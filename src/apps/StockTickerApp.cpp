@@ -1,3 +1,5 @@
+// Fallback reference for builds without the installable-app host.
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "ui/TouchKeyboard.h"
 #include "ui/I18n.h"
 #include "apps/StockTickerApp.h"
@@ -12,7 +14,7 @@
 #include <cstdio>
 #include <ctime>
 
-APP_REGISTER_COLOR_RANK("Stocks", LV_SYMBOL_CHARGE, stock_ticker_app_launch, 0x26b99a, 30);
+APP_REGISTER_ID_COLOR_RANK("stocks", "Stocks", LV_SYMBOL_CHARGE, stock_ticker_app_launch, 0x26b99a, 30);
 namespace {
 constexpr uint32_t Bg=0x182131, Card=0x292d44, Mint=0x55edc5, Red=0xff877e, Muted=0xaab8d2;
 struct Context {
@@ -287,3 +289,5 @@ void stock_ticker_app_launch() {
         if(!ctx.scrolling && ctx.view!=2 && (ctx.revision!=StockService::instance().revision() || ctx.last_minute!=minute)) {ctx.last_minute=minute;render();}
     },500,nullptr);
 }
+
+#endif

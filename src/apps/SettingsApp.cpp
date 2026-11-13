@@ -1,3 +1,5 @@
+#include "experimental/NativeApp.h"
+#include "experimental/NativeStore.h"
 #include "services/AppUsage.h"
 #include "ui/I18n.h"
 #include "apps/SettingsApp.h"
@@ -34,7 +36,7 @@
 #include <WiFi.h>
 #endif
 
-APP_REGISTER_COLOR_RANK("Settings", LV_SYMBOL_SETTINGS, settings_launch, 0x495057, 100);
+APP_REGISTER_ID_COLOR_RANK("settings", "Settings", LV_SYMBOL_SETTINGS, settings_launch, 0x495057, 100);
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
@@ -1951,7 +1953,16 @@ static void open_display_screen(lv_event_t *e)
   UiSessionState::set_route("settings_display");
 }
 
-static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
+static lv_obj_t *app_settings_list=nullptr;
+bool settings_apps_active(){return app_settings_list && lv_screen_active()==app_settings_list;}
+static lv_obj_t *create_settings_screen(lv_obj_t *home_scr, bool apps_only=false);
+static void switch_settings_list(lv_event_t *e){
+  auto *home=static_cast<lv_obj_t *>(lv_event_get_user_data(e));
+  const bool apps=!settings_apps_active();
+  ui_load_screen(create_settings_screen(home,apps),true);
+  UiSessionState::set_route(apps?"settings_apps":"settings");
+}
+static lv_obj_t *create_settings_screen(lv_obj_t *home_scr, bool apps_only)
 {
   lv_obj_t *scr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e2030), 0);
@@ -1959,7 +1970,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
 
-  make_top_bar(scr, i18n::tr("Settings"), home_scr, true);
+  make_top_bar(scr, i18n::tr(apps_only?"Apps":"Settings"), home_scr, true);
 
   /* Settings list */
   lv_obj_t *list = lv_obj_create(scr);
@@ -1971,6 +1982,36 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr)
   lv_obj_set_style_pad_row(list, 8, 0);
   lv_obj_set_layout(list, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+  auto settings_row=[&](const char *title,lv_event_cb_t callback,void *data){
+    auto *row=lv_button_create(list);lv_obj_set_size(row,lv_pct(100),52);
+    lv_obj_set_style_bg_color(row,lv_color_hex(0x2a2d42),0);lv_obj_set_style_shadow_width(row,0,0);
+    auto *label=lv_label_create(row);lv_label_set_text(label,title);
+    lv_obj_set_width(label,lv_pct(85));lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
+    lv_obj_align(label,LV_ALIGN_LEFT_MID,0,0);
+    auto *chevron=lv_label_create(row);lv_label_set_text(chevron,LV_SYMBOL_RIGHT);lv_obj_align(chevron,LV_ALIGN_RIGHT_MID,0,0);
+    lv_obj_add_event_cb(row,callback,LV_EVENT_CLICKED,data);return row;
+  };
+  if(apps_only){
+    app_settings_list=scr;
+    lv_obj_add_event_cb(scr,[](lv_event_t *e){if(app_settings_list==lv_event_get_target(e))app_settings_list=nullptr;},LV_EVENT_DELETE,nullptr);
+    // Replace the top-bar Back target: return to Settings, not the launcher.
+    auto *bar=lv_obj_get_child(scr,0);
+    auto *back=lv_obj_get_child(bar,0);
+    lv_obj_remove_event_cb(back,nav_to_home_screen);
+    lv_obj_add_event_cb(back,switch_settings_list,LV_EVENT_CLICKED,home_scr);
+    bool any=false;
+    for(const auto &app:native_app::store::installed())if(app.launchable&&app.manifest.settings){
+      any=true;auto *id=new std::string(app.manifest.id);
+      auto *row=settings_row(app.manifest.name.c_str(),[](lv_event_t *e){native_app::launch_settings_id(static_cast<std::string *>(lv_event_get_user_data(e))->c_str());},id);
+      lv_obj_add_event_cb(row,[](lv_event_t *e){delete static_cast<std::string *>(lv_event_get_user_data(e));},LV_EVENT_DELETE,id);
+    }
+    if(!any){auto *label=lv_label_create(list);lv_obj_set_width(label,lv_pct(100));lv_label_set_text(label,i18n::tr("No installed apps have settings."));}
+    return scr;
+  }
+  settings_row(i18n::tr("Apps"),switch_settings_list,home_scr);
+#endif
 
   // Language changes are applied on the next main-loop iteration so this
   // callback never destroys the dropdown or button while handling its event.
@@ -2160,9 +2201,12 @@ void settings_launch_with_route(const char *route)
 {
   UI_TRACE("Settings", "settings_launch_with_route route=%s", route ? route : "<null>");
   lv_obj_t *home_scr = lv_screen_active();
-  lv_obj_t *settings_scr = create_settings_screen(home_scr);
+  lv_obj_t *settings_scr = create_settings_screen(home_scr,route && std::strcmp(route,"settings_apps")==0);
   route_restore_settings_screen = settings_scr;
 
+  if(route && std::strcmp(route,"settings_apps")==0){
+    ui_load_screen(settings_scr,false);UiSessionState::set_route("settings_apps");route_restore_settings_screen=nullptr;return;
+  }
   if (!route || route[0] == '\0' || std::strcmp(route, "settings") == 0) {
     UiSessionState::set_route("settings");
     ui_load_screen(settings_scr, false);

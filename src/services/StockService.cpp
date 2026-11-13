@@ -1,3 +1,5 @@
+// Fallback reference for builds without the installable-app host.
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "ui/I18n.h"
 #include "services/StockService.h"
 #include "services/ConfigStoreService.h"
@@ -200,3 +202,5 @@ void StockService::loop() {
 #endif
 }
 SERVICE_REGISTER(StockService);
+
+#endif

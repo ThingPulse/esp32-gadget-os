@@ -25,7 +25,7 @@ bool parse(const char *data,size_t size,const char *chip,const std::string &base
     for(JsonObject a:d["apps"].as<JsonArray>()) {
         if(a["chip"].as<std::string>()!=chip)continue;
         if(!a["api_major"].is<unsigned>()||!a["api_minor"].is<unsigned>())return fail("Invalid app compatibility.");
-        if(a["api_major"]!=1||a["api_minor"].as<unsigned>() > 7)continue;
+        if(a["api_major"]!=1||a["api_minor"].as<unsigned>() > 9)continue;
         Item item{a["id"]|"",a["name"]|"",a["version"]|"",a["description"]|"",a["url"]|"",a["bytes"]|size_t(0)};
         if(!valid_app_id(item.id)||item.name.empty()||item.name.size()>32||item.version.empty()||item.version.size()>32||
            item.description.size()>240||item.bytes<signed_header_bytes||item.bytes>max_package_bytes||!allowed_url(item.url,base))

@@ -6,7 +6,7 @@
 #include "ui/UiNav.h"
 #include "ui/UiSessionState.h"
 
-APP_REGISTER_COLOR_RANK("Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
+APP_REGISTER_ID_COLOR_RANK("planes", "Planes", LV_SYMBOL_GPS, planes_app_launch, 0x339af0, 20);
 
 namespace {
 struct PlanesAppCtx {

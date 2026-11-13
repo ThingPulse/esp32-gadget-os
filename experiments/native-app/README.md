@@ -400,3 +400,95 @@ compatible via frozen legacy readers. The dashboard reserves 128 widgets using t
 extension. Activity and quota feeds refresh independently; existing private HTTPS
 quota endpoints continue to work. See the companion README for hook setup and
 the stale/disconnected behavior.
+
+## Settings entry API 1.8 and launcher
+
+Packages can declare `"settings": true` with `api_minor: 8`. Omission defaults to
+false. Settings → Apps discovers this capability from installed metadata without
+executing app code. Older packages continue to work without a settings row.
+On entry, `host->launch_mode()` returns `GADGET_LAUNCH_NORMAL` or
+`GADGET_LAUNCH_SETTINGS`. In settings mode, build the app-owned settings view and
+call `request_close()` to return to Settings → Apps. Initialization failure also
+returns there after the error is dismissed. The host keeps the usual deferred
+shutdown/callback cancellation/unload sequence. Device location settings can be
+opened from either mode, and the same mode resumes afterward.
+
+An in-app gear button should call the same settings renderer locally, with Back
+returning to the app view; this avoids an unnecessary unload/reload. Settings
+storage remains scoped to the package ID. Form widgets and additional network
+capabilities needed by the migration are phase 2/3 work.
+
+`example/settings_demo.c` demonstrates both entry paths and persistent settings.
+Build it with `build.py --app settings_demo` for either chip; this developer
+fixture is not published in the catalogue. Desktop adapters opt in with
+`simulator::register_settings_adapter(id, callback)`, whose callback opens a
+settings screen and returns to its caller like the existing preview adapters.
+Simulator metadata only advertises settings when that adapter exists.
+
+The launcher now mixes built-in and installed tiles, nine per page, with a page
+indicator only when needed. Order is persisted in the `launcher` configuration
+under `order`. Built-in identities use the explicit registration ID prefixed
+with `builtin:` (independent of display labels),
+Add apps uses `system:add-apps`, and packages use `native:<manifest-id>`.
+Updates retain position, new apps append, and removals are compacted on rebuild.
+Returning to the launcher clamps the saved page after an uninstall.
+
+Validation: `python3 scripts/test-launcher-settings.py` after a native build,
+plus `test-native-app.py`, `test-native-catalog.py`, and `test-settings.py`.
+
+## Installable Stocks and SDK 1.9
+
+Stocks 0.1.0 is built from `example/stocks.c` for both ESP32 and ESP32-S3 and
+requires host API 1.9. It owns the Yahoo Finance chart adapter, ten-symbol
+watchlist, quote/history parsing, five-minute refresh schedule, 30-second manual
+refresh cooldown and exponential error backoff (one minute to six hours).
+Requests are spaced by at least five seconds and respect bounded Retry-After.
+The app provides watchlist/detail views, 5D/1M/1Y charts (up to 96 daily samples),
+previous-close change, UTC quote times, cached/error states, swipe navigation,
+pull-to-refresh, and the same editor from its Edit button and Settings → Apps.
+Charts preserve gaps and span the full available width. Quotes/history are
+session-only; unloading frees them. Only the watchlist persists across sessions.
+
+Regular loader-enabled firmware and the simulator no longer register or run the
+bundled Stocks app, StockService or YahooStockProvider. The legacy sources remain
+as a fallback for builds without the app host and for comparison tests. A saved
+`stocks` route only opens an installed package; it does not silently install one.
+
+The host imports `/config/stocks.json`'s Yahoo watchlist into the app's `symbols`
+setting on first use, unless app-owned symbols already exist. The original
+configuration is retained. A `package_watchlist_migrated` marker prevents an
+uninstall/reinstall from resurrecting the legacy list. An unknown provider or
+oversized legacy list opens the editor with an import warning. Saving app settings
+does not change the legacy symbols. Updates retain app settings; uninstall removes
+app-owned settings. Native uses the isolated `stocks-preview` settings namespace.
+
+SDK 1.9 appends text-area and keyboard widgets, bounded input read/configuration,
+vertical scroll positioning, horizontal-swipe/pull callbacks and variable-length
+charts to the UI table. Existing API prefixes and the old 60-sample chart method
+are unchanged. All input/drawing callbacks use the lifecycle delivery gate; UI
+handles expire when their subtree is cleared or the app closes.
+
+The services table adds finite JSON numbers, bounded numeric formatting, a
+monotonic clock and a small arithmetic table. `sdk/gadget_math.h` provides PIC
+Xtensa compiler-runtime shims for C double arithmetic through that table, avoiding
+non-PIC toolchain archive dependencies or firmware symbol imports. UTC formatting
+uses `format_time(..., 2, ...)`. Extended HTTPS/JSON payloads are bounded at 64 KiB;
+old 2 KiB HTTP entry points retain their original limits.
+
+The native adapter executes the exact C package source. Normal use fetches Yahoo
+asynchronously. Set `GADGET_OS_STOCK_FIXTURE_DIR` to a directory of `<SYMBOL>.json`
+Yahoo chart responses for deterministic offline testing; missing fixture files
+produce a symbol-not-found error, not invented quotes. Unfinished requests retain
+only host data, and callbacks are dropped immediately on closure.
+
+Build a developer package with `build.py --app stocks --chip esp32` (or `esp32s3`),
+plus the existing `--toolchain` and `--output` options. Production packaging uses
+`build-native-apps.py` and the configured signing workflow; adding the app to
+`apps.json` does not publish it. An unsigned package needs developer mode.
+
+Run `python3 scripts/test-stocks-installable.py` after the native build. It tests
+the real package and SDK UI, parser failures, stale-response fencing, Retry-After,
+multiline Enter in each keyboard layout, migration, settings return paths,
+reinstall/uninstall and repeated cleanup. `test-native-app.py` additionally builds
+and validates Stocks ELF/packages for both chips. `test-stocks.py` retains the
+legacy provider/UI reference checks.

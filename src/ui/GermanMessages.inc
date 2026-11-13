@@ -500,4 +500,6 @@ static const Message messages[] = {
  {"  Time", "  Uhrzeit"},
  {"  Planes", "  Flugzeuge"},
  {"  WiFi", "  WLAN"},
+ {"Apps", "Apps"},
+ {"No installed apps have settings.", "Keine installierte App hat Einstellungen."},
 };
