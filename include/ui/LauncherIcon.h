@@ -1,8 +1,19 @@
 #pragma once
 
 #include <lvgl.h>
+#include <cstring>
 
 namespace launcher {
+// Older companion-app packages use the dashboard's dark canvas as icon fill.
+// Give these launcher tiles visible colors without changing signed packages.
+inline uint16_t icon_tile_color(const char *id, uint16_t background) {
+    if(background == 0x1106) {
+        if(std::strcmp(id, "agent-usage") == 0) return 0x8318; // Purple
+        if(std::strcmp(id, "system-monitor") == 0) return 0x2af6; // Blue
+    }
+    return background;
+}
+
 // Decorative frame: the containing launcher tile owns the click handler.
 inline lv_obj_t *icon_frame(lv_obj_t *tile, lv_color_t color) {
     auto *frame = lv_obj_create(tile);

@@ -246,7 +246,12 @@ void create_tile(lv_obj_t *grid, const Installed &entry) {
     lv_obj_remove_flag(tile,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_style_border_width(tile,0,0);
     lv_obj_set_style_bg_opa(tile,LV_OPA_TRANSP,0);lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,LV_STATE_PRESSED);lv_obj_set_style_bg_color(tile,lv_color_hex(0x38706f),LV_STATE_PRESSED);lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
     const uint16_t background=uint16_t(icon->pixels[0]) | (uint16_t(icon->pixels[1]) << 8);
-    auto *frame=launcher::icon_frame(tile,launcher::icon_background(background));
+    const uint16_t fill=launcher::icon_tile_color(icon->id,background);
+    if(fill!=background)for(size_t i=0;i<package_icon_bytes;i+=2){
+        const uint16_t pixel=uint16_t(icon->pixels[i]) | (uint16_t(icon->pixels[i+1]) << 8);
+        if(pixel==background){icon->pixels[i]=uint8_t(fill);icon->pixels[i+1]=uint8_t(fill>>8);}
+    }
+    auto *frame=launcher::icon_frame(tile,launcher::icon_background(fill));
     auto *image=lv_image_create(frame);lv_image_set_src(image,&icon->descriptor);lv_obj_center(image);
     lv_obj_remove_flag(image,LV_OBJ_FLAG_CLICKABLE);
     auto *name=lv_label_create(tile);lv_label_set_text(name,entry.manifest.name.c_str());lv_obj_set_width(name,84);
