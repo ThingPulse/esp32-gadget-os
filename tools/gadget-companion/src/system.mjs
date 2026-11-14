@@ -30,17 +30,21 @@ export class SystemCollector {
   if(slow){this.slow={...battery(batt),...disk(df),iface:route.match(/interface:\s*(\S+)/)?.[1],volume:cleanName(volume.match(/^\s*Volume Name:\s*(.+)$/m)?.[1]||'Startup volume')};this.slowAt=start;}
   const cpus=os.cpus(),total=os.totalmem(),used=memory(vm,total),rows=processes(ps),traffic=network(net,this.slow.iface),now=this.clock(),prev=this.previous,seconds=prev?(now-prev.time)/1000:0;
   const valid=seconds>0&&seconds<=6,cpu=valid?cpuDelta(prev.cpus,cpus):-1;
-  const ram=used===null?-1:Math.round(used/total*100);
-  const out={schema:1,age:0,host:cleanName(os.hostname()),cpu,cores:cpus.length,ram,mem_mib:used===null?-1:Math.round(used/1048576),total_mib:Math.round(total/1048576),uptime:Math.floor(os.uptime()),battery:this.slow.battery,power:this.slow.power,disk_total_mib:this.slow.disk_total_mib,disk_free_mib:this.slow.disk_free_mib,volume:this.slow.volume,down_bps:-1,up_bps:-1};
+  const ram10=used===null?-1:Math.round(used/total*1000);
+  const ram=ram10<0?-1:Math.round(ram10/10);
+  const out={schema:1,age:0,host:cleanName(os.hostname()),cpu,cores:cpus.length,ram,ram10,mem_mib:used===null?-1:Math.round(used/1048576),total_mib:Math.round(total/1048576),uptime:Math.floor(os.uptime()),battery:this.slow.battery,power:this.slow.power,disk_total_mib:this.slow.disk_total_mib,disk_free_mib:this.slow.disk_free_mib,volume:this.slow.volume,down_bps:-1,up_bps:-1};
   if(valid&&traffic&&prev.traffic?.iface===traffic.iface){for(const [key,n]of [['down_bps','rx'],['up_bps','tx']]){const d=traffic[n]-prev.traffic[n];if(d>=0)out[key]=Math.min(2147483647,Math.round(d/seconds));}}
   const old=new Map(prev?.rows.map(p=>[p.pid,p])??[]);
   for(const p of rows){const before=old.get(p.pid),d=before&&before.name===p.name?p.seconds-before.seconds:-1;p.cpu=valid&&d>=0&&cpus.length?Math.min(1000,Math.round(d/seconds/cpus.length*1000)):-1;}
   for(const [kind,field]of [['ct','cpu'],['mt','rss']])rows.filter(p=>p[field]>=0).sort((a,b)=>b[field]-a[field]||a.pid-b.pid).slice(0,5).forEach((p,i)=>{out[kind+i+'_name']=p.name;out[kind+i+'_pid']=p.pid;out[kind+i+'_value']=kind==='ct'?p.cpu:Math.min(2147483647,Math.round(p.rss/1048576));});
   const gaps=prev?Math.min(60,Math.max(0,Math.round(seconds/2)-1)):0;
   for(let i=0;i<gaps;i++){this.cpuHistory.push(-1);this.ramHistory.push(-1);}
-  this.cpuHistory.push(cpu);this.ramHistory.push(ram);this.cpuHistory=this.cpuHistory.slice(-60);this.ramHistory=this.ramHistory.slice(-60);
+  this.cpuHistory.push(cpu);this.ramHistory.push(ram10);this.cpuHistory=this.cpuHistory.slice(-60);this.ramHistory=this.ramHistory.slice(-60);
   const encode=a=>a.map(v=>(v<0?255:v).toString(16).padStart(2,'0')).join('');
-  out.cpu_hist=encode(this.cpuHistory);out.ram_hist=encode(this.ramHistory);
+  // Keep whole-percent history for older apps; one fractional digit per sample
+  // adds precision without exceeding the 2 KiB device snapshot limit.
+  out.cpu_hist=encode(this.cpuHistory);out.ram_hist=encode(this.ramHistory.map(v=>v<0?-1:Math.floor(v/10)));
+  out.ram_frac=this.ramHistory.map(v=>v<0?'f':String(v%10)).join('');
   this.previous={cpus,traffic,rows,time:now};
   if(Buffer.byteLength(JSON.stringify(out))>2048)throw new Error('System snapshot exceeds limit.');
   return out;

@@ -498,5 +498,11 @@
   "This removes the app and its saved settings and cache.": "Die App sowie ihre gespeicherten Einstellungen und ihr Cache werden gelöscht.",
   "App removed.": "App entfernt.",
   "No installed apps.": "Keine Apps installiert.",
-  "Select an app to remove it.": "Wähle eine App aus, um sie zu entfernen."
+  "Select an app to remove it.": "Wähle eine App aus, um sie zu entfernen.",
+  "Update all": "Alle aktualisieren",
+  "Updates available:": "Updates verfügbar:",
+  "Updating app": "App aktualisieren",
+  "Updated apps:": "Aktualisierte Apps:",
+  "Apps": "Apps",
+  "No installed apps have settings.": "Keine installierte App hat Einstellungen."
 }

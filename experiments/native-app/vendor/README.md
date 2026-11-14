@@ -1,6 +1,6 @@
 # Pinned upstream source
 
-`elf_loader/` is an unmodified copy of Espressif `espressif/elf_loader` **1.3.4**.
+`elf_loader/` is based on Espressif `espressif/elf_loader` **1.3.4**.
 Registry archive SHA-256:
 `1bb7cdaa8393b7c682a23c8ab25475c4476e1949cfafa97e184ff1ae1cbfc306`.
 
@@ -11,8 +11,8 @@ Registry archive SHA-256:
 
 Manifest requires ESP-IDF >=4.4.3 and lists ESP32 and ESP32-S3. This experiment
 compiles three source files directly with the existing Arduino/IDF headers using
-SCons; its CMake build helper dependency is unnecessary. The source remains
-unaltered. The SCons script supplies the equivalent minimal Kconfig options and
+SCons; its CMake build helper dependency is unnecessary. One local adapter change routes non-executable app allocations to PSRAM when
+`GADGET_LOADER_DATA_PSRAM` is defined; code allocation is unchanged. The SCons script supplies the equivalent minimal Kconfig options and
 component version constants, without rebuilding or altering IDF sdkconfig.
 
 No libc, ESP-IDF or custom symbol tables are enabled. `NativeSymbols.c` supplies

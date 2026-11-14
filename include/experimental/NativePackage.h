@@ -4,6 +4,8 @@
 #include <string>
 namespace native_app {
 constexpr size_t max_elf_bytes = 64 * 1024;
+// API 1.10 permits bounded PSRAM data while retaining the 64 KiB file limit.
+constexpr size_t max_elf_allocation = 128 * 1024;
 struct Manifest { std::string id, version, executable, name; bool settings=false; };
 constexpr size_t package_header_bytes=52, signed_header_bytes=124, package_icon_bytes=3200;
 constexpr size_t max_package_bytes=signed_header_bytes+2048+package_icon_bytes+max_elf_bytes;

@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "services/HomeAssistantService.h"
 #include "services/HomeAssistantHttp.h"
 #include "services/HomeAssistantDiscovery.h"
@@ -149,3 +150,5 @@ std::string HomeAssistantService::setup_request(const std::string&method,const s
  std::string out;serializeJson(d,out);return out;
 }
 SERVICE_REGISTER(HomeAssistantService);
+
+#endif

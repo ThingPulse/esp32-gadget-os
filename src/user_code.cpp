@@ -665,10 +665,17 @@ static void native_run_tutorial()
   }
   bool warmup_ready = false;
   if (a.type == "planes_warmup") {
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
     warmup_ready = planes_app_tutorial_ready(12);
+#else
+    warmup_ready = elapsed >= a.duration;
+#endif
     static uint32_t last_refresh = 0;
     if (!warmup_ready && now - last_refresh >= 1100) {
-      PlanesService::instance().refresh_now(); last_refresh = now;
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
+      PlanesService::instance().refresh_now();
+#endif
+      last_refresh = now;
     }
     if (!warmup_ready && elapsed >= a.duration) {
       std::fprintf(stderr, "[UI][Tutorial] aircraft trail/route warmup timed out\n");
@@ -1000,17 +1007,32 @@ static void launch_route(const std::string &route)
 
   if (route == "planes") {
     UI_TRACE("Route", "launch planes");
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+    for(const auto &app:native_app::store::installed())if(app.manifest.id=="planes"){native_app::launch_id("planes");return;}
+    UiSessionState::set_route("home");
+#else
     planes_app_launch();
+#endif
     return;
   }
 
   if (route == "home_assistant") {
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+    for(const auto &app:native_app::store::installed())if(app.manifest.id=="home-assistant"){native_app::launch_id("home-assistant");return;}
+    UiSessionState::set_route("home");
+#else
     home_assistant_app_launch();
+#endif
     return;
   }
 
   if (route == "transit") {
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+    for(const auto &app:native_app::store::installed())if(app.manifest.id=="transit"){native_app::launch_id("transit");return;}
+    UiSessionState::set_route("home");
+#else
     transit_app_launch();
+#endif
     return;
   }
 

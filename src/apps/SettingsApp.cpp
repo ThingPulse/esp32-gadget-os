@@ -1551,6 +1551,7 @@ static void open_weather_screen(lv_event_t *e)
   UiSessionState::set_route("settings_weather");
 }
 
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 static void planes_ta_event(lv_event_t *e)
 {
   lv_event_code_t code = lv_event_get_code(e);
@@ -1795,6 +1796,7 @@ static void open_planes_screen(lv_event_t *e){
   lv_obj_add_event_cb(edit,open_planes_location_screen,LV_EVENT_CLICKED,scr);
   ui_load_screen(scr,false);UiSessionState::set_route("settings_planes");
 }
+#endif
 
 static void display_brightness_slider_event(lv_event_t *e)
 {
@@ -2151,6 +2153,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr, bool apps_only)
   lv_obj_set_style_text_color(display_chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(display_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
   /* Planes row */
   lv_obj_t *planes_row = lv_obj_create(list);
   lv_obj_set_size(planes_row, lv_pct(100), 52);
@@ -2174,6 +2177,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr, bool apps_only)
   lv_obj_set_style_text_color(planes_chevron, lv_color_hex(0x888888), 0);
   lv_obj_align(planes_chevron, LV_ALIGN_RIGHT_MID, 0, 0);
 
+#endif
   /* Software update row */
   lv_obj_t *update_row = lv_obj_create(list);
   lv_obj_set_size(update_row, lv_pct(100), 52);
@@ -2199,6 +2203,9 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr, bool apps_only)
 
 void settings_launch_with_route(const char *route)
 {
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+  if(route && std::strcmp(route,"settings_planes")==0)route="settings_apps";
+#endif
   UI_TRACE("Settings", "settings_launch_with_route route=%s", route ? route : "<null>");
   lv_obj_t *home_scr = lv_screen_active();
   lv_obj_t *settings_scr = create_settings_screen(home_scr,route && std::strcmp(route,"settings_apps")==0);
@@ -2223,7 +2230,11 @@ void settings_launch_with_route(const char *route)
   } else if (std::strcmp(route, "settings_weather") == 0) {
     open_weather_screen(nullptr);
   } else if (std::strcmp(route, "settings_planes") == 0) {
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+    ui_load_screen(create_settings_screen(home_scr,true),true);UiSessionState::set_route("settings_apps");
+#else
     open_planes_screen(nullptr);
+#endif
   } else if (std::strcmp(route, "settings_display") == 0) {
     open_display_screen(nullptr);
   } else {

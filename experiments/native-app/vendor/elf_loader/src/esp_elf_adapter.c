@@ -35,6 +35,11 @@
 void *esp_elf_malloc(uint32_t n, bool exec)
 {
     uint32_t caps;
+#ifdef GADGET_LOADER_DATA_PSRAM
+    // Gadget OS: writable app state (including HA configuration) belongs in
+    // PSRAM. Executable text still follows the pinned loader's IRAM path.
+    if (!exec) return heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#endif
 
 #if CONFIG_ELF_LOADER_BUS_ADDRESS_MIRROR
 #ifdef CONFIG_ELF_LOADER_LOAD_PSRAM

@@ -27,6 +27,15 @@ int main(int argc,char **argv){
  gadget_app_lifecycle lifecycle={sizeof(lifecycle),1,4,nullptr};char*args[]={(char*)&api,(char*)&lifecycle};
  for(int cycle=0;cycle<100;++cycle){snapshot.clear();count=0;closed=false;api.minor=3;assert(gadget_app_entry(2,args)==-1);api.minor=6;assert(gadget_app_entry(2,args)==-1);api.minor=7;assert(gadget_app_entry(2,args)==0);assert(count<=64);assert(shown(status)=="Waiting for computer");
  snapshot=R"({"schema":1,"age":0,"cpu":38,"ram":68,"cores":8,"disk_total_mib":1000,"disk_free_mib":1000,"ct0_name":"Worker","ct0_value":125,"mt0_name":"Large","mt0_value":1024,"cpu_hist":"ff0064","ram_hist":"3244","battery":0,"power":0})";timer_cb(nullptr);assert(shown(metric[0])=="38%");assert(shown(connection)=="Live");assert(shown(power_text)=="Battery 0%");assert(((Node*)disk_bar)->percent==0);choose((void*)1);assert(((Node*)panels[1])->shown);assert(shown(proc_names[0])=="Worker");sorting((void*)1);assert(shown(proc_names[0])=="Large");assert(shown(proc_values[0])=="1 GB");choose((void*)2);assert(((Node*)panels[2])->shown);
+ snapshot=R"({"schema":1,"age":0,"ram":84,"ram10":837,"ram_hist":"545453ff","ram_frac":"247f"})";timer_cb(nullptr);
+ assert(shown(metric[1])=="83.7%");assert(shown(memory_range)=="82-86% / 2 min");
+ assert(chart_data[1][0]==55&&chart_data[1][1]==60&&chart_data[1][2]==42&&chart_data[1][3]==-1);
+ snapshot=R"({"schema":1,"age":0,"ram":84,"ram_hist":"5454"})";timer_cb(nullptr);
+ assert(shown(metric[1])=="84%");assert(shown(memory_range)=="83-85% / 2 min");assert(chart_data[1][0]==50);
+ snapshot=R"({"schema":1,"age":0,"ram10":1000,"ram_hist":"0064","ram_frac":"00"})";timer_cb(nullptr);
+ assert(shown(metric[1])=="100.0%");assert(chart_data[1][0]==0&&chart_data[1][1]==100);
+ snapshot=R"({"schema":1,"age":0,"ram":84,"ram10":1001,"ram_hist":"6464","ram_frac":"9f"})";timer_cb(nullptr);
+ assert(shown(metric[1])=="84%");assert(chart_data[1][0]==-1&&chart_data[1][1]==-1);
  snapshot=R"({"schema":1,"age":11,"disk_total_mib":1000,"disk_free_mib":0})";timer_cb(nullptr);assert(shown(connection)=="Offline");assert(((Node*)disk_bar)->percent==100);assert(shown(metric[0])=="--");
  snapshot=R"({"schema":1,"age":0,"cpu":0})";timer_cb(nullptr);assert(shown(connection)=="Live");assert(shown(metric[0])=="0%");unsigned before=refreshes;refresh(nullptr);refresh(nullptr);assert(refreshes==before+1);
  channel_age_ms=12000;timer_cb(nullptr);assert(shown(connection)=="Offline");assert(age==12);channel_age_ms=0;

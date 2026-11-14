@@ -10,7 +10,7 @@ if not arduino_json.exists(): raise SystemExit('Install the experimental Platfor
 with tempfile.TemporaryDirectory() as temp:
     temp=pathlib.Path(temp)
     fixtures=temp/'fixtures'
-    build_fixtures(fixtures, ('counter','iss','settings_demo','stocks'), ('esp32','esp32s3'))
+    build_fixtures(fixtures, ('counter','iss','settings_demo','stocks','transit','planes','home_assistant'), ('esp32','esp32s3'))
     flags=['-g','-fsanitize=address,undefined','-fno-omit-frame-pointer']
     subprocess.run(['cc','-shared','-fPIC',*flags,'-Iexperiments/native-app/sdk',
         'experiments/native-app/example/counter.c','-o',str(temp/'demo.so')],check=True)
@@ -20,7 +20,8 @@ with tempfile.TemporaryDirectory() as temp:
     subprocess.run([str(temp/'test'),str(fixtures/'esp32/native-demo/app.elf'),
         str(fixtures/'esp32s3/native-demo/app.elf'),str(temp/'demo.so'),
         str(fixtures/'esp32/settings-demo.gapp'),str(fixtures/'esp32s3/settings-demo.gapp'),
-        str(fixtures/'esp32/stocks.gapp'),str(fixtures/'esp32s3/stocks.gapp')],check=True)
+        str(fixtures/'esp32/stocks.gapp'),str(fixtures/'esp32s3/stocks.gapp'),
+        *[str(fixtures/chip/(app+'.gapp')) for app in ('transit','planes','home-assistant') for chip in ('esp32','esp32s3')]],check=True)
     subprocess.run(['cc','-shared','-fPIC',*flags,'-Iexperiments/native-app/sdk',
         'experiments/native-app/example/iss.c','-o',str(temp/'iss.so')],check=True)
     subprocess.run(['c++','-std=c++17',*flags,'-DGADGET_OS_NATIVE_APP_LOADER=1',

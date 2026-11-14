@@ -26,7 +26,7 @@ static gadget_handle timer(uint32_t,gadget_callback cb,void *) { timer_cb=cb; re
 static void close_app() { gate.close(); assert(!gate.can_unload()); }
 static void call(gadget_callback cb) { if (gate.enter()) { cb(nullptr); gate.leave(); } }
 int main(int argc,char **argv) {
- assert(argc==8); std::string e; Manifest m;
+ assert(argc==14); std::string e; Manifest m;
  assert(parse_manifest(manifest(),"esp32",m,e));
  assert(parse_manifest(manifest("esp32",1,7),"esp32",m,e));
  assert(!m.settings);
@@ -38,10 +38,10 @@ int main(int argc,char **argv) {
  assert(!parse_manifest(wrong_settings,"esp32",m,e));
  assert(parse_manifest(manifest(),"esp32",m,e)&&!m.settings);
 
- for(int i=4;i<8;++i){auto bytes=read(argv[i]);Package package;assert(validate_package(reinterpret_cast<const uint8_t *>(bytes.data()),bytes.size(),i%2==0?"esp32":"esp32s3",package,e));assert(package.manifest.settings);}
+ for(int i=4;i<argc;++i){auto bytes=read(argv[i]);Package package;assert(validate_package(reinterpret_cast<const uint8_t *>(bytes.data()),bytes.size(),i%2==0?"esp32":"esp32s3",package,e));assert(package.manifest.settings);}
  auto iss=manifest("esp32",1,1); iss.replace(iss.find("native-demo"),11,"native-iss");
  assert(parse_manifest(iss,"esp32",m,e) && m.id=="native-iss");
- for (auto s:{std::string(""),std::string("{"),std::string("[]"),std::string("{}"),manifest("esp32s3"),manifest("esp32",2),manifest("esp32",1,10),std::string(2049,' ')})
+ for (auto s:{std::string(""),std::string("{"),std::string("[]"),std::string("{}"),manifest("esp32s3"),manifest("esp32",2),manifest("esp32",1,11),std::string(2049,' ')})
   assert(!parse_manifest(s,"esp32",m,e));
  auto path=manifest(); path.replace(path.find("app.elf"),7,"../app.elf"); assert(!parse_manifest(path,"esp32",m,e));
  for (int target=1;target<=2;++target) {

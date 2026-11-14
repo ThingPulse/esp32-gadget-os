@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "ui/I18n.h"
 #include "ui/NearbyPlanesView.h"
 #include "ui/PlaneAltitudeColor.h"
@@ -562,3 +563,5 @@ void nearby_planes_create(NearbyPlanesView &v,lv_obj_t *parent) {
         },LV_EVENT_CLICKED,&v);
     }
 }
+
+#endif

@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 #define GADGET_APP_API_MAJOR 1
-#define GADGET_APP_API_MINOR 9
+#define GADGET_APP_API_MINOR 10
 /* All calls and callbacks run synchronously on the UI thread. Handles expire
  * at shutdown. No tasks, interrupts, exceptions, or background callbacks. */
 typedef void *gadget_handle;
@@ -23,7 +23,7 @@ enum { GADGET_HTTP_BUSY=-1, GADGET_HTTP_OFFLINE=-2, GADGET_HTTP_INVALID=-3,
  * handles returned by this table. At most 64 widgets, 160-byte text, depth 8.
  * box dimensions are logical pixels; flow is 0=absolute, 1=row, 2=column.
  * Setters return 0 on success, -1 for invalid/expired handles or arguments. */
-enum { GADGET_UI_ROOT, GADGET_UI_CONTAINER, GADGET_UI_LABEL, GADGET_UI_BUTTON, GADGET_UI_BAR, GADGET_UI_CHART, GADGET_UI_SPINNER, GADGET_UI_TEXTAREA, GADGET_UI_KEYBOARD };
+enum { GADGET_UI_ROOT, GADGET_UI_CONTAINER, GADGET_UI_LABEL, GADGET_UI_BUTTON, GADGET_UI_BAR, GADGET_UI_CHART, GADGET_UI_SPINNER, GADGET_UI_TEXTAREA, GADGET_UI_KEYBOARD, GADGET_UI_QRCODE, GADGET_UI_SLIDER };
 enum { GADGET_STYLE_DEFAULT, GADGET_STYLE_HEADER, GADGET_STYLE_CARD,
        GADGET_STYLE_TITLE, GADGET_STYLE_VALUE, GADGET_STYLE_MUTED,
        GADGET_STYLE_TAB, GADGET_STYLE_BACK, GADGET_STYLE_REFRESH,
@@ -46,7 +46,20 @@ typedef struct gadget_math_api {
  double (*from_uint)(uint32_t);
  int32_t (*to_int)(double);
  uint32_t (*to_uint)(double);
+ /* API 1.10: sin, cos, sqrt. binary operation 4 is atan2(a,b). */
+ double (*unary)(uint32_t,double);
 } gadget_math_api;
+/* API 1.10: copied request parameters. Method is GET or POST. Redirects are
+ * disabled, TLS is verified (optional PEM CA), credentials never enter logs.
+ * All strings are copied before returning. One request per running session. */
+typedef struct gadget_http_request {
+ uint32_t struct_size;
+ const char *url, *method, *body, *bearer, *ca;
+ uint32_t response_limit;
+} gadget_http_request;
+/* UI-thread setup endpoint; output must be NUL-terminated, <=capacity-1.
+ * Return HTTP status. The host checks the session key before invoking apps. */
+typedef int32_t (*gadget_setup_callback)(const char *method,const char *path,const char *body,char *output,uint32_t capacity,void *user);
 typedef struct gadget_services_api {
  uint32_t struct_size;
  int32_t (*environment)(gadget_environment*);
@@ -63,7 +76,8 @@ typedef struct gadget_services_api {
  int32_t (*cache_write)(const void*,uint32_t);
  /* Closes the app to open location settings, then reopens it on settings exit. */
  void (*open_location)(void);
- /* Extended HTTPS: <=49152 bytes, Retry-After available during callback. */
+ /* Extended HTTPS: 48 KiB in 1.5, 64 KiB in 1.9, 192 KiB in 1.10.
+  * Retry-After is available during callback. */
  int32_t (*http_get)(const char*,uint32_t,gadget_http_callback,void*);
  uint32_t (*http_retry_seconds)(void);
  int32_t (*json_number)(const char*,int32_t scale,int32_t*);
@@ -74,6 +88,17 @@ typedef struct gadget_services_api {
  int32_t (*format_number)(double,uint32_t,char*,uint32_t);
  uint32_t (*monotonic_ms)(void);
  const gadget_math_api *math;
+ /* API 1.10: one private persistent JSON configuration, <=24576 bytes.
+  * Reads return byte length (NUL included in capacity), or -1; never truncate.
+  * Writes are atomic. This is separate from disposable app cache. */
+ int32_t (*config_read)(char*,uint32_t);
+ int32_t (*config_write)(const char*,uint32_t);
+ int32_t (*http_request)(const gadget_http_request*,gadget_http_callback,void*);
+ /* Temporary paired HTTP setup, expires after 10 idle minutes. The host copies
+  * a <=16384 byte gzip HTML page, owns sockets, and clears callbacks on close. */
+ int32_t (*setup_start)(const void*,uint32_t,gadget_setup_callback,void*,char*,uint32_t);
+ void (*setup_stop)(void);
+ uint32_t (*setup_active)(void);
 } gadget_services_api;
 typedef struct gadget_ui_api {
     uint32_t struct_size;
@@ -112,6 +137,11 @@ typedef struct gadget_ui_api {
     int32_t (*chart_fit)(gadget_handle,const int32_t*,uint32_t);
     /* Defer rebuilding a view while a pointer is held or its container scrolls. */
     int32_t (*interaction_active)(gadget_handle);
+    /* API 1.10: QR text <=256 bytes; square 80..240. Slider callback fires
+     * on release, value_get reads its current value. No LVGL types escape. */
+    int32_t (*qr)(gadget_handle,const char*,uint32_t);
+    int32_t (*slider)(gadget_handle,int32_t,int32_t,int32_t);
+    int32_t (*value_get)(gadget_handle);
 } gadget_ui_api;
 enum { GADGET_LAUNCH_NORMAL, GADGET_LAUNCH_SETTINGS };
 typedef struct gadget_host_api {

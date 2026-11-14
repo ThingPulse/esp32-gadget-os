@@ -8,9 +8,9 @@ void *memcpy(void *d,const void *s,size_t n){unsigned char *a=d;const unsigned c
 void *memset(void *d,int v,size_t n){unsigned char*a=d;while(n--)*a++=v;return d;}
 #endif
 static const gadget_host_api *host;static const gadget_ui_api *ui;
-static gadget_handle panels[3],nav[3],sorts[2],host_name,connection,status,metric[2],sub[2],graphs[2],rates[2],battery_icon,power_text,power_state,uptime_text,proc_names[5],proc_values[5],column,proc_caption,disk_name,disk_free,disk_used,disk_bar,disk_percent;
+static gadget_handle panels[3],nav[3],sorts[2],host_name,connection,status,metric[2],sub[2],graphs[2],memory_range,rates[2],battery_icon,power_text,power_state,uptime_text,proc_names[5],proc_values[5],column,proc_caption,disk_name,disk_free,disk_used,disk_bar,disk_percent;
 static unsigned page,sort,elapsed,received,paired,refresh_wait;
-static int32_t age,cpu,ram,cores,mem,total,down,up,battery,power,uptime,disk_total,disk_avail;
+static int32_t age,cpu,ram,ram10,cores,mem,total,down,up,battery,power,uptime,disk_total,disk_avail;
 static int32_t chart_data[2][60],chart_count[2],proc_val[2][5];
 static char names[2][5][49],computer[49],volume[49];
 typedef struct {char s[160];unsigned n;} Text;
@@ -27,7 +27,7 @@ static void render(void){
  unsigned offline=received&&((unsigned)age+elapsed>=10);for(unsigned i=0;i<3;++i){ui->visible(panels[i],page==i);ui->selected(nav[i],page==i);ui->opacity(panels[i],offline?45:100);}for(unsigned i=0;i<2;++i)ui->selected(sorts[i],sort==i);
  ui->text(host_name,computer[0]?computer:"Computer");ui->text(connection,offline?"Offline":received?"Live":"Waiting");
  Text footer={{0},0};if(!paired)add(&footer,"Pair in Add apps > Pair computer");else if(!received)add(&footer,"Waiting for computer");else{add(&footer,offline?"Last seen ":"Updated ");num(&footer,(unsigned)age+elapsed);add(&footer,"s ago");}ui->text(status,footer.s);
- for(unsigned i=0;i<2;++i){Text v={{0},0},s={{0},0};int32_t val=i?ram:cpu;if(val<0)add(&v,"--");else{num(&v,val);add(&v,"%");}ui->text(metric[i],v.s);
+ for(unsigned i=0;i<2;++i){Text v={{0},0},s={{0},0};int32_t val=i?ram:cpu;if(val<0)add(&v,"--");else{if(i&&ram10>=0)decimal(&v,ram10);else num(&v,val);add(&v,"%");}ui->text(metric[i],v.s);
   if(i){if(mem<0||total<=0)add(&s,"Unavailable");else{unsigned base=total>=1048576?1048576:total>=1024?1024:1;if((unsigned)mem/base>=100)num(&s,((unsigned)mem+base/2)/base);else decimal(&s,(unsigned)mem/base*10+((unsigned)mem%base*10+base/2)/base);add(&s," / ");num(&s,((unsigned)total+base/2)/base);add(&s,base==1048576?" TB":base==1024?" GB":" MB");}}else{if(cores<1)add(&s,"Unavailable");else{num(&s,cores);add(&s,cores>=100?" cores":" logical cores");}}ui->text(sub[i],s.s);
  }
  Text rx={{0},0},tx={{0},0};add(&rx,"\xef\x81\xb8 ");add(&tx,"\xef\x81\xb7 ");rate(&rx,down);rate(&tx,up);ui->text(rates[0],rx.s);ui->text(rates[1],tx.s);
@@ -44,8 +44,20 @@ static void read_snapshot(void){char json[2049];uint32_t age_ms=0;int32_t n=host
  int32_t new_age=number(json,n,"age");if(new_age<0||new_age>3600)return;received=1;age=new_age+(int32_t)(age_ms/1000);elapsed=0;
  string(json,n,"host",computer,sizeof computer);string(json,n,"volume",volume,sizeof volume);
  cpu=number(json,n,"cpu");ram=number(json,n,"ram");cores=number(json,n,"cores");mem=number(json,n,"mem_mib");total=number(json,n,"total_mib");down=number(json,n,"down_bps");up=number(json,n,"up_bps");battery=number(json,n,"battery");power=number(json,n,"power");uptime=number(json,n,"uptime");disk_total=number(json,n,"disk_total_mib");disk_avail=number(json,n,"disk_free_mib");
- cpu=bounded(cpu,100);ram=bounded(ram,100);cores=bounded(cores,4096);battery=bounded(battery,100);power=bounded(power,3);
- for(unsigned k=0;k<2;++k){char data[121];string(json,n,k?"ram_hist":"cpu_hist",data,sizeof data);unsigned count=0;while(data[count])++count;count=count%2?0:count/2;if(count>60)count=60;chart_count[k]=count;for(unsigned i=0;i<count;++i){unsigned a=hex(data[i*2]),b=hex(data[i*2+1]),v=a*16+b;chart_data[k][i]=(a<16&&b<16&&v<=100)?(int32_t)v:-1;}ui->chart(graphs[k],chart_data[k],count);
+ ram10=bounded(number(json,n,"ram10"),1000);
+ cpu=bounded(cpu,100);ram=bounded(ram,100);if(ram10>=0)ram=(ram10+5)/10;cores=bounded(cores,4096);battery=bounded(battery,100);power=bounded(power,3);
+ for(unsigned k=0;k<2;++k){char data[121];string(json,n,k?"ram_hist":"cpu_hist",data,sizeof data);unsigned count=0;while(data[count])++count;count=count%2?0:count/2;if(count>60)count=60;chart_count[k]=count;for(unsigned i=0;i<count;++i){unsigned a=hex(data[i*2]),b=hex(data[i*2+1]),v=a*16+b;chart_data[k][i]=(a<16&&b<16&&v<=100)?(int32_t)v:-1;}if(k){
+   char fractions[61];string(json,n,"ram_frac",fractions,sizeof fractions);unsigned digits=0;while(fractions[digits])++digits;
+   int32_t low=1000,high=0;unsigned valid=0;
+   for(unsigned i=0;i<count;++i){if(chart_data[k][i]<0)continue;unsigned fraction=digits==count?hex(fractions[i]):0;
+    int32_t v=chart_data[k][i]*10+(fraction<=9?(int32_t)fraction:0);
+    if(fraction>9||v>1000){chart_data[k][i]=-1;continue;}chart_data[k][i]=v;if(v<low)low=v;if(v>high)high=v;++valid;
+   }
+   if(valid){low=(low/10)*10-10;high=((high+9)/10)*10+10;if(low<0)low=0;if(high>1000)high=1000;
+    for(unsigned i=0;i<count;++i)if(chart_data[k][i]>=0)chart_data[k][i]=(chart_data[k][i]-low)*100/(high-low);
+    Text range={{0},0};num(&range,low/10);add(&range,"-");num(&range,high/10);add(&range,"% / 2 min");ui->text(memory_range,range.s);
+   }else ui->text(memory_range,"Last 2 min");
+  }ui->chart(graphs[k],chart_data[k],count);
   for(unsigned i=0;i<5;++i){Text key={{0},0};add(&key,k?"mt":"ct");num(&key,i);unsigned prefix=key.n;add(&key,"_name");string(json,n,key.s,names[k][i],sizeof names[k][i]);key.n=prefix;key.s[prefix]=0;add(&key,"_value");proc_val[k][i]=bounded(number(json,n,key.s),k?2147483647:1000);}
  }render();
 }
@@ -60,13 +72,13 @@ static gadget_handle label(gadget_handle p,const char*t,int x,int y,int w,int h,
 __attribute__((visibility("default"))) int gadget_app_entry(int argc,char**argv){
  if(argc!=2||!argv)return -1;host=(const gadget_host_api*)argv[0];gadget_app_lifecycle*app=(gadget_app_lifecycle*)argv[1];
  if(!host||host->struct_size<sizeof(gadget_host_api)||host->major!=1||host->minor<7||!host->companion_channel_read||!host->system_refresh||!host->json_string||!host->ui||!app||app->struct_size<sizeof(*app))return -1;ui=host->ui;if(ui->struct_size<offsetof(gadget_ui_api,reserve)||!ui->chart||!ui->opacity)return -1;
- app->major=1;app->minor=7;app->shutdown=shutdown;page=sort=elapsed=received=refresh_wait=0;paired=1;age=0;computer[0]=volume[0]=0;cpu=ram=cores=mem=total=down=up=battery=power=uptime=disk_total=disk_avail=-1;for(unsigned k=0;k<2;++k)for(unsigned i=0;i<5;++i){names[k][i][0]=0;proc_val[k][i]=-1;}
+ app->major=1;app->minor=7;app->shutdown=shutdown;page=sort=elapsed=received=refresh_wait=0;paired=1;age=0;computer[0]=volume[0]=0;cpu=ram=ram10=cores=mem=total=down=up=battery=power=uptime=disk_total=disk_avail=-1;for(unsigned k=0;k<2;++k)for(unsigned i=0;i<5;++i){names[k][i][0]=0;proc_val[k][i]=-1;}
  gadget_handle root=ui->create(0,GADGET_UI_ROOT,0,0,0);if(!root)return -1;
  gadget_handle header=make(root,GADGET_UI_CONTAINER,0,0,0,320,44,GADGET_STYLE_HEADER,0,0);
  make(header,GADGET_UI_BUTTON,0,0,0,44,44,GADGET_STYLE_BACK,close_app,0);make(header,GADGET_UI_BUTTON,0,276,0,44,44,GADGET_STYLE_REFRESH,refresh,0);gadget_handle title=label(header,"System Monitor",44,8,232,30,GADGET_STYLE_TITLE);ui->align(title,1);
  host_name=label(root,"Computer",14,52,214,22,GADGET_STYLE_DEFAULT);ui->style(host_name,GADGET_STYLE_ELLIPSIS);connection=label(root,"Waiting",234,52,72,22,GADGET_STYLE_ACCENT);ui->align(connection,2);
  for(unsigned i=0;i<3;++i){panels[i]=make(root,GADGET_UI_CONTAINER,0,0,84,320,316,GADGET_STYLE_DEFAULT,0,0);if(!panels[i])return -1;nav[i]=make(root,GADGET_UI_BUTTON,i==0?"Overview":i==1?"Processes":"Storage",(int)i*106+2,432,104,46,GADGET_STYLE_TAB,choose,(void*)(uintptr_t)i);if(!nav[i])return -1;}
- for(unsigned i=0;i<2;++i){gadget_handle c=make(panels[0],GADGET_UI_CONTAINER,0,10+(int)i*156,0,144,154,GADGET_STYLE_CARD,0,0);label(c,i?"Memory":"CPU",10,8,124,22,GADGET_STYLE_DEFAULT);metric[i]=label(c,"--",10,32,124,40,GADGET_STYLE_VALUE);ui->style(metric[i],GADGET_STYLE_WHITE);sub[i]=label(c,"",10,76,124,20,GADGET_STYLE_MUTED);graphs[i]=make(c,GADGET_UI_CHART,0,10,100,124,27,GADGET_STYLE_DEFAULT,0,0);label(c,"Last 2 min",10,131,124,20,GADGET_STYLE_MUTED);}
+ for(unsigned i=0;i<2;++i){gadget_handle c=make(panels[0],GADGET_UI_CONTAINER,0,10+(int)i*156,0,144,154,GADGET_STYLE_CARD,0,0);label(c,i?"Memory":"CPU",10,8,124,22,GADGET_STYLE_DEFAULT);metric[i]=label(c,"--",10,32,124,40,GADGET_STYLE_VALUE);ui->style(metric[i],GADGET_STYLE_WHITE);sub[i]=label(c,"",10,76,124,20,GADGET_STYLE_MUTED);graphs[i]=make(c,GADGET_UI_CHART,0,10,100,124,27,GADGET_STYLE_DEFAULT,0,0);gadget_handle range=label(c,"Last 2 min",10,131,124,20,GADGET_STYLE_MUTED);if(i)memory_range=range;}
  gadget_handle net=make(panels[0],GADGET_UI_CONTAINER,0,10,164,300,78,GADGET_STYLE_CARD,0,0);label(net,"Network",10,6,280,20,GADGET_STYLE_DEFAULT);for(unsigned i=0;i<2;++i){rates[i]=label(net,"--",10+(int)i*146,28,138,22,GADGET_STYLE_DEFAULT);label(net,i?"Upload":"Download",10+(int)i*146,52,138,20,GADGET_STYLE_MUTED);}
  gadget_handle batt=make(panels[0],GADGET_UI_CONTAINER,0,10,252,300,64,GADGET_STYLE_CARD,0,0);battery_icon=label(batt,"\xef\x89\x80",10,20,30,30,GADGET_STYLE_TITLE);power_text=label(batt,"",48,8,154,22,GADGET_STYLE_DEFAULT);power_state=label(batt,"",48,34,154,20,GADGET_STYLE_MUTED);label(batt,"Uptime",210,8,78,20,GADGET_STYLE_MUTED);uptime_text=label(batt,"",210,34,78,20,GADGET_STYLE_DEFAULT);
  for(unsigned i=0;i<2;++i)sorts[i]=make(panels[1],GADGET_UI_BUTTON,i?"Memory":"CPU",10+(int)i*150,0,150,40,GADGET_STYLE_TAB,sorting,(void*)(uintptr_t)i);

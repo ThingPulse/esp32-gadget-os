@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "ui/I18n.h"
 #include "apps/PlanesApp.h"
 #include "AppRegistry.h"
@@ -163,4 +164,6 @@ bool planes_app_tutorial_ready(unsigned minimum_points) {
     }
     return true;
 }
+#endif
+
 #endif

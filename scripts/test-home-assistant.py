@@ -77,7 +77,7 @@ for library in build.glob('lib*'):
 with tempfile.TemporaryDirectory(prefix='home-test-') as temporary:
  binary=Path(temporary)/'regression'
  flags=shlex.split(subprocess.check_output(['sdl2-config','--libs'],text=True))
- subprocess.run(['c++','-std=c++14','-fsanitize=address','-pthread','-DLV_CONF_SKIP','-DLV_USE_QRCODE=1','-DLV_FONT_MONTSERRAT_24=1','-Iinclude','-I.pio/libdeps/native/lvgl','test/home-assistant/regression.cpp',*map(str,objects),*flags,'-o',str(binary)],check=True)
+ subprocess.run(['c++','-std=c++14','-fsanitize=address','-pthread','-DLV_CONF_SKIP','-DLV_USE_QRCODE=1','-DLV_FONT_MONTSERRAT_24=1','-Iinclude','-I.pio/libdeps/native/lvgl','-I.pio/libdeps/native/ArduinoJson/src',*[str(p) for p in (root/'src/services').glob('HomeAssistant*.cpp')],'src/services/TransitService.cpp','test/home-assistant/regression.cpp',*map(str,objects),*flags,'-o',str(binary)],check=True)
  env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0',GADGET_OS_DATA_DIR=temporary,GADGET_OS_SETUP_EPHEMERAL_PORT='1')
  subprocess.run([str(binary),url],env=env,check=True,timeout=45)
  assert ('/api/services/light/turn_on',{'entity_id':'light.sofa','brightness_pct':65}) in commands

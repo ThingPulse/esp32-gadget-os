@@ -1,5 +1,6 @@
 #if GADGET_OS_NATIVE_APP_LOADER
 #include "experimental/NativeStore.h"
+#include "experimental/NativeSettings.h"
 #include "experimental/NativeServices.h"
 #include "experimental/NativeApp.h"
 #include "AppRegistry.h"
@@ -9,6 +10,7 @@
 #include "NativeTrust.h"
 #include "services/AppUsage.h"
 #include "ui/I18n.h"
+#include "ui/LauncherIcon.h"
 #include <src/misc/cache/instance/lv_image_cache.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -69,7 +71,7 @@ void scan() {
     std::sort(entries,entries+count,[](const Entry&a,const Entry&b){return a.manifest.name<b.manifest.name;});
 }
 void list() {
-    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=9;
+    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=10;
     auto apps=d["apps"].to<JsonArray>();
     for(unsigned i=0;i<count;++i){auto a=apps.add<JsonObject>();auto &m=entries[i].manifest;
         a["trusted"]=entries[i].trusted;a["id"]=m.id;a["name"]=m.name;a["version"]=m.version;a["running"]=native_app::running(m.id.c_str());}
@@ -212,7 +214,7 @@ bool uninstall(const std::string &id,std::string &why){
     if(!LittleFS.remove(path(id).c_str())){why="Could not remove app.";return false;}
     LittleFS.remove((std::string("/apps/settings/")+id+".json").c_str());
     LittleFS.remove((std::string("/apps/settings/")+id+".json.tmp").c_str());
-    services::erase_cache(id.c_str());
+    services::erase_cache(id.c_str());settings::erase_config(id.c_str());
     dirty=true;return true;
 }
 bool install_signed(const uint8_t *data,size_t size,const Manifest &expected,std::string &why){
@@ -241,12 +243,16 @@ void create_tile(lv_obj_t *grid, const Installed &entry) {
     icon->descriptor.header.cf=LV_COLOR_FORMAT_RGB565;icon->descriptor.header.w=40;icon->descriptor.header.h=40;
     icon->descriptor.header.stride=80;icon->descriptor.data_size=package_icon_bytes;icon->descriptor.data=icon->pixels;
     auto *tile=lv_button_create(grid);lv_obj_set_size(tile,88,112);
+    lv_obj_remove_flag(tile,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_style_border_width(tile,0,0);
     lv_obj_set_style_bg_opa(tile,LV_OPA_TRANSP,0);lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,LV_STATE_PRESSED);lv_obj_set_style_bg_color(tile,lv_color_hex(0x38706f),LV_STATE_PRESSED);lv_obj_set_style_shadow_width(tile,0,0);lv_obj_set_style_pad_all(tile,2,0);
-    auto *image=lv_image_create(tile);lv_image_set_src(image,&icon->descriptor);lv_obj_align(image,LV_ALIGN_TOP_MID,0,14);
+    const uint16_t background=uint16_t(icon->pixels[0]) | (uint16_t(icon->pixels[1]) << 8);
+    auto *frame=launcher::icon_frame(tile,launcher::icon_background(background));
+    auto *image=lv_image_create(frame);lv_image_set_src(image,&icon->descriptor);lv_obj_center(image);
+    lv_obj_remove_flag(image,LV_OBJ_FLAG_CLICKABLE);
     auto *name=lv_label_create(tile);lv_label_set_text(name,entry.manifest.name.c_str());lv_obj_set_width(name,84);
     lv_obj_set_style_text_font(name,i18n::font14(),0);lv_obj_set_height(name,2*i18n::font14()->line_height);
     lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);lv_obj_align(name,LV_ALIGN_BOTTOM_MID,0,0);
+    lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_style_text_color(name,lv_color_white(),0);lv_obj_align(name,LV_ALIGN_TOP_MID,0,76);
     lv_obj_add_event_cb(tile,[](lv_event_t *e){native_app::launch_id(((Icon*)lv_event_get_user_data(e))->id);},LV_EVENT_CLICKED,icon);
     lv_obj_add_event_cb(image,[](lv_event_t *e){auto*p=(Icon*)lv_event_get_user_data(e);lv_image_set_src((lv_obj_t*)lv_event_get_target(e),nullptr);lv_image_cache_drop(&p->descriptor);heap_caps_free(p);},LV_EVENT_DELETE,icon);
 }

@@ -65,6 +65,8 @@ jobs:
           python scripts/test-native-ui.py
           python scripts/test-native-store-simulator.py
           python scripts/test-iss-installable.py
+          python scripts/test-stocks-installable.py
+          python scripts/test-phase3-installable.py
           python scripts/test-companion.py
 
       - name: Test device check-in policy

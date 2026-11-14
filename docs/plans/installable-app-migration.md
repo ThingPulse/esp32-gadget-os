@@ -1,6 +1,6 @@
 # Installable app migration
 
-Status: phases 1 and 2 implemented (2026-11-13); phases 3–4 are pending.
+Status: phases 1–3 implemented (2026-11-13); phase 4 release validation is pending.
 No apps are removed from firmware in phase 1.
 
 ## Target
@@ -105,4 +105,42 @@ package publication and release rollout are not part of phase 1.
 - Grande/Pro compile validation does not substitute for on-device runtime tests.
   Device flashing, on-device lifecycle checks and signed catalogue publication
   are still pending; no release or remote deployment was performed.
-- Next: phase 3 (Transit, Planes and Home Assistant).
+- Phase 3 implementation is recorded below.
+
+## Phase 3 implementation and verification
+
+- Transit, Planes and Home Assistant are API 1.10 packages, version 0.1.0, in
+  `experiments/native-app/apps.json`. Each owns its UI, provider/parser, settings
+  and refresh/action lifecycle. Normal firmware and simulator builds exclude
+  their old bundled apps/services; reference sources remain for regression tests.
+- Transit retains eight favourites, stop search, departures, cancellations,
+  delays, route stops, cached failures and request-generation fencing.
+- Planes includes radar selection, a selected aircraft trail, altitude colours,
+  range controls, four-provider fallback, route/airport details, persistent
+  airport markers, units and ground filtering. It uses the shared device location
+  by default; migrated coordinates remain an explicit app override. Settings
+  changes are staged and Back offers Save, Discard or Keep editing.
+- Home Assistant retains the browser setup page, paired expiring setup server,
+  discovery pagination/manual entity IDs, four pages of seven tiles, light
+  brightness/warmth/colour, switches, scenes/scripts and confirmation polling.
+  Credentials are private app configuration, omitted from browser config reads
+  and catalogue metadata. Requests copy all arguments, verify TLS, support an
+  optional CA and never follow redirects or log authorization headers.
+- SDK additions are append-only: atomic JSON configuration (24 KiB), bounded
+  GET/POST with optional bearer/CA (192 KiB responses), host-owned paired setup,
+  QR and slider widgets, and trigonometric helpers. Package files remain limited
+  to a 64 KiB ELF; loaded text/data are bounded at 128 KiB. Writable app memory
+  goes to PSRAM; code remains in IRAM. Earlier packages retain their ABI prefix.
+- Legacy configuration is copied once without overwriting existing package
+  configuration or deleting the original domain. Uninstall removes the app's
+  configuration and cache; a persistent legacy marker prevents resurrection.
+- Native adapters execute the exact package C source. Regression coverage includes
+  imports, both settings entry paths, failed saves, stale callbacks, real pointer
+  radar selection, paired setup authorization/expiry, action confirmation,
+  uninstall cleanup and 60 source lifecycle cycles plus repeated installed-app
+  settings navigation. Package/ELF validation builds all three for both chips.
+- Native, Grande and Pro compile checks pass. Simulator screenshots are in
+  `.pio/ui-previews/phase3-*.png`; developer packages are in
+  `.pio/phase3-packages/{esp32,esp32s3}/*.gapp`.
+- Hardware runtime checks, live-provider validation, signing/publication and
+  rollout remain phase 4 work. No device was flashed and no package was published.

@@ -48,6 +48,10 @@ std::vector<store::Installed> installed_apps;
 std::set<std::string> new_ids;
 std::string message,open_id,remove_id;
 bool installed_view=false;
+std::vector<size_t> update_queue;
+size_t update_cursor=0,updated_count=0;
+std::string update_errors;
+bool updating_all(){return !update_queue.empty();}
 lv_obj_t *content=nullptr,*status_label=nullptr,*progress=nullptr,*badge=nullptr,*refresh_button=nullptr;
 
 bool ota_busy(){auto s=UpdateService::instance().state();return s==UpdateService::State::Downloading||s==UpdateService::State::ReadyToReboot;}
@@ -106,34 +110,65 @@ void remember_catalog(bool mark_seen){
 #endif
     has_new=!mark_seen&&!new_ids.empty();update_badge();
 }
-void start(bool package=false){
-    if(transfer)return;
+bool start(bool package=false){
+    if(transfer)return false;
 #if defined(ARDUINO)
-    if(WiFi.status()!=WL_CONNECTED){message="Connect to Wi-Fi, then tap Refresh.";redraw=true;return;}
-    if(ota_busy()){message="Wait for the OS update to finish.";redraw=true;return;}
+    if(WiFi.status()!=WL_CONNECTED){message="Connect to Wi-Fi, then tap Refresh.";redraw=true;return false;}
+    if(ota_busy()){message="Wait for the OS update to finish.";redraw=true;return false;}
     auto *t=new(std::nothrow) Transfer;
-    if(!t){message="Not enough memory. Please try again.";redraw=true;return;}
+    if(!t){message="Not enough memory. Please try again.";redraw=true;return false;}
     t->package=package;
     if(package){
-        if(selection<0||size_t(selection)>=items.size()){delete t;return;}
+        if(selection<0||size_t(selection)>=items.size()){delete t;return false;}
         t->item=items[selection];t->url=t->item.url;t->limit=t->item.bytes;
     }else t->url=GADGET_OS_APP_CATALOG_URL;
     transfer=t;last_check=millis();background_started=true;
     if(xTaskCreate(worker,"app-store",8192,t,1,nullptr)!=pdPASS){transfer=nullptr;delete t;message="Not enough memory. Please try again.";}
     else message=package?"Downloading app…":"Checking for apps…";
 #else
+    bool success=true;
     if(package){
-        if(selection<0||size_t(selection)>=items.size())return;
-        if(simulator::install(items[selection],message)){
+        if(selection<0||size_t(selection)>=items.size())return false;
+        success=simulator::install(items[selection],message);
+        if(success){
             message="Installed. Find it on the Installed apps screen.";
             installed_apps=store::installed();
         }
     }else{items=simulator::catalog();loaded=true;message.clear();remember_catalog(true);}
 #endif
     redraw=true;
+#if defined(ARDUINO)
+    return transfer!=nullptr;
+#else
+    return success;
+#endif
 }
 const store::Installed *find_installed(const std::string &id){
     for(auto &i:installed_apps)if(i.manifest.id==id)return &i;return nullptr;
+}
+bool update_available(const catalog::Item &item){
+    const auto *old=find_installed(item.id);
+    return old&&(!old->trusted||old->manifest.version!=item.version);
+}
+void begin_updates(){
+    if(transfer||updating_all())return;
+    installed_apps=store::installed();update_cursor=updated_count=0;update_errors.clear();
+    for(size_t i=0;i<items.size();++i)if(update_available(items[i]))update_queue.push_back(i);
+    message.clear();redraw=true;
+}
+void update_result(bool success){
+    if(success)++updated_count;
+    else {
+        if(!update_errors.empty())update_errors+="\n";
+        update_errors+=items[update_queue[update_cursor]].name+": "+message;
+    }
+    ++update_cursor;
+    if(update_cursor==update_queue.size()){
+        message=std::string(i18n::tr("Updated apps:"))+" "+std::to_string(updated_count)+" / "+std::to_string(update_queue.size())+".";
+        if(!update_errors.empty())message+="\n"+update_errors;
+        update_queue.clear();selection=-1;installed_apps=store::installed();
+    }
+    redraw=true;
 }
 lv_obj_t *text(lv_obj_t *parent,const char *value,bool small=false){
     auto *label=lv_label_create(parent);lv_obj_set_width(label,lv_pct(100));
@@ -151,7 +186,15 @@ void render(){
     redraw=false;if(!visible||!content)return;
     lv_obj_clean(content);progress=nullptr;status_label=nullptr;
     lv_obj_scroll_to_y(content,0,LV_ANIM_OFF);
-    if(refresh_button){if(transfer)lv_obj_add_state(refresh_button,LV_STATE_DISABLED);else lv_obj_remove_state(refresh_button,LV_STATE_DISABLED);}
+    if(refresh_button){if(transfer||updating_all())lv_obj_add_state(refresh_button,LV_STATE_DISABLED);else lv_obj_remove_state(refresh_button,LV_STATE_DISABLED);}
+    if(updating_all()){
+        const auto &item=items[update_queue[update_cursor]];
+        text(content,(std::string(i18n::tr("Updating app"))+" "+std::to_string(update_cursor+1)+" / "+std::to_string(update_queue.size())).c_str());
+        text(content,item.name.c_str());
+        if(transfer){progress=lv_bar_create(content);lv_obj_set_size(progress,lv_pct(100),18);}
+        text(content,"You can go back to cancel the download.",true);
+        return;
+    }
     if(!message.empty())status_label=text(content,message.c_str(),true);
     if(!remove_id.empty()){
         const auto *app=find_installed(remove_id);
@@ -180,6 +223,12 @@ void render(){
         }
         text(content,"Select an app to remove it.",true);
         return;
+    }
+    if(selection<0&&loaded&&!transfer){
+        const auto count=std::count_if(items.begin(),items.end(),update_available);
+        if(count)text(content,(std::string(i18n::tr("Updates available:"))+" "+std::to_string(count)).c_str(),true);
+        auto *all=button(content,"Update all",[](lv_event_t*){begin_updates();});
+        if(!count)lv_obj_add_state(all,LV_STATE_DISABLED);
     }
     if(selection<0)button(content,"Installed apps",[](lv_event_t*){
         installed_apps=store::installed();installed_view=true;message.clear();redraw=true;
@@ -251,7 +300,7 @@ void show(){
         auto *label=lv_label_create(b);lv_label_set_text(label,symbol);lv_obj_center(label);
         lv_obj_add_event_cb(b,action,LV_EVENT_CLICKED,nullptr);return b;
     };
-    nav(LV_SYMBOL_LEFT,LV_ALIGN_LEFT_MID,[](lv_event_t*){if(!remove_id.empty()){remove_id.clear();message.clear();redraw=true;}else if(installed_view){installed_view=false;message.clear();redraw=true;}else if(selection>=0&&!transfer){selection=-1;message.clear();redraw=true;}else closing=true;});
+    nav(LV_SYMBOL_LEFT,LV_ALIGN_LEFT_MID,[](lv_event_t*){if(updating_all())closing=true;else if(!remove_id.empty()){remove_id.clear();message.clear();redraw=true;}else if(installed_view){installed_view=false;message.clear();redraw=true;}else if(selection>=0&&!transfer){selection=-1;message.clear();redraw=true;}else closing=true;});
     refresh_button=nav(LV_SYMBOL_REFRESH,LV_ALIGN_RIGHT_MID,[](lv_event_t*){selection=-1;page=0;installed_view=false;remove_id.clear();start();});
     auto *title=lv_label_create(bar);lv_label_set_text(title,i18n::tr("Add apps"));
     lv_obj_set_style_text_color(title,lv_color_hex(0x63e6be),0);lv_obj_center(title);
@@ -299,6 +348,7 @@ void close(){if(active())closing=true;}
 void poll(){
     if(requested)show();
     if(closing){
+        update_queue.clear();update_errors.clear();selection=-1;
         closing=false;requested=false;visible=false;if(transfer)transfer->cancelled.store(true);
         content=status_label=progress=refresh_button=nullptr;native_launcher_restore();
         if(pair_requested){pair_requested=false;companion_setup::request();}
@@ -311,11 +361,13 @@ void poll(){
     if(transfer&&!visible&&(!native_launcher_is_active()||native_app::busy()||ota_busy()))transfer->cancelled.store(true);
     if(transfer&&transfer->done.load(std::memory_order_acquire)){
         auto *t=transfer;transfer=nullptr;
+        bool success=false;
         if(!t->cancelled.load()){
             if(!t->error.empty())message=t->error;
             else if(t->package){
                 Manifest expected{t->item.id,t->item.version,"app.elf",t->item.name};
-                if(store::install_signed(t->bytes,t->size,expected,message)){
+                success=store::install_signed(t->bytes,t->size,expected,message);
+                if(success){
                     message="Installed. Find it on the Installed apps screen.";installed_apps=store::installed();
                 }
             }else {
@@ -327,9 +379,16 @@ void poll(){
                 }
             }
         }
+        if(updating_all()&&t->package)update_result(success);
         delete t;redraw=true;
     }
 #endif
+    if(visible&&updating_all()&&!transfer){
+        selection=int(update_queue[update_cursor]);
+        const bool success=start(true);
+        // Desktop installs finish synchronously; device transfers finish above.
+        if(!transfer)update_result(success);
+    }
     if(visible&&redraw)render();
 #if defined(ARDUINO)
     if(progress&&transfer&&transfer->package)lv_bar_set_value(progress,int(transfer->received.load()*100/transfer->limit),LV_ANIM_OFF);

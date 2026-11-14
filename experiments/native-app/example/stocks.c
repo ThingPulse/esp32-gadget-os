@@ -196,7 +196,7 @@ static void shutdown_app(void){closing=1;root=body=input=error_label=0;}
 __attribute__((visibility("default")))
 int gadget_app_entry(int argc,char**argv){
  if(argc!=2||!argv)return -1;host=(const gadget_host_api*)argv[0];gadget_app_lifecycle*app=(gadget_app_lifecycle*)argv[1];
- if(!host||host->major!=1||host->minor<9||host->struct_size<sizeof(*host)||!host->ui||host->ui->struct_size<sizeof(gadget_ui_api)||!host->services||host->services->struct_size<sizeof(gadget_services_api)||!app||app->struct_size<sizeof(*app))return -2;
+ if(!host||host->major!=1||host->minor<9||host->struct_size<sizeof(*host)||!host->ui||host->ui->struct_size<offsetof(gadget_ui_api,qr)||!host->services||host->services->struct_size<offsetof(gadget_services_api,config_read)||!app||app->struct_size<sizeof(*app))return -2;
  app->major=1;app->minor=9;app->shutdown=shutdown_app;ui=host->ui;svc=host->services;closing=busy=0;generation=0;period=0;body=input=error_label=0;notice[0]=editor_error[0]=0;next_request=svc->monotonic_ms();last_paint=next_request;
  gadget_environment env;zero(&env,sizeof(env));env.struct_size=sizeof(env);svc->environment(&env);german=env.german;
  settings_entry=host->launch_mode()==GADGET_LAUNCH_SETTINGS;view=settings_entry?2:0;editor_return=0;

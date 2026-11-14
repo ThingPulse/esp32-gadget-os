@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "ui/I18n.h"
 #include "services/TransitService.h"
 #include "services/ConfigStoreService.h"
@@ -91,3 +92,5 @@ void TransitService::loop(){
 #endif
 }
 SERVICE_REGISTER(TransitService);
+
+#endif

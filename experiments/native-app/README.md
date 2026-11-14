@@ -492,3 +492,61 @@ multiline Enter in each keyboard layout, migration, settings return paths,
 reinstall/uninstall and repeated cleanup. `test-native-app.py` additionally builds
 and validates Stocks ELF/packages for both chips. `test-stocks.py` retains the
 legacy provider/UI reference checks.
+
+
+## Transit, Planes and Home Assistant (SDK 1.10)
+
+The source catalogue now includes `transit`, `planes` and `home-assistant`, all
+version 0.1.0. Build using `--app transit`, `--app planes` or
+`--app home_assistant`. These packages require API **1.10 firmware**; older stores
+filter them out. An `apps-v*` publication tag is still required to sign and deploy
+this source catalogue. Adding source files does not publish them.
+
+All three expose Settings → Apps and use the same app-owned configuration UI
+from inside the app. Native uses the identical package source with asynchronous
+host-owned HTTP. Fixture directories are `GADGET_OS_TRANSIT_FIXTURE_DIR`
+(`search.json`, `board.json`, `trip.json`), `GADGET_OS_PLANES_FIXTURE_DIR`
+(`planes.json`, `route.json`) and `GADGET_OS_HOME_FIXTURE_DIR`
+(`entity.id.json`, `discovery.json`, `action.json`).
+
+`config_read` / `config_write` manage one private JSON object of at most 24576
+bytes, atomically saved separately from cache. Reads include a terminating NUL
+in their caller-provided capacity. The host imports the old transit favourites,
+Planes preferences or Home Assistant configuration once. It preserves the old
+configuration and records a migration marker. Updates retain package settings;
+uninstall removes them and does not reimport the legacy copy. This is not an
+API for apps to read arbitrary host domains or other apps' files.
+
+`http_request` accepts copied GET/POST arguments, a 2047-byte URL, a 24 KiB
+request body, a 4096-byte bearer token, an 8192-byte CA and a response limit up to
+192 KiB. HTTP is available for explicitly configured local services; HTTPS
+always verifies certificates. Redirects are disabled. The host owns workers and
+suppresses callbacks after closure. Tokens and bodies never enter command-line
+arguments or logs. Existing HTTPS GET APIs continue to work.
+
+`setup_start` copies a gzip HTML page (at most 16 KiB), creates a fresh pairing
+key, and returns a URL whose fragment contains that key. Only authenticated API
+requests reach the app's synchronous callback. The host caps requests at 24 KiB
+and replies at 32 KiB, expires setup after ten idle minutes, and stops sockets
+and callbacks on app close. Home Assistant retains its existing browser editor;
+setup is opened explicitly by the user. Native binds to loopback.
+
+The UI adds QR and slider widgets. Slider callbacks run on release; apps can
+read the bounded current value. Numeric helpers add sin/cos/sqrt/atan2 for
+freestanding aircraft calculations. App files still contain at most 64 KiB of
+ELF; combined loaded sections are capped at 128 KiB. Non-executable state is
+allocated in PSRAM so larger configuration documents do not consume internal
+RAM required for TLS. No PSRAM execution is enabled.
+
+Run `python3 scripts/test-phase3-installable.py` after a native build, plus
+`test-native-app.py` for both-chip package validation. The phase 3 test uses a
+local loopback server and no real Home Assistant credentials. Compile tests and
+simulator fixtures do not replace hardware runtime or live-provider checks.
+
+System Monitor 0.2.1 preserves tenths of a percent for memory. Companion schema 1
+adds optional `ram10` (0–1000, or -1 when unavailable) and `ram_frac` (one decimal
+digit per `ram_hist` sample, `f` for a gap). The legacy history contains the whole
+percent part; old apps and old companions remain compatible. The memory sparkline
+uses an explicitly labeled range with one percentage point of padding, while CPU
+retains its fixed 0–100% scale. Install the updated companion and app to get the
+higher precision.

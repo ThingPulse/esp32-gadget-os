@@ -22,7 +22,7 @@ bool parse_manifest(const std::string &json, const char *chip, Manifest &out, st
         if (!d[key].is<const char *>() || !d[key].as<const char *>()[0]) return fail(e, "Missing manifest field");
     if (d["chip"].as<std::string>() != chip) return fail(e, "Package is for a different chip");
     if (!d["api_major"].is<unsigned>() || !d["api_minor"].is<unsigned>() ||
-        d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 9)
+        d["api_major"].as<unsigned>() != 1 || d["api_minor"].as<unsigned>() > 10)
         return fail(e, "Unsupported host API version");
     out = {d["id"].as<std::string>(), d["version"].as<std::string>(), d["executable"].as<std::string>()};
     if (!d["settings"].isNull() && !d["settings"].is<bool>()) return fail(e,"Invalid settings capability");
@@ -80,7 +80,7 @@ bool validate_elf(const uint8_t *b, size_t n, std::string &e)
         const uint8_t *p=b+table+i*40;
         s[i]={u32(p),u32(p+4),u32(p+8),u32(p+12),u32(p+16),u32(p+20),u32(p+24),u32(p+28),u32(p+32),u32(p+36),nullptr,false};
         auto &v=s[i];
-        if (v.size > max_elf_bytes || (v.type!=8 && !range(v.off,v.size)) ||
+        if (v.size > (v.type==8?max_elf_allocation:max_elf_bytes) || (v.type!=8 && !range(v.off,v.size)) ||
             v.addr > UINT32_MAX-v.size || v.align>16 || (v.align && (v.align&(v.align-1))))
             return fail(e,"Invalid ELF section bounds/alignment");
     }
@@ -106,7 +106,7 @@ bool validate_elf(const uint8_t *b, size_t n, std::string &e)
         } else if ((v.flags&2) && v.type!=3 && v.type!=4 && v.type!=5 && v.type!=11 && v.type!=0x6ffffff6)
             return fail(e,"Unsupported allocated section (no constructors, TLS or PLT)");
     }
-    if (!entry_ok || allocated>max_elf_bytes) return fail(e,"Invalid entry or excessive ELF allocation");
+    if (!entry_ok || allocated>max_elf_allocation) return fail(e,"Invalid entry or excessive ELF allocation");
     for (unsigned i=0;i<count;++i) for (unsigned j=i+1;j<count;++j)
         if (s[i].loaded && s[j].loaded &&
             (!strcmp(s[i].label,s[j].label) || (s[i].size && s[j].size && s[i].addr<s[j].addr+s[j].size && s[j].addr<s[i].addr+s[i].size)))

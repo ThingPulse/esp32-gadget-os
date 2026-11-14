@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "ui/TouchKeyboard.h"
 #include "ui/I18n.h"
 #include "apps/TransitApp.h"
@@ -179,3 +180,5 @@ void transit_app_launch(){
   auto*indev=lv_indev_get_next(nullptr);while(indev){if(lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)return;indev=lv_indev_get_next(indev);}
   if(ctx.revision!=s.revision() || ((ctx.view==0||ctx.view==3)&&tick!=ctx.tick)){ctx.tick=tick;render();}},500,nullptr);
 }
+
+#endif

@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix='transit-test-') as temporary:
     flags = shlex.split(subprocess.check_output(['sdl2-config', '--libs'], text=True))
     subprocess.run(['c++', '-std=c++14', '-fsanitize=address', '-pthread',
                     '-DLV_CONF_SKIP', '-DLV_USE_SYSMON=0', '-DLV_FONT_MONTSERRAT_24=1',
-                    '-Iinclude', '-I.pio/libdeps/native/lvgl', 'test/transit/regression.cpp',
+                    '-Iinclude', '-I.pio/libdeps/native/lvgl', '-I.pio/libdeps/native/ArduinoJson/src', 'src/services/TransitService.cpp', 'test/transit/regression.cpp',
                     *map(str, objects), *flags, '-o', str(binary)], check=True)
     subprocess.run([str(binary), *sys.argv[1:]], env=dict(os.environ,
                    ASAN_OPTIONS='detect_leaks=0', GADGET_OS_DATA_DIR=temporary), check=True, timeout=30)

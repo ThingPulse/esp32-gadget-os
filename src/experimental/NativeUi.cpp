@@ -20,18 +20,18 @@ void event(lv_event_t *e){
  if(native_app::trace_enabled() && (code==LV_EVENT_PRESSED || code==LV_EVENT_RELEASED || code==LV_EVENT_CLICKED))
   Serial.printf("[NATIVE UI] event=%u button=%s\n",unsigned(code),i->caption?lv_label_get_text(i->caption):"");
 #endif
- if(code==LV_EVENT_CLICKED && dispatch && find(reinterpret_cast<gadget_handle>(i->token)) && i->callback)dispatch(i->callback,i->user);
+ if(((i->kind==GADGET_UI_SLIDER&&code==LV_EVENT_RELEASED)||(i->kind!=GADGET_UI_SLIDER&&code==LV_EVENT_CLICKED)) && dispatch && find(reinterpret_cast<gadget_handle>(i->token)) && i->callback)dispatch(i->callback,i->user);
 }
 gadget_handle create(gadget_handle parent,uint32_t kind,const char *text,gadget_callback cb,void *user){
- if(!screen || suspended || kind>GADGET_UI_KEYBOARD || (text&&strlen(text)>(kind==GADGET_UI_TEXTAREA?255U:160U)))return nullptr;
+ if(!screen || suspended || kind>GADGET_UI_SLIDER || (text&&strlen(text)>(kind==GADGET_UI_TEXTAREA?255U:160U)))return nullptr;
  auto *p=find(parent);
 
  if(kind==GADGET_UI_ROOT){if(parent || items[0].obj)return nullptr;}
  else if(!p || (p->kind!=GADGET_UI_ROOT && p->kind!=GADGET_UI_CONTAINER && p->kind!=GADGET_UI_BUTTON) || p->depth>=8)return nullptr;
  Item *item=nullptr;for(unsigned n=0;n<quota;++n)if(!items[n].obj){item=&items[n];break;}if(!item)return nullptr;
- lv_obj_t *obj=kind==GADGET_UI_TEXTAREA?lv_textarea_create(p->obj):kind==GADGET_UI_KEYBOARD?lv_keyboard_create(p->obj):kind==GADGET_UI_ROOT?screen:kind==GADGET_UI_LABEL?lv_label_create(p->obj):kind==GADGET_UI_BUTTON?lv_button_create(p->obj):kind==GADGET_UI_CHART?lv_chart_create(p->obj):kind==GADGET_UI_SPINNER?lv_spinner_create(p->obj):kind==GADGET_UI_BAR?lv_bar_create(p->obj):lv_obj_create(p->obj);
+ lv_obj_t *obj=kind==GADGET_UI_QRCODE?lv_qrcode_create(p->obj):kind==GADGET_UI_SLIDER?lv_slider_create(p->obj):kind==GADGET_UI_TEXTAREA?lv_textarea_create(p->obj):kind==GADGET_UI_KEYBOARD?lv_keyboard_create(p->obj):kind==GADGET_UI_ROOT?screen:kind==GADGET_UI_LABEL?lv_label_create(p->obj):kind==GADGET_UI_BUTTON?lv_button_create(p->obj):kind==GADGET_UI_CHART?lv_chart_create(p->obj):kind==GADGET_UI_SPINNER?lv_spinner_create(p->obj):kind==GADGET_UI_BAR?lv_bar_create(p->obj):lv_obj_create(p->obj);
  if(!obj)return nullptr;*item={obj,nullptr,kind,p?p->depth+1:0,-1,cb,user};item->token=next_token++;
- if(kind!=GADGET_UI_TEXTAREA&&kind!=GADGET_UI_KEYBOARD)lv_obj_remove_style_all(obj);
+ if(kind!=GADGET_UI_TEXTAREA&&kind!=GADGET_UI_KEYBOARD&&kind!=GADGET_UI_QRCODE&&kind!=GADGET_UI_SLIDER)lv_obj_remove_style_all(obj);
  if(kind!=GADGET_UI_TEXTAREA)lv_obj_clear_flag(obj,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_set_style_text_font(obj,i18n::font14(),0);lv_obj_set_style_text_color(obj,lv_color_hex(0xf1f3f5),0);
  if(kind==GADGET_UI_TEXTAREA){lv_textarea_set_max_length(obj,255);lv_textarea_set_text(obj,text?text:"");lv_obj_set_style_bg_color(obj,lv_color_hex(0x2a2d42),0);lv_obj_set_style_bg_opa(obj,LV_OPA_COVER,0);lv_obj_set_style_border_color(obj,lv_color_hex(0x63e6be),LV_PART_CURSOR);lv_obj_set_style_border_width(obj,2,LV_PART_CURSOR);lv_obj_set_style_border_side(obj,LV_BORDER_SIDE_LEFT,LV_PART_CURSOR);}
@@ -46,6 +46,7 @@ gadget_handle create(gadget_handle parent,uint32_t kind,const char *text,gadget_
  lv_obj_set_style_outline_color(obj,lv_color_hex(0x8af2d5),LV_STATE_PRESSED);
  lv_obj_set_style_outline_width(obj,2,LV_STATE_PRESSED);
  lv_obj_set_style_outline_pad(obj,-2,LV_STATE_PRESSED);}
+ if(kind==GADGET_UI_SLIDER)lv_obj_add_event_cb(obj,event,LV_EVENT_RELEASED,item);
  if(kind==GADGET_UI_BAR){lv_bar_set_range(obj,0,100);lv_obj_set_style_bg_opa(obj,LV_OPA_COVER,0);lv_obj_set_style_bg_color(obj,lv_color_hex(0x384f61),0);lv_obj_set_style_radius(obj,5,0);lv_obj_set_style_bg_opa(obj,LV_OPA_COVER,LV_PART_INDICATOR);lv_obj_set_style_bg_color(obj,lv_color_hex(0x63e6be),LV_PART_INDICATOR);lv_obj_set_style_radius(obj,5,LV_PART_INDICATOR);}
  if(kind==GADGET_UI_SPINNER){lv_spinner_set_anim_params(obj,1000,220);lv_obj_set_style_arc_width(obj,3,LV_PART_MAIN);lv_obj_set_style_arc_width(obj,3,LV_PART_INDICATOR);lv_obj_set_style_arc_color(obj,lv_color_hex(0x384f61),LV_PART_MAIN);lv_obj_set_style_arc_color(obj,lv_color_hex(0x63e6be),LV_PART_INDICATOR);lv_obj_clear_flag(obj,LV_OBJ_FLAG_CLICKABLE);}
  if(kind==GADGET_UI_CHART){lv_chart_set_type(obj,LV_CHART_TYPE_LINE);lv_chart_set_range(obj,LV_CHART_AXIS_PRIMARY_Y,0,100);lv_chart_set_point_count(obj,60);lv_chart_set_div_line_count(obj,0,0);lv_obj_set_style_size(obj,0,0,LV_PART_INDICATOR);lv_obj_set_style_line_width(obj,2,LV_PART_ITEMS);item->series=lv_chart_add_series(obj,lv_color_hex(0x63e6be),LV_CHART_AXIS_PRIMARY_Y);lv_chart_set_all_value(obj,item->series,LV_CHART_POINT_NONE);}
@@ -111,7 +112,10 @@ int32_t chart_fit(gadget_handle h,const int32_t*v,uint32_t n){auto*i=find(h);if(
 int32_t interaction_active(gadget_handle h){auto*i=find(h);if(h&&!i)return -1;if(i&&lv_obj_is_scrolling(i->obj))return 1;for(auto*input=lv_indev_get_next(nullptr);input;input=lv_indev_get_next(input))if(lv_indev_get_type(input)==LV_INDEV_TYPE_POINTER&&lv_indev_get_state(input)==LV_INDEV_STATE_PRESSED)return 1;return 0;}
 
 }
-const gadget_ui_api api={sizeof(api),create,box,flow,style,text,value,visible,selected,align,chart,opacity,reserve,clear,scroll,paint,draw,wrap,input_config,input_get,keyboard_attach,scroll_y,gestures,chart_fit,interaction_active};
+int32_t qr(gadget_handle h,const char*t,uint32_t size){auto*i=find(h);if(!i||i->kind!=GADGET_UI_QRCODE||!t||strlen(t)>256||size<80||size>240)return -1;lv_qrcode_set_size(i->obj,size);lv_qrcode_set_dark_color(i->obj,lv_color_black());lv_qrcode_set_light_color(i->obj,lv_color_white());return lv_qrcode_update(i->obj,t,strlen(t))==LV_RESULT_OK?0:-1;}
+int32_t slider(gadget_handle h,int32_t low,int32_t high,int32_t value){auto*i=find(h);if(!i||i->kind!=GADGET_UI_SLIDER||low<0||high>10000||low>=high||value<low||value>high)return -1;lv_slider_set_range(i->obj,low,high);lv_slider_set_value(i->obj,value,LV_ANIM_OFF);return 0;}
+int32_t value_get(gadget_handle h){auto*i=find(h);return i&&i->kind==GADGET_UI_SLIDER?lv_slider_get_value(i->obj):-1;}
+const gadget_ui_api api={sizeof(api),create,box,flow,style,text,value,visible,selected,align,chart,opacity,reserve,clear,scroll,paint,draw,wrap,input_config,input_get,keyboard_attach,scroll_y,gestures,chart_fit,interaction_active,qr,slider,value_get};
 void begin(lv_obj_t *s,void (*d)(gadget_callback,void*)){end();quota=64;suspended=false;screen=s;dispatch=d;}
 void suspend(){suspended=true;}
 void end(){dispatch=nullptr; // Delete top-level owned widgets once; children follow.

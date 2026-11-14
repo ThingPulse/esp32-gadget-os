@@ -32,20 +32,23 @@ public:
 void request(Result &r,uint32_t began)
 {
     if (r.cancelled.load()) return;
-    WiFiClientSecure client;
-    client.useBuiltinCACertBundle(); client.setHandshakeTimeout(8);
+    WiFiClientSecure secure;WiFiClient plain;
+    if(r.ca.empty())secure.useBuiltinCACertBundle();else secure.setCACert(r.ca.c_str());
+    secure.setHandshakeTimeout(8);
     HTTPClient http;
     http.setConnectTimeout(5000); http.setTimeout(5000);
     http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
-    if (!http.begin(client,r.url)) return;
+    if (!http.begin(r.url.compare(0,8,"https://")==0?static_cast<NetworkClient&>(secure):static_cast<NetworkClient&>(plain),r.url.c_str())) return;
     http.addHeader("Accept","application/json");
     http.addHeader("User-Agent","GadgetOS-NativeExperiment/0.2");
     Serial.printf("[NATIVE HTTP] generation=%u phase=request\n",r.generation);
     const char *headers[]={"Retry-After"};http.collectHeaders(headers,1);
-    int status=http.GET();
+    if(!r.bearer.empty())http.addHeader("Authorization",("Bearer "+r.bearer).c_str());
+    if(r.method=="POST")http.addHeader("Content-Type","application/json");
+    int status=r.method=="POST"?http.POST((uint8_t*)r.request_body.data(),r.request_body.size()):http.GET();
     r.retry_seconds=DeviceCheckInPolicy::retry_after_ms(http.header("Retry-After").c_str())/1000;
     if (status<=0) status=GADGET_HTTP_TRANSPORT;
-    if (status==200 && !r.cancelled.load()) {
+    if (status>=200 && status<300 && !r.cancelled.load()) {
         Body sink(r,began);
         if (http.getSize()>int(r.capacity)) status=GADGET_HTTP_TOO_LARGE;
         else if (http.writeToStream(&sink)<0) status=sink.oversized?GADGET_HTTP_TOO_LARGE:GADGET_HTTP_TRANSPORT;
@@ -59,7 +62,7 @@ void worker(void *arg)
     uint32_t began=millis();
     request(*r,began); // All transport objects destroyed before publishing.
     if (r->cancelled.load()) r->status=GADGET_HTTP_CANCELLED;
-    if (r->status!=200) {r->size=0; r->body[0]=0;}
+    if (r->status<200||r->status>=300) {r->size=0; r->body[0]=0;}
     r->elapsed_ms=millis()-began;
     r->done.store(true,std::memory_order_release);
     // UI may delete r immediately. No further dereference, even for logging.
@@ -68,23 +71,31 @@ void worker(void *arg)
 }
 int32_t start(const char *url,uint32_t generation,uint32_t capacity)
 {
-    if (capacity<1||capacity>65536)return GADGET_HTTP_INVALID;
-    auto update=UpdateService::instance().state();
-    if(update==UpdateService::State::Downloading||update==UpdateService::State::Checking||update==UpdateService::State::ReadyToReboot)return GADGET_HTTP_BUSY;
-    if (pending) return GADGET_HTTP_BUSY;
-    if (!url || strlen(url)>=sizeof(Result::url) || strncmp(url,"https://",8) || !url[8]) return GADGET_HTTP_INVALID;
-    for (const char *c=url;*c;++c) if (static_cast<unsigned char>(*c)<=32 || *c==127) return GADGET_HTTP_INVALID;
-    if (WiFi.status()!=WL_CONNECTED) return GADGET_HTTP_OFFLINE;
-    if (started && uint32_t(millis()-last_start)<5000) return GADGET_HTTP_RATE_LIMIT;
-    auto *r=new(std::nothrow) Result(capacity);
-    if (!r) return GADGET_HTTP_MEMORY;
-    if(!r->body){delete r;return GADGET_HTTP_MEMORY;}
-    strcpy(r->url,url); r->generation=generation;
-    pending=r;
-    if (xTaskCreate(worker,"native-http",8192,r,1,nullptr)!=pdPASS) {
-        pending=nullptr; delete r; return GADGET_HTTP_MEMORY;
-    }
-    last_start=millis(); started=true; return 0;
+ if(!url||strncmp(url,"https://",8)||strlen(url)>2047||capacity>196608)return GADGET_HTTP_INVALID;
+ if(started&&uint32_t(millis()-last_start)<5000)return GADGET_HTTP_RATE_LIMIT;
+ gadget_http_request args{sizeof(args),url,"GET","","","",capacity};return start_request(&args,generation);
+}
+int32_t start_request(const gadget_http_request *args,uint32_t generation)
+{
+ if(!args||args->struct_size<sizeof(*args)||!args->url||!args->method||!args->body||!args->bearer||!args->ca||args->response_limit<1||args->response_limit>196608)return GADGET_HTTP_INVALID;
+ const std::string url=args->url,method=args->method,body=args->body,token=args->bearer,ca=args->ca;
+ size_t start=url.compare(0,8,"https://")==0?8:url.compare(0,7,"http://")==0?7:0;
+ if(!start||url.size()>2047||url.size()<=start||url.find_first_of("@#")!=std::string::npos||
+    (method!="GET"&&method!="POST")||body.size()>24576||token.size()>4096||ca.size()>8192)return GADGET_HTTP_INVALID;
+ auto end=url.find('/',start);auto authority=url.substr(start,end-start);
+ if(authority.empty()||authority.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-:[]")!=std::string::npos)return GADGET_HTTP_INVALID;
+ for(unsigned char c:url)if(c<=32||c>=127)return GADGET_HTTP_INVALID;
+ if(token.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-=")!=std::string::npos)return GADGET_HTTP_INVALID;
+ auto update=UpdateService::instance().state();
+ if(update==UpdateService::State::Downloading||update==UpdateService::State::Checking||update==UpdateService::State::ReadyToReboot||pending)return GADGET_HTTP_BUSY;
+ if(WiFi.status()!=WL_CONNECTED)return GADGET_HTTP_OFFLINE;
+ if(started&&uint32_t(millis()-last_start)<250)return GADGET_HTTP_RATE_LIMIT;
+ auto*r=new(std::nothrow)Result(args->response_limit);if(!r)return GADGET_HTTP_MEMORY;
+ if(!r->body){delete r;return GADGET_HTTP_MEMORY;}
+ r->url=url;r->method=method;r->request_body=body;r->bearer=token;r->ca=ca;r->generation=generation;
+ pending=r;
+ if(xTaskCreate(worker,"native-http",12288,r,1,nullptr)!=pdPASS){pending=nullptr;delete r;return GADGET_HTTP_MEMORY;}
+ last_start=millis();started=true;return 0;
 }
 void cancel(uint32_t generation)
 {

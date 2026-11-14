@@ -261,7 +261,7 @@ __attribute__((visibility("default"))) int gadget_app_entry(int argc,char **argv
  if(argc!=2 || !argv)return -1;
  host=(const gadget_host_api*)argv[0];gadget_app_lifecycle *app=(gadget_app_lifecycle*)argv[1];
  if(!host || host->struct_size<sizeof(gadget_host_api) || host->major!=1 || host->minor<7 || !host->http_get_json || !host->json_number_scaled || !host->ui || !host->setting_get || !host->setting_set || !host->companion_channel_read || !host->json_string || !app || app->struct_size<sizeof(*app))return -1;
- ui=host->ui;if(ui->struct_size<sizeof(gadget_ui_api) || !ui->reserve || !ui->paint || ui->reserve(128))return -1;
+ ui=host->ui;if(ui->struct_size<offsetof(gadget_ui_api,qr) || !ui->reserve || !ui->paint || ui->reserve(128))return -1;
  app->major=1;app->minor=7;app->shutdown=shutdown;
  activity_view=activity_detail=activity_page=activity_count=activity_total=attention_count=nav_touched=activity_seen=activity_elapsed=0;activity_age=-1;activity_enabled=activity_sample=0;selected_session[0]=0;
  detail_view=0;period_view=1;read_detail("{}",2);

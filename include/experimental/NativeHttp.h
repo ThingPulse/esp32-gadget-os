@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstring>
 #include <cstdlib>
+#include <string>
 #ifdef ARDUINO
 #include <esp_heap_caps.h>
 #endif
@@ -30,7 +31,7 @@ struct Result {
     std::atomic<bool> done{false}, cancelled{false};
     uint32_t generation=0, size=0, elapsed_ms=0;
     int32_t status=GADGET_HTTP_TRANSPORT;
-    char url[256]{};char *body=nullptr;uint32_t capacity=max_http_body,retry_seconds=0;
+    std::string url,method="GET",request_body,bearer,ca;char *body=nullptr;uint32_t capacity=max_http_body,retry_seconds=0;
     explicit Result(uint32_t limit=max_http_body):capacity(limit){
 #ifdef ARDUINO
         body=(char*)heap_caps_calloc(limit+1,1,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
@@ -47,6 +48,7 @@ struct Result {
     }
 };
 int32_t start(const char *url,uint32_t generation,uint32_t capacity=max_http_body);
+int32_t start_request(const gadget_http_request*,uint32_t generation);
 void cancel(uint32_t generation);
 Result *take_completed(); // UI owns/deletes result; worker no longer accesses it.
 }

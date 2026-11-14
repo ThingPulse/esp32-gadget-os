@@ -34,12 +34,8 @@ int main(){
  lv_obj_send_event(display_ctx.brightness_slider,LV_EVENT_RELEASED,nullptr);assert(lv_screen_active()==screen);assert(cfg.load("display")&&cfg.get_int("brightness_percent",0)==42);
  lv_obj_add_state(display_ctx.fps_switch,LV_STATE_CHECKED);lv_obj_send_event(display_ctx.fps_switch,LV_EVENT_VALUE_CHANGED,nullptr);assert(cfg.load("display")&&cfg.get_bool("show_fps",false));
  tick+=1600;capture("settings-display");ui_load_screen(settings,true);settle();
- open_planes_screen(nullptr);auto *planes=lv_screen_active();click(planes,"Edit location");screen=lv_screen_active();assert(!form_dirty());
- lv_textarea_set_text(planes_ctx.lat_input,"91");lv_textarea_set_text(planes_ctx.lon_input,"8.5");lv_textarea_set_text(planes_ctx.range_input,"30");assert(!save_planes_form());assert(lv_screen_active()==screen);
- lv_textarea_set_text(planes_ctx.lat_input,"47,37");assert(form_dirty());assert(confirm_form_back());tick+=5100;capture("settings-unsaved");click(settings_form.dialog,"Keep editing");settle();assert(lv_screen_active()==screen&&form_dirty());
- assert(confirm_form_back());click(settings_form.dialog,"Save");settle();assert(lv_screen_active()==planes);assert(cfg.load("planes")&&cfg.get("center_latitude","")=="47.37");
- click(planes,"Edit location");screen=lv_screen_active();lv_textarea_set_text(planes_ctx.lat_input,"12");assert(confirm_form_back());click(settings_form.dialog,"Discard");settle();assert(lv_screen_active()==planes);assert(cfg.load("planes")&&cfg.get("center_latitude","")=="47.37");
- tick+=1600;capture("settings-planes");ui_load_screen(settings,true);settle();
+ // App-owned Planes fields are exercised in test/native_app/phase3.cpp.
+ assert(!find_label(settings,i18n::tr(LV_SYMBOL_GPS "  Planes")));
  open_wifi_screen(nullptr);screen=lv_screen_active();lv_textarea_set_text(wifi_ctx.ssid_input,"Test network");assert(form_dirty());assert(confirm_form_back());click(settings_form.dialog,"Discard");settle();assert(lv_screen_active()==settings);assert(cfg.load("wifi")&&cfg.get("ssid","").empty());
  open_wifi_screen(nullptr);screen=lv_screen_active();lv_textarea_set_text(wifi_ctx.ssid_input,"");assert(!save_wifi_form());
  // Real pointer input: preview on press, one character on release, slide-off cancels.
@@ -56,14 +52,13 @@ int main(){
  lv_keyboard_set_mode(kb,LV_KEYBOARD_MODE_TEXT_LOWER);lv_obj_remove_flag(wifi_ctx.content,LV_OBJ_FLAG_HIDDEN);lv_obj_send_event(wifi_ctx.pass_input,LV_EVENT_FOCUSED,nullptr);tick+=5100;capture("settings-keyboard");
  lv_textarea_set_text(wifi_ctx.ssid_input,"Test network");assert(save_wifi_form());assert(cfg.load("wifi")&&cfg.get("ssid","")=="Test network"&&cfg.get("password","")=="qwQ");leave_form();settle();
  // Save failure is reported and the form is retained.
- open_planes_screen(nullptr);planes=lv_screen_active();click(planes,"Edit location");screen=lv_screen_active();lv_textarea_set_text(planes_ctx.lat_input,"48");
- std::string path=std::string(getenv("GADGET_OS_DATA_DIR"))+"/config/planes.json";std::string backup=path+".bak";assert(std::rename(path.c_str(),backup.c_str())==0);assert(mkdir(path.c_str(),0700)==0);
- assert(!save_planes_form());assert(lv_screen_active()==screen&&form_dirty());assert(find_label(screen,"Could not save settings"));assert(std::remove(path.c_str())==0);assert(std::rename(backup.c_str(),path.c_str())==0);
+ open_wifi_screen(nullptr);screen=lv_screen_active();lv_textarea_set_text(wifi_ctx.ssid_input,"Changed network");
+ std::string path=std::string(getenv("GADGET_OS_DATA_DIR"))+"/config/wifi.json";std::string backup=path+".bak";assert(std::rename(path.c_str(),backup.c_str())==0);assert(mkdir(path.c_str(),0700)==0);
+ assert(!save_wifi_form());assert(lv_screen_active()==screen&&form_dirty());assert(find_label(screen,"Could not save settings"));assert(std::remove(path.c_str())==0);assert(std::rename(backup.c_str(),path.c_str())==0);
  leave_form();settle();ui_load_screen(settings,true);settle();ui_load_screen(home,true);settle();
  // German forms and the shared keyboard also render at physical resolution.
  assert(i18n::set_language("de"));i18n::apply_fonts(display);settings_launch();settings=lv_screen_active();route_restore_settings_screen=settings;
- open_planes_screen(nullptr);planes=lv_screen_active();capture("settings-planes-de");click(planes,"Edit location");
- lv_textarea_set_text(planes_ctx.lat_input,"49");assert(confirm_form_back());capture("settings-unsaved-de");click(settings_form.dialog,"Discard");settle();ui_load_screen(settings,true);settle();
+ open_wifi_screen(nullptr);screen=lv_screen_active();lv_textarea_set_text(wifi_ctx.ssid_input,"Unsaved network");assert(confirm_form_back());capture("settings-unsaved-de");click(settings_form.dialog,"Discard");settle();
  open_wifi_screen(nullptr);lv_obj_send_event(wifi_ctx.pass_input,LV_EVENT_FOCUSED,nullptr);tick+=500;capture("settings-keyboard-de");leave_form();settle();ui_load_screen(home,true);settle();
  std::puts("Settings autosave, form validation/save/discard, failed storage and keyboard pointer tests passed");
 }

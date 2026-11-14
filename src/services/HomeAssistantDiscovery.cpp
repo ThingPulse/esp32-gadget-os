@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "services/HomeAssistantDiscovery.h"
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -33,3 +34,5 @@ bool parse_discovery(const std::string&body,size_t offset,std::vector<Entity>&en
  entities=std::move(result);total=count;error.clear();return true;
 }
 }
+
+#endif

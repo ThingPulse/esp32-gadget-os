@@ -56,7 +56,7 @@ print("__COPILOT_HTTP_CODE:" + str(code))
         raise SystemExit("Build native first: pio run -e native")
     binary = directory / "provider-regression"
     subprocess.run(["c++", "-std=c++14", "-fsanitize=address", "-pthread", "-Iinclude",
-                    "test/planes/provider_regression.cpp", *objects,
+                    "-I.pio/libdeps/native/ArduinoJson/src", "src/services/PlanesService.cpp", "test/planes/provider_regression.cpp", *objects,
                     "-o", str(binary)], check=True)
     environment = dict(os.environ, PATH=str(directory) + os.pathsep + os.environ["PATH"],
                        ASAN_OPTIONS="detect_leaks=0", GADGET_OS_DATA_DIR=temporary, PLANES_ROUTE_LOG=str(directory / "routes.log"))

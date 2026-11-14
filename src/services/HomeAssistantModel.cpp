@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "services/HomeAssistantModel.h"
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -67,3 +68,5 @@ bool command(const Config&c,const Entity&e,const std::string&action,int value,st
  path="/api/services/"+kind+"/"+service;body.clear();serializeJson(d,body);return true;
 }
 }
+
+#endif

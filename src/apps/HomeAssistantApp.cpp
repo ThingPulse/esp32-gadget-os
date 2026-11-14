@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "apps/HomeAssistantApp.h"
 #include "services/HomeAssistantService.h"
 #include "AppRegistry.h"
@@ -130,3 +131,5 @@ void home_assistant_app_launch(){
  lv_obj_add_event_cb(ctx.screen,cleanup,LV_EVENT_DELETE,nullptr);ui_load_screen(ctx.screen,false);lv_obj_update_layout(ctx.screen);UiSessionState::set_route("home_assistant");HomeAssistantService::instance().resume();render();
  ctx.timer=lv_timer_create([](lv_timer_t*){auto&s=HomeAssistantService::instance();if(s.busy())lv_obj_remove_flag(ctx.spinner,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(ctx.spinner,LV_OBJ_FLAG_HIDDEN);for(auto*i=lv_indev_get_next(nullptr);i;i=lv_indev_get_next(i))if(lv_indev_get_state(i)==LV_INDEV_STATE_PRESSED)return;if(ctx.revision!=s.revision()||ctx.connected!=s.connected())refresh();},250,nullptr);
 }
+
+#endif

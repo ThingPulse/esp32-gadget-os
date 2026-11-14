@@ -32,3 +32,14 @@ test('full histories and long names fit a device snapshot',async()=>{
  assert.equal(d.ct4_name.length,32);assert.equal(d.mt4_name.length,32);
  assert(Buffer.byteLength(JSON.stringify(d))<=2048);
 });
+test('sub-percent memory changes survive collection and history encoding',async()=>{
+ let now=0,pages=842;
+ const system={platform:()=> 'darwin',cpus:()=>[{times:{user:0,sys:0,idle:now,irq:0,nice:0}}],totalmem:()=>1000*4096,hostname:()=> 'Example',uptime:()=>100};
+ const command=async file=>file.endsWith('vm_stat')?`page size of 4096 bytes\nAnonymous pages: ${pages}.\nPages wired down: 0.\nPages occupied by compressor: 0.\nPages purgeable: 0.`:'';
+ const collector=new SystemCollector({command,system,clock:()=>now});
+ let d=await collector.sample();assert.equal(d.ram,84);assert.equal(d.ram10,842);
+ now=2000;pages=844;d=await collector.sample();assert.equal(d.ram,84);assert.equal(d.ram10,844);
+ now=4000;pages=837;d=await collector.sample();assert.equal(d.ram,84);assert.equal(d.ram10,837);
+ assert.equal(d.ram_hist,'545453');assert.equal(d.ram_frac,'247');
+ now=8000;d=await collector.sample();assert.equal(d.ram_frac,'247f7');assert.equal(d.ram_hist,'545453ff53');
+});

@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "services/PlanesService.h"
 
 #include "services/ConfigStoreService.h"
@@ -1038,3 +1039,5 @@ unsigned long PlanesService::now_ms() const
 }
 
 SERVICE_REGISTER(PlanesService);
+
+#endif

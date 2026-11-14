@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "services/HomeAssistantEntityStream.h"
 #include <algorithm>
 #include <cctype>
@@ -31,3 +32,5 @@ bool EntityStream::feed(const char*data,size_t size){
 }
 bool EntityStream::finish(){if(error.empty()&&_phase!=4)error="Incomplete Home Assistant response";return error.empty();}
 }
+
+#endif

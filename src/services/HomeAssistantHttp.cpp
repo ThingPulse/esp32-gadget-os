@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "services/HomeAssistantHttp.h"
 #include "services/HomeAssistantEntityStream.h"
 #include <algorithm>
@@ -49,3 +50,5 @@ bool request(const Config&c,const std::string&path,const std::string&payload,std
  out.clear();error=status==401||status==403?"Home Assistant access denied":status==404?"Entity no longer exists":status==-2?"Home Assistant response too large":status>=300&&status<400?"Use the direct Home Assistant address (no redirects)":"Home Assistant unavailable - check address, Wi-Fi and TLS";return false;
 }
 }
+
+#endif

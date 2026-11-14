@@ -1,3 +1,4 @@
+#if !GADGET_OS_NATIVE_APP_LOADER && !GADGET_OS_APP_STORE_SIMULATOR
 #include "services/HomeAssistantHttp.h"
 #include "services/HomeAssistantService.h"
 #include "services/TransitService.h"
@@ -105,3 +106,5 @@ void server_loop(){if(!active)return;uint32_t now=TransitService::now_ms();
  }
 }
 }
+
+#endif

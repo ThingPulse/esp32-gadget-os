@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory() as source:
   return header+hashlib.sha256(header+payload).digest()+payload
  with tempfile.TemporaryDirectory() as folder:
   folder=pathlib.Path(folder);fixtures={'ok-generic':pack(base),'bad-elf':pack(base,b'x'*100),'bad-icon':pack(base,icon=b'x')}
-  for key,value in [('id','../escape'),('id','a/b'),('id','A'),('id','a'*33),('name',''),('name','n'*33),('version','v'*33),('chip','esp32'),('api_major',2),('api_minor',10),('api_minor',-1),('executable','../app.elf')]:
+  for key,value in [('id','../escape'),('id','a/b'),('id','A'),('id','a'*33),('name',''),('name','n'*33),('version','v'*33),('chip','esp32'),('api_major',2),('api_minor',11),('api_minor',-1),('executable','../app.elf')]:
    fixtures[f'bad-{len(fixtures)}']=pack(dict(base,**{key:value}))
   fixtures['bad-extra']=pack(base)+b'x'
   for name,data in fixtures.items():(folder/name).write_bytes(data)

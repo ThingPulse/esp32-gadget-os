@@ -37,6 +37,10 @@ slower cached metrics. Taps never wait synchronously for network operations.
   bounded by physical RAM. File-backed cache and compressed pages' uncompressed
   logical size are excluded. This is a physical-memory estimate, not memory
   pressure. Displayed MB/GB/TB memory and storage units use binary scaling.
+  System Monitor 0.2.1 and the updated companion retain tenths of a percent.
+  Its memory graph shows a labeled adaptive range (with one percentage point
+  of padding) so small changes are visible; the CPU graph stays at 0–100%.
+  Older companions still work, with whole-percent memory readings.
 - Network: delta bytes on the default route's `enN` interface. Unknown/tunnel
   interfaces show unavailable rather than double-counting underlying traffic.
   Rates use decimal B/s, KB/s, MB/s. Counter/interface resets invalidate one sample.

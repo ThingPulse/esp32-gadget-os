@@ -4,7 +4,7 @@ from pathlib import Path
 Import("env")
 root = Path(env.subst("$PROJECT_DIR"))
 apps = json.loads((root / "experiments/native-app/apps.json").read_text())["apps"]
-names = {"stocks": "Stocks", "agent_usage": "Agent Dashboard", "system_monitor": "System Monitor", "iss_tracker": "ISS"}
+names = {"transit":"Transit","planes":"Planes","home_assistant":"Home Assistant","stocks": "Stocks", "agent_usage": "Agent Dashboard", "system_monitor": "System Monitor", "iss_tracker": "ISS"}
 entries = []
 for app in apps:
     entries.append("{" + ",".join(json.dumps(value) for value in

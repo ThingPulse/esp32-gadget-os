@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstring>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -18,7 +19,7 @@ static lv_obj_t *find(lv_obj_t *obj,const char *text){
     return nullptr;
 }
 static void click(const char *text){
-    auto *label=find(lv_screen_active(),text);assert(label);
+    auto *label=find(lv_screen_active(),text);if(!label)std::cerr<<"Missing store control: "<<text<<"\n";assert(label);
     lv_obj_send_event(lv_obj_get_parent(label),LV_EVENT_CLICKED,nullptr);
     native_app::poll();native_app::poll();lv_obj_update_layout(lv_screen_active());
 }
@@ -71,11 +72,47 @@ int main(int argc,char **argv){
     }
     // Every catalog entry can be installed and removed through the shared UI.
     for(const auto &item:native_app::simulator::catalog()){
-        click("Add apps");click(item.name.c_str());click("Install app");
+        click("Add apps");while(!find(lv_screen_active(),item.name.c_str()))click("More apps");click(item.name.c_str());click("Install app");
         native_app::app_store::close();native_app::poll();assert(find(home,item.name.c_str()));
         click("Add apps");click("Installed apps");click(item.name.c_str());click("Remove");
         native_app::app_store::close();native_app::poll();assert(!find(home,item.name.c_str()));
     }
+    // Bulk updates include later catalog pages, skip current/uninstalled apps,
+    // preserve settings, and keep completed updates when cancelled.
+    const auto catalog=native_app::simulator::catalog();
+    auto seed_updates=[&](){
+        std::ofstream f(".pio/simulator-apps.json");
+        f<<"[{\"id\":\""<<catalog[0].id<<"\",\"version\":\"0.0.0\"},"
+         <<"{\"id\":\""<<catalog[2].id<<"\",\"version\":\"0.0.0\"},"
+         <<"{\"id\":\""<<catalog[4].id<<"\",\"version\":\"0.0.0\"},"
+         <<"{\"id\":\""<<catalog[1].id<<"\",\"version\":\""<<catalog[1].version<<"\"}]";
+    };
+    auto old_count=[](){unsigned n=0;for(const auto &app:native_app::store::installed())if(app.manifest.version=="0.0.0")++n;return n;};
+    seed_updates();
+    std::filesystem::create_directories(".pio/native-app-settings");
+    {std::ofstream f(".pio/native-app-settings/agent-usage-preview.json");f<<"{\"retained\":true}";}
+    click("Add apps");assert(find(lv_screen_active(),"Updates available: 3"));capture(argv[1],"store-update-all");
+    click("Update all");assert(find(lv_screen_active(),"Updating app 3 / 3"));
+    assert(lv_obj_has_state(lv_obj_get_parent(find(lv_screen_active(),LV_SYMBOL_REFRESH)),LV_STATE_DISABLED));
+    capture(argv[1],"store-update-progress");native_app::poll();assert(old_count()==0);
+    assert(native_app::store::installed().size()==4);assert(find(lv_screen_active(),"Updated apps: 3 / 3."));
+    assert(lv_obj_has_state(lv_obj_get_parent(find(lv_screen_active(),"Update all")),LV_STATE_DISABLED));
+    {std::ifstream f(".pio/native-app-settings/agent-usage-preview.json");std::string saved;std::getline(f,saved);assert(saved=="{\"retained\":true}");}
+    native_app::app_store::close();native_app::poll();
+    seed_updates();click("Add apps");click("Update all");assert(old_count()==1);
+    click(LV_SYMBOL_LEFT);assert(native_launcher_is_active());
+    for(int i=0;i<5;++i)native_app::poll();assert(old_count()==1);
+    // A real write failure must leave old versions intact and allow the queue
+    // to continue once storage becomes writable, then offer failed apps again.
+    seed_updates();std::filesystem::create_directories(".pio/simulator-apps.json.tmp/blocker");
+    click("Add apps");click("Update all");assert(old_count()==3);
+    std::filesystem::remove_all(".pio/simulator-apps.json.tmp");native_app::poll();
+    assert(old_count()==2);assert(native_app::store::installed().size()==4);
+    const std::string result="Updated apps: 1 / 3.\n"+catalog[0].name+": Could not save installed apps.\n"+catalog[2].name+": Could not save installed apps.";
+    assert(find(lv_screen_active(),result.c_str()));capture(argv[1],"store-update-failed");
+    click("Update all");assert(old_count()==0);assert(find(lv_screen_active(),"Updated apps: 2 / 2."));
+    native_app::app_store::close();native_app::poll();
+    for(const auto &app:native_app::store::installed()){std::string why;assert(native_app::store::uninstall(app.manifest.id,why));}
     click("Add apps");click("System Monitor");click("Install app");native_app::app_store::close();native_app::poll();
-    assert(find(home,"System Monitor"));std::cout<<"PASS: shared store UI install/open/remove/cancel and repeated lifecycle\n";
+    assert(find(home,"System Monitor"));std::cout<<"PASS: shared store UI, bulk updates, cancellation, failed-write recovery, settings retention and repeated lifecycle\n";
 }
