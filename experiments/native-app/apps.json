@@ -4,7 +4,7 @@
     {
       "source": "agent_usage",
       "id": "agent-usage",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "description": "Monitor Codex and Claude Code sessions, attention requests and Codex usage. Enable activity in Gadget Companion on your paired computer."
     },
     {

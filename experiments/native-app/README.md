@@ -577,3 +577,17 @@ The [migration parity audit](../../docs/plans/installable-app-parity-audit.md) r
 the legacy-to-package comparison, restored behavior, bounded-cache differences and
 verification. Stocks 0.2.0 also requires API 1.11 for shaded charts and shared UI
 presets. Update firmware before installing these four package versions.
+
+### Agent Dashboard 0.8.0
+
+Activity shows remaining allowances below the task count, one line per enabled
+provider with both quota windows. With this header, tasks are paged two at a time;
+all six recent tasks remain reachable. Expired windows show `--` and stale quotas
+are labeled. No companion schema change is needed for this header.
+
+Today uses the current UTC daily bucket from Codex `account/usage/read`, not the
+sum of Activity sessions. A fresh response can contain only prior days. In that
+case the detail view says “Today not reported by Codex” and shows the latest
+reported day. A missing bucket is not a reported zero. On 2026-11-14, a live
+read through the installed CLI returned daily dates through 2026-11-13 only.
+The renderer is also tested with a present Today bucket and displays its total.

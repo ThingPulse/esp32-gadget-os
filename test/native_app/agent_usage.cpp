@@ -62,8 +62,8 @@ int main(int argc,char **argv){
  }
  count=0;gate={};transport=0;assert(gadget_app_entry(2,args)==0);
  delivery.clear();pending=0;cooldown=0;endpoint[0]=0;
- std::string partial=std::string(good);partial.pop_back();partial+=R"(,"codex_detail_age":1,"cx_p2_v":1230,"cx_p2_u":1,"cx_p2_n":4,"cx_p2_e":6,"cx_m0_v":1230,"cx_m0_u":1,"cx_m0_bar":100})";
- received(200,partial.c_str(),partial.size(),nullptr);open_detail(nullptr);choose_period((void*)2);assert(text(chart_title)=="Known: 123K tokens (4/6 days)");choose_period(nullptr);assert(text(chart_title)=="Not reported yet (UTC)");close_app(nullptr);
+ std::string partial=std::string(good);partial.pop_back();partial+=R"(,"codex_detail_age":1,"codex_d5_v":120,"codex_d5_u":1,"codex_d5_date":1113,"cx_p2_v":1230,"cx_p2_u":1,"cx_p2_n":4,"cx_p2_e":6,"cx_m0_v":1230,"cx_m0_u":1,"cx_m0_bar":100})";
+ received(200,partial.c_str(),partial.size(),nullptr);open_detail(nullptr);choose_period((void*)2);assert(text(chart_title)=="Known: 123K tokens (4/6 days)");choose_period(nullptr);assert(text(chart_title)=="Today not reported by Codex");assert(text(status)=="Latest report: 11/13 UTC");close_app(nullptr);
  local_snapshot=good;refresh(nullptr);assert(text(cards[0].value)=="72%");assert(!pending);
  channel_age_ms=11000;cooldown=0;refresh(nullptr);assert(text(cards[0].value)=="--");assert(ages[0]==11);
  channel_age_ms=0;cooldown=0;refresh(nullptr);assert(text(cards[0].value)=="72%");
@@ -87,7 +87,10 @@ int main(int argc,char **argv){
  sessions[0].state=2;sessions[0].age=604800;assert(session_state_value(&sessions[0])==2);sessions[0].state=1;sessions[0].age=0;
  close_app(nullptr);assert(!activity_detail&&!gate.closing);switch_view((void*)1);assert(!activity_view);refresh_activity();assert(!activity_view);
  activity_snapshot.clear();for(int i=0;i<16;++i)timer_cb(nullptr);assert(session_state_value(&sessions[0])==3);assert(text(nav[0])=="Activity");
- switch_view(nullptr);activity_count=6;for(unsigned i=1;i<6;++i){sessions[i]=sessions[0];sessions[i].id[0]=(char)('a'+i);sessions[i].id[1]=0;sessions[i].project[0]=(char)('A'+i);sessions[i].project[1]=0;}next_page(nullptr);assert(activity_page==1);select_session((void*)2);assert(text(session_provider)=="F");AgentSession swap=sessions[0];sessions[0]=sessions[5];sessions[5]=swap;render();assert(text(session_provider)=="F");
+ switch_view(nullptr);activity_count=6;for(unsigned i=1;i<6;++i){sessions[i]=sessions[0];sessions[i].id[0]=(char)('a'+i);sessions[i].id[1]=0;sessions[i].project[0]=(char)('A'+i);sessions[i].project[1]=0;}next_page(nullptr);assert(activity_page==1);next_page(nullptr);assert(activity_page==2);select_session((void*)1);assert(text(session_provider)=="F");AgentSession swap=sessions[0];sessions[0]=sessions[5];sessions[5]=swap;render();assert(text(session_provider)=="F");
+ enabled[0]=enabled[1]=1;ages[0]=ages[1]=0;elapsed=0;windows[0][0]=(Window){28,300,3600};windows[0][1]=(Window){46,10080,3600};windows[1][0]=(Window){10,300,3600};windows[1][1]=(Window){20,10080,3600};render();
+ assert(text(activity_quota[0])=="Codex: 5h 72% / 7d 54% left");assert(text(activity_quota[1])=="Claude: 5h 90% / 7d 80% left");
+ elapsed=3601;render();assert(text(activity_quota[0]).find("stale")!=std::string::npos&&text(activity_quota[0]).find("72%")==std::string::npos);
  activity_count=0;render();assert(text(session_state)=="Session no longer listed");close_app(nullptr);close_app(nullptr);app.shutdown();
  puts("PASS: Agent Usage remaining and usage periods, disabled provider, expired data, invalid response, rate limit and 100 close cycles");
 }
