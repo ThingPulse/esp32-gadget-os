@@ -4,6 +4,7 @@
 #include "gadget_app.h"
 #endif
 #include <stddef.h>
+#include "package_text.h"
 #define STOCKS_MAX 10
 #define HISTORY_MAX 96
 #define BG 0x172131
@@ -14,6 +15,7 @@ static const gadget_host_api *host;
 static const gadget_ui_api *ui;
 static const gadget_services_api *svc;
 static gadget_handle root,body,input,error_label;
+#include "package_status.h"
 typedef struct {
  char symbol[25],name[81],currency[9],exchange[41],error[100];
  double price,previous,history[HISTORY_MAX];
@@ -37,7 +39,7 @@ static int ready(uint32_t now,uint32_t due){return (int32_t)(now-due)>=0;}
 static void number(char*out,double value,unsigned digits){if(svc->format_number(value,digits,out,64)<0)copy(out,"--",64);}
 static void integer(char*out,unsigned n){char rev[12];unsigned len=0,i=0;do{rev[len++]=(char)('0'+n%10);n/=10;}while(n);while(len)out[i++]=rev[--len];out[i]=0;}
 static void money(char*out,double n,const char*currency){unsigned places=equal(currency,"JPY")?0:(n>0&&n<1?6:2);number(out,n,places);append(out," ",80);append(out,currency,80);}
-static void change(char*out,const Stock*s){if(!s->has_previous){copy(out,tr("Change unavailable","Aenderung unbekannt"),80);return;}double p=(s->price-s->previous)/s->previous*100.0;number(out,p,2);if(p>0){char tmp[80];copy(tmp,out,80);copy(out,"+",80);append(out,tmp,80);}append(out,"%",80);}
+static void change(char*out,const Stock*s){if(!s->has_previous){copy(out,tr("Change unavailable","Aenderung unbekannt"),80);return;}double p=(s->price-s->previous)/s->previous*100.0;number(out,p,2);if(p>=0){char tmp[80];copy(tmp,out,80);copy(out,"+",80);append(out,tmp,80);}append(out,"%",80);}
 static const char *validate(const char*text,char symbols[STOCKS_MAX][25],unsigned *size){
  unsigned n=0;const char*p=text;
  while(*p){while(*p==' '||*p=='\n'||*p=='\r'||*p=='\t')++p;if(!*p)break;
@@ -51,10 +53,27 @@ static const char *validate(const char*text,char symbols[STOCKS_MAX][25],unsigne
  }*size=n;return 0;
 }
 static void watchlist(char*out){out[0]=0;for(unsigned i=0;i<count;++i){if(i)append(out,"\n",256);append(out,stocks[i].symbol,256);}}
+static Stock reordered[STOCKS_MAX];
 static void apply_symbols(char symbols[STOCKS_MAX][25],unsigned n){
- /* Quotes are transient; no callback may write into this generation afterward. */
- ++generation;count=n;selected=0;zero(stocks,sizeof(stocks));uint32_t now=svc->monotonic_ms();
- for(unsigned i=0;i<n;++i){copy(stocks[i].symbol,symbols[i],25);stocks[i].period=-1;stocks[i].due=now;}
+ /* Match by symbol so reordering preserves cached quotes and retry deadlines. */
+ zero(reordered,sizeof reordered);uint32_t now=svc->monotonic_ms();
+ for(unsigned i=0;i<n;++i){copy(reordered[i].symbol,symbols[i],25);reordered[i].period=-1;reordered[i].due=now;for(unsigned j=0;j<count;++j)if(equal(symbols[i],stocks[j].symbol)){reordered[i]=stocks[j];break;}}
+ ++generation;count=n;selected=0;for(unsigned i=0;i<STOCKS_MAX;++i)stocks[i]=reordered[i];zero(reordered,sizeof reordered);
+}
+/* The bundled service kept quotes while its screen was closed. Package unload
+ * releases RAM, so a bounded snapshot preserves that offline/reopen behavior. */
+static struct {uint32_t magic,count,epoch,monotonic,gate;Stock entries[STOCKS_MAX];} quote_cache;
+static void persist_quotes(void){if(!svc->cache_write)return;gadget_environment env;zero(&env,sizeof env);env.struct_size=sizeof env;svc->environment(&env);if(!env.clock_ready)return;
+ quote_cache.magic=0x53544b31;quote_cache.count=count;quote_cache.epoch=env.epoch;quote_cache.monotonic=svc->monotonic_ms();quote_cache.gate=next_request;for(unsigned i=0;i<count;++i)quote_cache.entries[i]=stocks[i];svc->cache_write(&quote_cache,sizeof quote_cache);
+}
+static void restore_quotes(void){if(!svc->cache_read||svc->cache_read(&quote_cache,sizeof quote_cache)!=sizeof quote_cache||quote_cache.magic!=0x53544b31||quote_cache.count>STOCKS_MAX)return;
+ gadget_environment env;zero(&env,sizeof env);env.struct_size=sizeof env;svc->environment(&env);if(!env.clock_ready||quote_cache.epoch>env.epoch||env.epoch-quote_cache.epoch>21600)return;
+ uint32_t now=svc->monotonic_ms(),elapsed=(env.epoch-quote_cache.epoch)*1000;
+ for(unsigned i=0;i<count;++i)for(unsigned j=0;j<quote_cache.count;++j){Stock*c=&quote_cache.entries[j];if(c->symbol[24]||c->name[80]||c->currency[8]||c->exchange[40]||c->error[99]||!equal(c->symbol,stocks[i].symbol)||!c->valid||!(c->price>0&&c->price<=1e12)||!c->stamp||c->count<0||c->count>HISTORY_MAX||c->period<0||c->period>2||c->failures<0||c->failures>10||(c->has_previous&&!(c->previous>0&&c->previous<=1e12)))continue;
+  int valid=1;for(int k=0;k<c->count;++k)if(!(c->history[k]==-1||(c->history[k]>0&&c->history[k]<=1e12)))valid=0;if(!valid)continue;
+  stocks[i]=*c;Stock*r=&stocks[i];r->fetched=now-(quote_cache.monotonic-c->fetched+elapsed);r->attempt=now-(quote_cache.monotonic-c->attempt+elapsed);int32_t left=(int32_t)(c->due-quote_cache.monotonic)-(int32_t)elapsed;r->due=left>0?now+left:now;
+ }
+ int32_t gate=(int32_t)(quote_cache.gate-quote_cache.monotonic)-(int32_t)elapsed;if(gate>0&&gate<=21600000)next_request=now+gate;
 }
 static void message(const char*s){copy(notice,s,sizeof(notice));notice_until=svc->monotonic_ms()+4000;dirty=1;}
 static void back(void*unused){(void)unused;if(view==2){if(settings_entry){host->request_close();return;}view=editor_return;}else if(view==1)view=0;else{host->request_close();return;}dirty=1;}
@@ -64,7 +83,7 @@ static void save(void*unused){(void)unused;char text[256],symbols[STOCKS_MAX][25
  const char*why=validate(text,symbols,&n);if(why){ui->text(error_label,why);return;}
  normalized[0]=0;for(unsigned i=0;i<n;++i){if(i)append(normalized,"\n",256);append(normalized,symbols[i],256);}
  if(host->setting_set("symbols",normalized)<0){ui->text(error_label,tr("Could not save watchlist","Liste konnte nicht gespeichert werden"));return;}
- host->setting_set("import_error","");apply_symbols(symbols,n);
+ host->setting_set("import_error","");apply_symbols(symbols,n);persist_quotes();
  if(settings_entry){host->request_close();return;}view=0;dirty=1;
 }
 static void select_stock(void*data){selected=(unsigned)(uintptr_t)data;view=1;dirty=1;}
@@ -83,13 +102,13 @@ static void render(void){
  ui->clear(root);body=input=error_label=0;
  gadget_handle bar=widget(root,GADGET_UI_CONTAINER,"",0,0,320,44,0,0);ui->style(bar,GADGET_STYLE_HEADER);
  gadget_handle b=button(bar,"",0,0,48,44,back,0);ui->style(b,GADGET_STYLE_BACK);
- label(bar,tr("Stocks","Aktien"),58,10,126,28,GADGET_STYLE_DEFAULT);
+ label(bar,tr("Stocks","Aktien"),58,10,110,28,GADGET_STYLE_DEFAULT);header_status(bar,192,busy);
  if(view!=2){b=button(bar,"",220,0,44,44,refresh,0);ui->style(b,GADGET_STYLE_REFRESH);button(bar,tr("Edit","Liste"),266,0,54,44,edit,0);}
  if(view==2){
   label(root,tr("One symbol per line (maximum 10)","Ein Symbol pro Zeile (maximal 10)"),12,52,296,22,GADGET_STYLE_DEFAULT);
   label(root,tr("Reorder lines to reorder your watchlist","Zeilen umordnen fuer die Reihenfolge"),12,77,296,22,GADGET_STYLE_MUTED);
   char text[256];watchlist(text);input=widget(root,GADGET_UI_TEXTAREA,text,12,104,296,102,0,0);ui->input_config(input,255,1);
-  error_label=label(root,editor_error,12,210,296,30,GADGET_STYLE_MUTED);
+  error_label=label(root,editor_error[0]?editor_error:tr("Examples: AAPL  NESN.SW  7203.T","Beispiele: AAPL  NESN.SW  7203.T"),12,210,296,30,GADGET_STYLE_MUTED);
   button(root,tr("Save","Speichern"),12,246,142,40,save,0);button(root,tr("Cancel","Abbrechen"),166,246,142,40,back,0);
   gadget_handle keyboard=widget(root,GADGET_UI_KEYBOARD,"",0,292,320,188,0,0);ui->keyboard_attach(keyboard,input);return;
  }
@@ -101,8 +120,8 @@ static void render(void){
    label(row,s->symbol,10,6,108,24,GADGET_STYLE_DEFAULT);char price[80],delta[80];
    if(s->valid){money(price,s->price,s->currency);change(delta,s);}else{copy(price,"--",80);copy(delta,s->error[0]?s->error:tr("Waiting for quote","Warte auf Kurs"),80);}
    label(row,price,122,6,164,24,GADGET_STYLE_DEFAULT);gadget_handle d=label(row,delta,s->valid?122:10,34,s->valid?164:276,24,GADGET_STYLE_MUTED);
-   if(s->valid&&s->has_previous)ui->paint(d,s->price>=s->previous?GREEN:RED,0,0);
-   if(s->valid&&s->error[0])label(row,tr("Cached","Cache"),10,34,100,24,GADGET_STYLE_MUTED);
+   if(s->valid&&s->has_previous)ui->paint(d,s->price>s->previous?GREEN:s->price<s->previous?RED:MUTED,0,0);
+   if(s->valid)label(row,s->error[0]||svc->monotonic_ms()-s->fetched>900000?tr("Cached","Cache"):s->name,10,34,108,24,GADGET_STYLE_MUTED);
   }
   /* LVGL only recognizes elastic pulls when the content has a scroll extent. */
   widget(body,GADGET_UI_LABEL,"",0,394,1,1,0,0);
@@ -110,12 +129,13 @@ static void render(void){
  }else if(count){Stock*s=&stocks[selected];char text[100],price[80],delta[80];
   label(body,s->symbol,12,0,200,30,GADGET_STYLE_TITLE);label(body,s->valid?s->name:"",12,34,296,22,GADGET_STYLE_MUTED);
   if(s->valid){money(price,s->price,s->currency);change(delta,s);}else{copy(price,"--",80);delta[0]=0;}
-  label(body,price,12,62,296,34,GADGET_STYLE_TITLE);gadget_handle d=label(body,delta,12,99,296,24,GADGET_STYLE_DEFAULT);ui->paint(d,s->has_previous?(s->price>=s->previous?GREEN:RED):MUTED,0,0);
+  if(s->valid&&s->has_previous){char absolute[80],percent[80];copy(percent,delta,sizeof percent);number(absolute,s->price-s->previous,2);copy(delta,s->price>=s->previous?"+":"",sizeof delta);append(delta,absolute,sizeof delta);append(delta,"  (",sizeof delta);append(delta,percent,sizeof delta);append(delta,")",sizeof delta);}
+  label(body,price,12,62,296,34,GADGET_STYLE_TITLE);gadget_handle d=label(body,delta,12,99,296,24,GADGET_STYLE_DEFAULT);ui->paint(d,s->has_previous?(s->price>s->previous?GREEN:s->price<s->previous?RED:MUTED):MUTED,0,0);
   label(body,s->exchange,12,126,296,22,GADGET_STYLE_MUTED);
   int32_t points[HISTORY_MAX];double low=0,high=0;unsigned found=0;
   if(s->valid&&s->period==period){for(int i=0;i<s->count;++i)if(s->history[i]>0){if(!found||s->history[i]<low)low=s->history[i];if(!found||s->history[i]>high)high=s->history[i];++found;}}
   if(found){for(int i=0;i<s->count;++i)points[i]=s->history[i]<=0?-1:high==low?50:(int32_t)((s->history[i]-low)/(high-low)*100.0);
-   gadget_handle chart=widget(body,GADGET_UI_CHART,"",12,157,296,100,0,0);ui->chart_fit(chart,points,s->count);
+   gadget_handle chart=widget(body,GADGET_UI_CHART,"",12,157,296,100,0,0);ui->style(chart,GADGET_STYLE_CHART_SMOOTH);ui->chart_fit(chart,points,s->count);
   }else label(body,tr("History unavailable / loading","Verlauf nicht verfuegbar / laedt"),12,192,296,24,GADGET_STYLE_MUTED);
   const char*periods[]={"5D","1M","1Y"};for(int i=0;i<3;++i){b=button(body,periods[i],12+i*100,268,96,34,select_period,(void*)(uintptr_t)i);ui->selected(b,period==i);}
   text[0]=0;if(s->valid)svc->format_time(s->stamp,2,text,sizeof(text));label(body,text,12,308,296,22,GADGET_STYLE_MUTED);
@@ -145,6 +165,7 @@ static int parse_quote(const char*json,unsigned size,Stock*out){
  if(!string("meta/currency",out->currency,sizeof(out->currency))||!out->currency[0])goto done;
  for(unsigned i=0;out->currency[i];++i)if(!((out->currency[i]>='A'&&out->currency[i]<='Z')||(out->currency[i]>='a'&&out->currency[i]<='z')))goto done;
  if(!string("meta/longName",out->name,sizeof(out->name))&&!string("meta/shortName",out->name,sizeof(out->name)))copy(out->name,out->symbol,sizeof(out->name));
+ fold_latin(out->name);
  if(!string("meta/fullExchangeName",out->exchange,sizeof(out->exchange)))string("meta/exchangeName",out->exchange,sizeof(out->exchange));
  out->has_previous=real("meta/previousClose",&value)&&value>0&&value<=1e12;if(out->has_previous)out->previous=value;
  out->delay=real("meta/exchangeDataDelayedBy",&value)&&value>=0&&value<10000?(int)value:0;
@@ -172,18 +193,20 @@ static void received(int32_t status,const char*json,uint32_t size,void*unused){
   if(status==404||status==401||status==403)delay=21600000;
   unsigned retry=svc->http_retry_seconds();if(retry>21600)retry=21600;if(retry*1000>delay)delay=retry*1000;s->due=now+delay;
   const char*why=status==429?tr("Yahoo rate limit","Yahoo-Anfragelimit"):status==404?tr("Symbol not found","Symbol nicht gefunden"):status==401||status==403?tr("Yahoo denied access","Yahoo verweigert Zugriff"):status==200?tr("Invalid provider response","Ungueltige Kursdaten"):status==GADGET_HTTP_OFFLINE?tr("Offline - waiting for Wi-Fi","Offline - warte auf WLAN"):tr("Quote request failed","Kursabfrage fehlgeschlagen");
+  if(status!=404&&status!=200)next_request=now+delay;
   copy(s->error,s->valid?tr("Cached: ","Cache: "):"",sizeof(s->error));append(s->error,why,sizeof(s->error));
- }if(view!=2)dirty=1;
+ }persist_quotes();if(view!=2)dirty=1;
 }
 static void tick(void*unused){
  (void)unused;if(closing)return;uint32_t now=svc->monotonic_ms();
  if(notice[0]&&ready(now,notice_until)){notice[0]=0;if(view!=2)dirty=1;}
- if(view!=2&&!busy&&count&&ready(now,next_request)){
+ gadget_environment env;zero(&env,sizeof env);env.struct_size=sizeof env;svc->environment(&env);
+ if(view!=2&&!busy&&count&&env.online&&env.clock_ready&&ready(now,next_request)){
   int pick=-1;
   if(view==1){Stock*s=&stocks[selected];if(ready(now,s->due)||(s->period!=period&&!s->failures))pick=(int)selected;}
-  else for(unsigned i=0;i<count;++i)if(ready(now,stocks[i].due)){pick=(int)i;break;}
-  if(pick>=0){Stock*s=&stocks[pick];char url[256];copy(url,"https://query1.finance.yahoo.com/v8/finance/chart/",sizeof(url));append(url,s->symbol,sizeof(url));append(url,"?range=",sizeof(url));append(url,view==1?(period==0?"5d":period==1?"1mo":"1y"):"5d",sizeof(url));append(url,"&interval=1d&includePrePost=false",sizeof(url));
-   request_index=(unsigned)pick;request_period=view==1?period:0;request_generation=generation;busy=1;next_request=now+5000;
+  if(pick<0)for(unsigned i=0;i<count;++i)if(ready(now,stocks[i].due)){pick=(int)i;break;}
+  if(pick>=0){Stock*s=&stocks[pick];char url[256];copy(url,"https://query1.finance.yahoo.com/v8/finance/chart/",sizeof(url));append(url,s->symbol,sizeof(url));append(url,"?range=",sizeof(url));append(url,view==1&&(unsigned)pick==selected?(period==0?"5d":period==1?"1mo":"1y"):"5d",sizeof(url));append(url,"&interval=1d&includePrePost=false",sizeof(url));
+   request_index=(unsigned)pick;request_period=view==1&&(unsigned)pick==selected?period:0;request_generation=generation;busy=1;next_request=now+5000;
    int result=svc->http_get(url,65536,received,0);
    if(result<0){busy=0;if(result!=GADGET_HTTP_BUSY&&result!=GADGET_HTTP_RATE_LIMIT){s->attempt=now;s->attempted=1;received(result,0,0,0);}}
    else{s->attempt=now;s->attempted=1;}dirty=1;
@@ -196,14 +219,14 @@ static void shutdown_app(void){closing=1;root=body=input=error_label=0;}
 __attribute__((visibility("default")))
 int gadget_app_entry(int argc,char**argv){
  if(argc!=2||!argv)return -1;host=(const gadget_host_api*)argv[0];gadget_app_lifecycle*app=(gadget_app_lifecycle*)argv[1];
- if(!host||host->major!=1||host->minor<9||host->struct_size<sizeof(*host)||!host->ui||host->ui->struct_size<offsetof(gadget_ui_api,qr)||!host->services||host->services->struct_size<offsetof(gadget_services_api,config_read)||!app||app->struct_size<sizeof(*app))return -2;
- app->major=1;app->minor=9;app->shutdown=shutdown_app;ui=host->ui;svc=host->services;closing=busy=0;generation=0;period=0;body=input=error_label=0;notice[0]=editor_error[0]=0;next_request=svc->monotonic_ms();last_paint=next_request;
+ if(!host||host->major!=1||host->minor<11||host->struct_size<sizeof(*host)||!host->ui||host->ui->struct_size<offsetof(gadget_ui_api,qr)||!host->services||host->services->struct_size<offsetof(gadget_services_api,config_read)||!app||app->struct_size<sizeof(*app))return -2;
+ app->major=1;app->minor=11;app->shutdown=shutdown_app;ui=host->ui;svc=host->services;closing=busy=0;count=0;zero(stocks,sizeof stocks);generation=0;period=0;body=input=error_label=0;notice[0]=editor_error[0]=0;next_request=svc->monotonic_ms();last_paint=next_request;
  gadget_environment env;zero(&env,sizeof(env));env.struct_size=sizeof(env);svc->environment(&env);german=env.german;
  settings_entry=host->launch_mode()==GADGET_LAUNCH_SETTINGS;view=settings_entry?2:0;editor_return=0;
  char text[256],symbols[STOCKS_MAX][25],migration[100];unsigned n=0;
  if(host->setting_get("symbols",text,sizeof(text))<0)copy(text,defaults,sizeof(text));
  const char*why=validate(text,symbols,&n);if(why){copy(editor_error,why,sizeof(editor_error));n=0;view=2;}
- apply_symbols(symbols,n);
+ apply_symbols(symbols,n);restore_quotes();
  if(host->setting_get("import_error",migration,sizeof(migration))>0){copy(editor_error,migration,sizeof(editor_error));view=2;}
  root=ui->create(0,GADGET_UI_ROOT,"",0,0);if(!root||ui->reserve(96)<0||!host->timer_create(250,tick,0))return -3;dirty=0;render();return 0;
 }

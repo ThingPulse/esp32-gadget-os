@@ -49,9 +49,9 @@ static void launch(bool settings_mode=false){
  closed=false;pending=nullptr;mode=settings_mode?GADGET_LAUNCH_SETTINGS:GADGET_LAUNCH_NORMAL;
  auto *old=lv_screen_active();lv_screen_load(lv_obj_create(nullptr));lv_obj_delete(old);
  settings::begin("stocks-preview");services::begin("stocks-preview");native_app::ui::begin(lv_screen_active(),[](gadget_callback cb,void*u){if(!closed)cb(u);});
- service={};service.struct_size=sizeof(service);service.environment=services::environment;service.format_time=services::format_time;service.json_open=services::json_open;service.json_get=services::json_get;service.json_count=services::json_count;service.json_close=services::json_close;service.json_real=services::json_real;service.format_number=services::format_number;service.monotonic_ms=[](){return ticks;};service.math=&services::math_api;
+ service={};service.struct_size=sizeof(service);service.environment=services::environment;service.format_time=services::format_time;service.json_open=services::json_open;service.json_get=services::json_get;service.json_count=services::json_count;service.json_close=services::json_close;service.json_real=services::json_real;service.format_number=services::format_number;service.monotonic_ms=[](){return ticks;};service.math=&services::math_api;service.cache_read=services::cache_read;service.cache_write=services::cache_write;
  service.http_retry_seconds=[](){return retry;};service.http_get=[](const char*url,uint32_t cap,gadget_http_callback cb,void*u)->int32_t{assert(!pending&&cap==65536);pending=cb;pending_user=u;requested=url;++requests;return 0;};
- api={};api.struct_size=sizeof(api);api.major=1;api.minor=9;api.ui=&native_app::ui::api;api.services=&service;api.setting_get=settings::get;api.setting_set=settings::set;api.launch_mode=[](){return mode;};api.request_close=[](){closed=true;native_app::ui::suspend();};api.timer_create=[](uint32_t,gadget_callback,void*)->gadget_handle{return (void*)1;};
+ api={};api.struct_size=sizeof(api);api.major=1;api.minor=11;api.ui=&native_app::ui::api;api.services=&service;api.setting_get=settings::get;api.setting_set=settings::set;api.launch_mode=[](){return mode;};api.request_close=[](){closed=true;native_app::ui::suspend();};api.timer_create=[](uint32_t,gadget_callback,void*)->gadget_handle{return (void*)1;};
  life={sizeof(life)};char*args[]={reinterpret_cast<char*>(&api),reinterpret_cast<char*>(&life)};assert(source::stocks_test_entry(2,args)==0);
 }
 static void close(){life.shutdown();native_app::ui::end();settings::end();services::end();pending=nullptr;}
@@ -73,7 +73,7 @@ int main(int argc,char**argv){assert(argc==2);auto&cfg=ConfigStoreService::insta
  for(int y=250;y<=470;y+=10){pointer_data.point.y=y;ticks+=20;lv_indev_read(pointer);source::tick(nullptr);lv_timer_handler();}
  pointer_data.state=LV_INDEV_STATE_RELEASED;lv_indev_read(pointer);for(int i=0;i<50;++i)step(20);lv_indev_delete(pointer);
  assert(source::view==0&&source::notice[0]);
- click("AAPL");capture(argv[1],"detail");assert(find(lv_screen_active(),"230.00 USD"));assert(find(lv_screen_active(),"+1.32%"));
+ click("AAPL");capture(argv[1],"detail");assert(find(lv_screen_active(),"230.00 USD"));assert(find(lv_screen_active(),"+3.00  (+1.32%)"));
  click("1Y");step(5000);assert(requested.find("range=1y")!=std::string::npos);respond(200,quote());assert(source::stocks[0].period==2);
  // Invalid data never replaces a cached quote; Retry-After blocks manual retries.
  source::stocks[0].due=ticks;step(5000);retry=120;respond(429,"");assert(source::stocks[0].valid&&source::stocks[0].due>=ticks+119000);unsigned before=requests;source::refresh(nullptr);step(30000);assert(requests==before);retry=0;
@@ -81,17 +81,20 @@ int main(int argc,char**argv){assert(argc==2);auto&cfg=ConfigStoreService::insta
  source::Stock parsed{};std::strcpy(parsed.symbol,"AAPL");auto valid=quote();assert(source::parse_quote(valid.data(),valid.size(),&parsed));
  auto wrong=quote("MSFT");assert(!source::parse_quote(wrong.data(),wrong.size(),&parsed));
  JsonDocument broken;deserializeJson(broken,valid);broken["chart"]["result"][0]["timestamp"][1]=86401;std::string bad;serializeJson(broken,bad);assert(!source::parse_quote(bad.data(),bad.size(),&parsed));
+ // Reordering and closing preserve the cached quote, including offline use.
+ char ordered[10][25];unsigned ordered_count=0;assert(!source::validate("NESN.SW\nAAPL",ordered,&ordered_count));source::apply_symbols(ordered,ordered_count);assert(source::stocks[1].valid&&source::stocks[1].price==230);source::persist_quotes();
+ assert(settings::set("symbols","NESN.SW\nAAPL")==0);close();launch();assert(source::stocks[1].valid&&source::stocks[1].price==230);source::select_stock((void*)1);step(1);
  // All keyboard layouts insert Enter into the actual SDK multiline field.
- click("Edit");auto*ta=type(lv_screen_active(),&lv_textarea_class);assert(ta);lv_textarea_set_text(ta,"btc-usd");key(LV_SYMBOL_NEW_LINE);key("ABC");key(LV_SYMBOL_NEW_LINE);key("1#");key(LV_SYMBOL_NEW_LINE);assert(std::string(lv_textarea_get_text(ta))=="btc-usd\n\n\n");
+ click("Edit");auto*ta=type(lv_screen_active(),&lv_textarea_class);assert(ta);assert(lv_obj_has_state(ta,LV_STATE_FOCUSED));assert(lv_obj_get_style_border_width(ta,LV_PART_CURSOR)==2);assert(lv_obj_get_style_opa(ta,LV_PART_CURSOR)>0);lv_textarea_set_text(ta,"btc-usd");key(LV_SYMBOL_NEW_LINE);key("ABC");key(LV_SYMBOL_NEW_LINE);key("1#");key(LV_SYMBOL_NEW_LINE);assert(std::string(lv_textarea_get_text(ta))=="btc-usd\n\n\n");assert(lv_textarea_get_cursor_pos(ta)==10);
  lv_textarea_set_text(ta,"aapl\nAAPL");click("Save");assert(source::view==2&&find(lv_screen_active(),"Duplicate symbol"));
  assert(api.ui->input_config(source::input,256,1)==-1);char tiny[2];assert(api.ui->input_get(source::input,tiny,sizeof(tiny))==-1);auto old_input=source::input;
  lv_textarea_set_text(ta,"btc-usd\nSOL-USD");capture(argv[1],"editor");click("Save");assert(source::view==0&&source::count==2&&std::string(source::stocks[0].symbol)=="BTC-USD");assert(api.ui->input_get(old_input,tiny,sizeof(tiny))==-1);close();
  // Do not re-import modified legacy data over package settings; external Save closes.
  assert(cfg.load("stocks"));cfg.set("symbols",std::string("MSFT"));assert(cfg.save());launch(true);assert(source::count==2&&std::string(source::stocks[0].symbol)=="BTC-USD");ta=type(lv_screen_active(),&lv_textarea_class);lv_textarea_set_text(ta,"");click("Save");assert(closed);close();launch(true);assert(source::count==0);click("Cancel");assert(closed);close();
  // A late response after editing cannot populate an unrelated new symbol.
- settings::begin("stocks-preview");assert(settings::set("symbols","AAPL")==0);settings::end();launch();step();auto late=pending;auto*u=pending_user;pending=nullptr;click("Edit");ta=type(lv_screen_active(),&lv_textarea_class);lv_textarea_set_text(ta,"MSFT");click("Save");late(200,valid.data(),valid.size(),u);assert(!source::stocks[0].valid);close();
+ settings::begin("stocks-preview");assert(settings::set("symbols","AAPL")==0);settings::end();launch();source::next_request=ticks;source::stocks[0].due=ticks;step();assert(pending);auto late=pending;auto*u=pending_user;pending=nullptr;click("Edit");ta=type(lv_screen_active(),&lv_textarea_class);lv_textarea_set_text(ta,"MSFT");click("Save");late(200,valid.data(),valid.size(),u);assert(!source::stocks[0].valid);close();
  // Cancellation gates callbacks before teardown, repeated sessions reclaim widgets.
- for(int i=0;i<30;++i){launch();step();auto cb=pending;auto*u=pending_user;source::shutdown_app();cb(200,valid.data(),valid.size(),u);assert(!source::stocks[0].valid);close();}
+ for(int i=0;i<30;++i){launch();source::next_request=ticks;source::stocks[0].due=ticks;step();assert(pending);auto cb=pending;auto*u=pending_user;source::shutdown_app();cb(200,valid.data(),valid.size(),u);assert(!source::stocks[0].valid);close();}
  // Uninstall removes app-owned settings; the legacy marker prevents resurrection.
  std::remove(".pio/native-app-settings/stocks-preview.json");launch(true);assert(source::count==5&&std::string(source::stocks[0].symbol)=="AAPL");close();
 

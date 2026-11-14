@@ -117,6 +117,16 @@ python3 experiments/native-app/audit-builds.py \
   --toolchain "$HOME/.platformio/packages/toolchain-xtensa-esp-elf/bin"
 ```
 
+## One-command app development
+
+Use `pio run -e color-pro-apps -t upload` or
+`pio run -e color-grande-apps -t upload` to build the current catalog apps for one
+chip and install them through one USB-paired Wi-Fi session. These environments
+skip firmware compilation and preserve settings. See the
+[setup, app filtering, signing, and upload requirements](../../README.md#installable-app-development).
+The standalone installer also accepts multiple packages:
+`python scripts/install-native-app.py --port PORT --package one.gapp two.gapp`.
+
 ## Install, update and remove in the browser
 
 Flash the experimental firmware once for the matching board:
@@ -494,13 +504,25 @@ and validates Stocks ELF/packages for both chips. `test-stocks.py` retains the
 legacy provider/UI reference checks.
 
 
-## Transit, Planes and Home Assistant (SDK 1.10)
+## Transit, Planes and Home Assistant (SDK 1.11)
 
-The source catalogue now includes `transit`, `planes` and `home-assistant`, all
-version 0.1.0. Build using `--app transit`, `--app planes` or
-`--app home_assistant`. These packages require API **1.10 firmware**; older stores
+The source catalogue includes `transit` and `planes` at version 0.3.0, and
+`home-assistant` at version 0.2.0. Build using `--app transit`, `--app planes` or
+`--app home_assistant`. These packages require API **1.11 firmware**; older stores
 filter them out. An `apps-v*` publication tag is still required to sign and deploy
 this source catalogue. Adding source files does not publish them.
+
+Planes 0.3.0 restores the compact compass radar, altitude colors, selected-aircraft
+summary, range menu and flight details. The radar excludes ground aircraft, retains per-aircraft trails across selection and zoom,
+and learns nearby airports from cached routes. Its settings offer units, range presets, and shared or custom coordinates. **Guess from IP** uses
+an asynchronous HTTPS lookup and fills only the editable draft; Save commits it.
+Transit 0.3.0 restores route badges, compact departure cards, the route timeline,
+stop search/results, and confirmation before removing a favourite.
+
+The shared keyboard host focuses an attached text field and applies a steady,
+high-contrast cursor, including Planes numeric fields and the Stocks multiline
+editor. Built-in Wi-Fi and location forms use the same cursor behavior. This cursor fix
+requires updating firmware; updating only the Stocks package is insufficient.
 
 All three expose Settings → Apps and use the same app-owned configuration UI
 from inside the app. Native uses the identical package source with asynchronous
@@ -550,3 +572,8 @@ percent part; old apps and old companions remain compatible. The memory sparklin
 uses an explicitly labeled range with one percentage point of padding, while CPU
 retains its fixed 0–100% scale. Install the updated companion and app to get the
 higher precision.
+
+The [migration parity audit](../../docs/plans/installable-app-parity-audit.md) records
+the legacy-to-package comparison, restored behavior, bounded-cache differences and
+verification. Stocks 0.2.0 also requires API 1.11 for shaded charts and shared UI
+presets. Update firmware before installing these four package versions.

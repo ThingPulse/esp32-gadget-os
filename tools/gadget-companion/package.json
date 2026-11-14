@@ -1,6 +1,6 @@
 {
   "name": "@thingpulse/gadget-companion",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Connect your Gadget to your computer from the menu bar",
   "type": "module",
   "bin": {

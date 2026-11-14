@@ -59,16 +59,20 @@ def request(address, key, route, data=None):
         connection.close()
 
 
-def install(url, raw):
+def preflight(raw, state):
     app = metadata(raw)
-    address, key = pairing(url)
-    state = request(address, key, '/api/apps')
     if app.get('chip') != state.get('chip'):
         raise ValueError(f"Wrong package chip: device is {state.get('chip')}, package is {app.get('chip')}")
     if app.get('api_major') != state.get('apiMajor') or not isinstance(app.get('api_minor'), int) or app['api_minor'] > state.get('apiMinor', -1):
         raise ValueError('Update the device firmware first: this app needs a newer SDK')
     if raw[:8] == b'GOSAPP1\0' and not state.get('developerMode'):
         raise ValueError('Unsigned package: enable Developer mode on the device installer screen, then retry')
+    return app
+
+
+def install(url, raw):
+    address, key = pairing(url)
+    app = preflight(raw, request(address, key, '/api/apps'))
     request(address, key, '/api/install', raw)
     state = request(address, key, '/api/apps')
     if not any(x.get('id') == app['id'] and x.get('version') == app.get('version') for x in state.get('apps', [])):
@@ -76,18 +80,32 @@ def install(url, raw):
     print(f"Installed {app['id']} {app.get('version')} on {address}.")
 
 
+def install_all(url, packages):
+    address, key = pairing(url)
+    state = request(address, key, '/api/apps')
+    # Check every selected package before modifying the device.
+    for raw in packages:
+        preflight(raw, state)
+    for index, raw in enumerate(packages, 1):
+        print(f'Installing app {index} / {len(packages)}...')
+        install(url, raw)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', required=True, help='USB serial port; close other serial monitors first')
-    parser.add_argument('--package', required=True, type=Path)
+    parser.add_argument('--package', required=True, type=Path, nargs='+', help='One or more .gapp files; pair once for the entire batch')
     parser.add_argument('--timeout', type=float, default=40, help='Pairing wait in seconds')
     args = parser.parse_args()
     if not 10 <= args.timeout <= 120:
         parser.error('--timeout must be between 10 and 120 seconds')
-    if args.package.stat().st_size > 70908:
-        raise ValueError("Package exceeds the installer size limit")
-    raw = args.package.read_bytes()
-    metadata(raw)  # Fail before interacting with the device.
+    packages = []
+    for path in args.package:
+        if path.stat().st_size > 70908:
+            raise ValueError("Package exceeds the installer size limit")
+        raw = path.read_bytes()
+        metadata(raw)  # Fail before interacting with the device.
+        packages.append(raw)
     import serial
     port = serial.Serial(port=None, baudrate=115200, timeout=0.25)
     port.dtr = False
@@ -115,10 +133,10 @@ def main():
                 break
         if not url:
             raise ValueError('No pairing response. Use app-enabled firmware, connect Wi-Fi, return to the launcher, and close other serial monitors')
-        install(url, raw)
+        install_all(url, packages)
         port.write(b'native manager close\n')
         port.flush()
-    print('Open Installed apps on the device to launch it.')
+    print('Apps are ready on the home screens. App settings were retained.')
 
 if __name__ == '__main__':
     try:

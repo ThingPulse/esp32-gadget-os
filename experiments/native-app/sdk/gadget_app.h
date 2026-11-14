@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 #define GADGET_APP_API_MAJOR 1
-#define GADGET_APP_API_MINOR 10
+#define GADGET_APP_API_MINOR 11
 /* All calls and callbacks run synchronously on the UI thread. Handles expire
  * at shutdown. No tasks, interrupts, exceptions, or background callbacks. */
 typedef void *gadget_handle;
@@ -27,7 +27,10 @@ enum { GADGET_UI_ROOT, GADGET_UI_CONTAINER, GADGET_UI_LABEL, GADGET_UI_BUTTON, G
 enum { GADGET_STYLE_DEFAULT, GADGET_STYLE_HEADER, GADGET_STYLE_CARD,
        GADGET_STYLE_TITLE, GADGET_STYLE_VALUE, GADGET_STYLE_MUTED,
        GADGET_STYLE_TAB, GADGET_STYLE_BACK, GADGET_STYLE_REFRESH,
-       GADGET_STYLE_ACCENT, GADGET_STYLE_BLUE, GADGET_STYLE_ELLIPSIS, GADGET_STYLE_WHITE };
+       GADGET_STYLE_ACCENT, GADGET_STYLE_BLUE, GADGET_STYLE_ELLIPSIS, GADGET_STYLE_WHITE,
+       /* API 1.11: bounded presentation / interaction presets. */
+       GADGET_STYLE_DISABLED, GADGET_STYLE_ENABLED, GADGET_STYLE_MARQUEE,
+       GADGET_STYLE_DECORATIVE, GADGET_STYLE_CHART_SMOOTH, GADGET_STYLE_OUTLINED };
 /* API 1.5: copied drawing commands, never app callbacks in the renderer. */
 enum { GADGET_DRAW_LINE, GADGET_DRAW_CIRCLE };
 typedef struct gadget_draw_command { int32_t kind,x,y,x2,y2,width; uint32_t color; } gadget_draw_command;
@@ -76,7 +79,7 @@ typedef struct gadget_services_api {
  int32_t (*cache_write)(const void*,uint32_t);
  /* Closes the app to open location settings, then reopens it on settings exit. */
  void (*open_location)(void);
- /* Extended HTTPS: 48 KiB in 1.5, 64 KiB in 1.9, 192 KiB in 1.10.
+ /* Extended HTTPS: 48 KiB in 1.5, 64 KiB in 1.9, 192 KiB in 1.10, 256 KiB in 1.11.
   * Retry-After is available during callback. */
  int32_t (*http_get)(const char*,uint32_t,gadget_http_callback,void*);
  uint32_t (*http_retry_seconds)(void);

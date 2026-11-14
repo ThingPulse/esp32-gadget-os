@@ -504,5 +504,8 @@
   "Updating app": "App aktualisieren",
   "Updated apps:": "Aktualisierte Apps:",
   "Apps": "Apps",
-  "No installed apps have settings.": "Keine installierte App hat Einstellungen."
+  "No installed apps have settings.": "Keine installierte App hat Einstellungen.",
+  "Arrange apps": "Apps anordnen",
+  "Move apps up or down. Changes save automatically.": "Apps nach oben oder unten verschieben. Änderungen werden automatisch gespeichert.",
+  "Could not load settings": "Einstellungen konnten nicht geladen werden"
 }

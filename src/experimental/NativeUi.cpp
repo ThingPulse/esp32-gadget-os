@@ -1,5 +1,6 @@
 #if GADGET_OS_NATIVE_APP_LOADER || !defined(ARDUINO)
 #include "experimental/NativeUi.h"
+#include "ui/ChartShade.h"
 #include "ui/I18n.h"
 #include "ui/TouchKeyboard.h"
 #include <cstring>
@@ -10,7 +11,7 @@
 #endif
 namespace native_app { namespace ui {
 namespace {
-struct Item {lv_obj_t *obj=nullptr,*caption=nullptr;uint32_t kind=0,depth=0;int selection=-1;gadget_callback callback=nullptr;void *user=nullptr;lv_chart_series_t *series=nullptr;uintptr_t token=0;std::vector<gadget_draw_command> drawing;bool drawing_hook=false;gadget_gesture_callback gesture=nullptr;void *gesture_user=nullptr;bool pull=false;uint32_t direction=0;bool gesture_hook=false;};
+struct Item {lv_obj_t *obj=nullptr,*caption=nullptr;uint32_t kind=0,depth=0;int selection=-1;gadget_callback callback=nullptr;void *user=nullptr;lv_chart_series_t *series=nullptr;uintptr_t token=0;std::vector<gadget_draw_command> drawing;bool drawing_hook=false;gadget_gesture_callback gesture=nullptr;void *gesture_user=nullptr;bool pull=false;uint32_t direction=0;bool gesture_hook=false,smooth=false;};
 bool suspended=false;Item items[256];unsigned quota=64;uintptr_t next_token=1;lv_obj_t *screen=nullptr;void (*dispatch)(gadget_callback,void*)=nullptr;
 Item *find(gadget_handle h){if(!screen || suspended)return nullptr;for(auto &i:items)if(h==reinterpret_cast<gadget_handle>(i.token) && i.obj)return &i;return nullptr;}
 bool valid_text(const char *s){return s && strlen(s)<=160;}
@@ -34,7 +35,7 @@ gadget_handle create(gadget_handle parent,uint32_t kind,const char *text,gadget_
  if(kind!=GADGET_UI_TEXTAREA&&kind!=GADGET_UI_KEYBOARD&&kind!=GADGET_UI_QRCODE&&kind!=GADGET_UI_SLIDER)lv_obj_remove_style_all(obj);
  if(kind!=GADGET_UI_TEXTAREA)lv_obj_clear_flag(obj,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_set_style_text_font(obj,i18n::font14(),0);lv_obj_set_style_text_color(obj,lv_color_hex(0xf1f3f5),0);
- if(kind==GADGET_UI_TEXTAREA){lv_textarea_set_max_length(obj,255);lv_textarea_set_text(obj,text?text:"");lv_obj_set_style_bg_color(obj,lv_color_hex(0x2a2d42),0);lv_obj_set_style_bg_opa(obj,LV_OPA_COVER,0);lv_obj_set_style_border_color(obj,lv_color_hex(0x63e6be),LV_PART_CURSOR);lv_obj_set_style_border_width(obj,2,LV_PART_CURSOR);lv_obj_set_style_border_side(obj,LV_BORDER_SIDE_LEFT,LV_PART_CURSOR);}
+ if(kind==GADGET_UI_TEXTAREA){lv_textarea_set_max_length(obj,255);lv_textarea_set_text(obj,text?text:"");lv_obj_set_style_bg_color(obj,lv_color_hex(0x2a2d42),0);lv_obj_set_style_bg_opa(obj,LV_OPA_COVER,0);configure_text_input(obj);}
  if(kind==GADGET_UI_ROOT){lv_obj_set_layout(obj,LV_LAYOUT_NONE);lv_obj_set_style_bg_color(obj,lv_color_hex(0x172131),0);lv_obj_set_style_bg_opa(obj,LV_OPA_COVER,0);}
  if(kind==GADGET_UI_LABEL){lv_label_set_text(obj,text?text:"");lv_label_set_long_mode(obj,LV_LABEL_LONG_CLIP);}
  if(kind==GADGET_UI_BUTTON){item->caption=lv_label_create(obj);lv_label_set_text(item->caption,text?text:"");lv_obj_center(item->caption);lv_obj_set_style_bg_color(obj,lv_color_hex(0x213247),0);lv_obj_set_style_bg_opa(obj,LV_OPA_COVER,0);lv_obj_set_style_radius(obj,8,0);lv_obj_add_event_cb(obj,event,LV_EVENT_ALL,item);
@@ -54,9 +55,15 @@ gadget_handle create(gadget_handle parent,uint32_t kind,const char *text,gadget_
 }
 int32_t box(gadget_handle h,int32_t x,int32_t y,int32_t w,int32_t height){auto *i=find(h);if(!i || x<0 || y<0 || x>4096 || y>4096 || w<1 || height<1 || w>1024 || height>1024)return -1;lv_obj_set_align(i->obj,LV_ALIGN_TOP_LEFT);lv_obj_set_pos(i->obj,x,y);lv_obj_set_size(i->obj,w,height);return 0;}
 int32_t flow(gadget_handle h,uint32_t axis,uint32_t pad,uint32_t gap){auto *i=find(h);if(!i || (i->kind!=GADGET_UI_ROOT&&i->kind!=GADGET_UI_CONTAINER) || axis>2 || pad>64 || gap>64)return -1;lv_obj_set_style_pad_all(i->obj,pad,0);lv_obj_set_style_pad_row(i->obj,gap,0);lv_obj_set_style_pad_column(i->obj,gap,0);if(axis)lv_obj_set_flex_flow(i->obj,axis==1?LV_FLEX_FLOW_ROW:LV_FLEX_FLOW_COLUMN);else lv_obj_set_layout(i->obj,LV_LAYOUT_NONE);return 0;}
-int32_t style(gadget_handle h,uint32_t preset){auto *i=find(h);if(!i || preset>GADGET_STYLE_WHITE)return -1;auto *o=i->obj;
+int32_t style(gadget_handle h,uint32_t preset){auto *i=find(h);if(!i || preset>GADGET_STYLE_OUTLINED)return -1;auto *o=i->obj;
  switch(preset){
  case GADGET_STYLE_HEADER:case GADGET_STYLE_CARD:lv_obj_set_style_bg_opa(o,LV_OPA_COVER,0);lv_obj_set_style_bg_color(o,lv_color_hex(preset==GADGET_STYLE_HEADER?0x14162a:0x213247),0);lv_obj_set_style_radius(o,preset==GADGET_STYLE_HEADER?0:12,0);break;
+ case GADGET_STYLE_DISABLED:lv_obj_add_state(o,LV_STATE_DISABLED);lv_obj_set_style_opa(o,LV_OPA_50,LV_STATE_DISABLED);break;
+ case GADGET_STYLE_ENABLED:lv_obj_remove_state(o,LV_STATE_DISABLED);break;
+ case GADGET_STYLE_MARQUEE:if(i->kind!=GADGET_UI_LABEL)return -1;lv_label_set_long_mode(o,LV_LABEL_LONG_SCROLL_CIRCULAR);break;
+ case GADGET_STYLE_DECORATIVE:lv_obj_remove_flag(o,LV_OBJ_FLAG_CLICKABLE);break;
+ case GADGET_STYLE_OUTLINED:lv_obj_set_style_bg_opa(o,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(o,1,0);lv_obj_set_style_border_color(o,lv_color_hex(0x63e6be),0);break;
+ case GADGET_STYLE_CHART_SMOOTH:if(i->kind!=GADGET_UI_CHART)return -1;if(!i->smooth){i->smooth=true;lv_obj_add_flag(o,LV_OBJ_FLAG_SEND_DRAW_TASK_EVENTS);lv_obj_add_event_cb(o,chart_shade::shade,LV_EVENT_DRAW_TASK_ADDED,nullptr);}lv_chart_set_div_line_count(o,3,0);lv_obj_set_style_pad_all(o,6,0);lv_obj_set_style_line_rounded(o,true,LV_PART_ITEMS);break;
  case GADGET_STYLE_WHITE:lv_obj_set_style_text_color(o,lv_color_hex(0xf1f3f5),0);break;
  case GADGET_STYLE_ELLIPSIS:if(i->kind!=GADGET_UI_LABEL)return -1;lv_label_set_long_mode(o,LV_LABEL_LONG_DOT);break;
  case GADGET_STYLE_TITLE:lv_obj_set_style_text_font(o,i18n::font24(),0);break;
@@ -93,7 +100,11 @@ int32_t wrap(gadget_handle h){auto*i=find(h);if(!i||i->kind!=GADGET_UI_LABEL)ret
 
 int32_t input_config(gadget_handle h,uint32_t n,uint32_t multiline){auto*i=find(h);if(!i||i->kind!=GADGET_UI_TEXTAREA||!n||n>255||multiline>1)return -1;lv_textarea_set_max_length(i->obj,n);lv_textarea_set_one_line(i->obj,!multiline);return 0;}
 int32_t input_get(gadget_handle h,char*out,uint32_t cap){auto*i=find(h);if(!i||i->kind!=GADGET_UI_TEXTAREA||!out||!cap||cap>1024)return -1;const char*s=lv_textarea_get_text(i->obj);size_t n=strlen(s);if(n>=cap)return -1;memcpy(out,s,n+1);return n;}
-int32_t keyboard_attach(gadget_handle h,gadget_handle input){auto*k=find(h);auto*i=find(input);if(!k||!i||k->kind!=GADGET_UI_KEYBOARD||i->kind!=GADGET_UI_TEXTAREA)return -1;lv_keyboard_set_textarea(k->obj,i->obj);configure_touch_keyboard(k->obj,!lv_textarea_get_one_line(i->obj));return 0;}
+int32_t keyboard_attach(gadget_handle h,gadget_handle input){
+ auto*k=find(h);auto*i=find(input);if(!k||!i||k->kind!=GADGET_UI_KEYBOARD||i->kind!=GADGET_UI_TEXTAREA)return -1;
+ attach_touch_keyboard(k->obj,i->obj);
+ configure_touch_keyboard(k->obj,!lv_textarea_get_one_line(i->obj));return 0;
+}
 
 int32_t scroll_y(gadget_handle h,int32_t y){auto*i=find(h);if(!i||i->kind!=GADGET_UI_CONTAINER||y < -1||y>4096)return -1;if(y>=0)lv_obj_scroll_to_y(i->obj,y,LV_ANIM_OFF);return lv_obj_get_scroll_y(i->obj);}
 
@@ -107,7 +118,16 @@ void gesture_event(lv_event_t *e){auto*i=static_cast<Item*>(lv_event_get_user_da
 }
 int32_t gestures(gadget_handle h,gadget_gesture_callback cb,void*u){auto*i=find(h);if(!i||(i->kind!=GADGET_UI_CONTAINER&&i->kind!=GADGET_UI_ROOT))return -1;i->gesture=cb;i->gesture_user=u;if(!i->gesture_hook){lv_obj_add_event_cb(i->obj,gesture_event,LV_EVENT_ALL,i);i->gesture_hook=true;}return 0;}
 
-int32_t chart_fit(gadget_handle h,const int32_t*v,uint32_t n){auto*i=find(h);if(!i||i->kind!=GADGET_UI_CHART||!v||!n||n>96)return -1;for(unsigned k=0;k<n;++k)if(v[k]<-1||v[k]>100)return -1;lv_chart_set_point_count(i->obj,n);auto*values=lv_chart_get_series_y_array(i->obj,i->series);for(unsigned k=0;k<n;++k)values[k]=v[k]<0?LV_CHART_POINT_NONE:v[k];lv_chart_refresh(i->obj);return 0;}
+int32_t chart_fit(gadget_handle h,const int32_t*v,uint32_t n){
+ auto*i=find(h);if(!i||i->kind!=GADGET_UI_CHART||!v||!n||n>96)return -1;for(unsigned k=0;k<n;++k)if(v[k]<-1||v[k]>100)return -1;
+ unsigned steps=i->smooth&&n>1?std::max(1U,std::min<unsigned>(12U,267U/(n-1))):1,points=(n-1)*steps+1;
+ lv_chart_set_point_count(i->obj,points);lv_chart_set_range(i->obj,LV_CHART_AXIS_PRIMARY_Y,0,i->smooth?1000:100);auto*values=lv_chart_get_series_y_array(i->obj,i->series);
+ auto tangent=[](double a,double b){return a*b<=0?0.0:2*a*b/(a+b);};
+ for(unsigned k=0;k<points;++k){unsigned p=k/steps;double value=v[p],t=double(k%steps)/steps;
+  if(t&&p+1<n){if(v[p]<0||v[p+1]<0)value=-1;else{double a=v[p],b=v[p+1],delta=b-a,m0=p&&v[p-1]>=0?tangent(a-v[p-1],delta):delta,m1=p+2<n&&v[p+2]>=0?tangent(delta,v[p+2]-b):delta,t2=t*t,t3=t2*t;value=std::clamp((2*t3-3*t2+1)*a+(t3-2*t2+t)*m0+(-2*t3+3*t2)*b+(t3-t2)*m1,std::min(a,b),std::max(a,b));}}
+  values[k]=value<0?LV_CHART_POINT_NONE:i->smooth?int32_t(80+8.4*value):int32_t(value);
+ }lv_chart_refresh(i->obj);return 0;
+}
 
 int32_t interaction_active(gadget_handle h){auto*i=find(h);if(h&&!i)return -1;if(i&&lv_obj_is_scrolling(i->obj))return 1;for(auto*input=lv_indev_get_next(nullptr);input;input=lv_indev_get_next(input))if(lv_indev_get_type(input)==LV_INDEV_TYPE_POINTER&&lv_indev_get_state(input)==LV_INDEV_STATE_PRESSED)return 1;return 0;}
 

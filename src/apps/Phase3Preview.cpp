@@ -62,7 +62,7 @@ void transport(std::shared_ptr<Request>r,std::string url,std::string method,std:
 }
 int32_t request_http(const gadget_http_request*args,gadget_http_callback cb,void*u){
  if(request||closing)return GADGET_HTTP_BUSY;
- if(!args||args->struct_size<sizeof(*args)||!cb||!args->url||!args->method||!args->body||!args->bearer||!args->ca||!args->response_limit||args->response_limit>196608)return GADGET_HTTP_INVALID;
+ if(!args||args->struct_size<sizeof(*args)||!cb||!args->url||!args->method||!args->body||!args->bearer||!args->ca||!args->response_limit||args->response_limit>262144)return GADGET_HTTP_INVALID;
  std::string url=args->url,method=args->method,body=args->body,token=args->bearer,ca=args->ca;
  size_t start=url.compare(0,8,"https://")==0?8:url.compare(0,7,"http://")==0?7:0;
  if(!start||url.size()<=start||url.size()>2047||url.find_first_of("@#")!=std::string::npos||(method!="GET"&&method!="POST")||body.size()>24576||token.size()>4096||ca.size()>8192)return GADGET_HTTP_INVALID;
@@ -78,7 +78,7 @@ void launch(const char*id,bool settings,int(*entry)(int,char**)){
  app_id=id;home=lv_screen_active();auto*screen=lv_obj_create(nullptr);closing=false;settings_mode=settings;
  native_app::ui::begin(screen,dispatch);native_app::settings::begin((app_id+"-preview").c_str());services::begin((app_id+"-preview").c_str());
  static const gadget_services_api s={sizeof(s),services::environment,services::format_time,services::parse_time,services::json_open,services::json_get,services::json_count,services::json_close,services::cache_read,services::cache_write,nullptr,get,[]()->uint32_t{return response_retry;},services::json_number,services::json_real,services::format_number,services::monotonic_ms,&services::math_api,native_app::settings::config_read,native_app::settings::config_write,request_http,[](const void*p,uint32_t n,gadget_setup_callback cb,void*u,char*out,uint32_t cap)->int32_t{return closing?-1:native_app::setup::start(p,n,cb,u,out,cap);},native_app::setup::stop,native_app::setup::is_active};
- static gadget_host_api api{};api.struct_size=sizeof api;api.major=1;api.minor=10;api.ui=&native_app::ui::api;api.services=&s;api.timer_create=timer_create;api.request_close=stop;api.setting_get=native_app::settings::get;api.setting_set=native_app::settings::set;api.launch_mode=[]()->uint32_t{return settings_mode?GADGET_LAUNCH_SETTINGS:GADGET_LAUNCH_NORMAL;};
+ static gadget_host_api api{};api.struct_size=sizeof api;api.major=1;api.minor=11;api.ui=&native_app::ui::api;api.services=&s;api.timer_create=timer_create;api.request_close=stop;api.setting_get=native_app::settings::get;api.setting_set=native_app::settings::set;api.launch_mode=[]()->uint32_t{return settings_mode?GADGET_LAUNCH_SETTINGS:GADGET_LAUNCH_NORMAL;};
  lifecycle={sizeof lifecycle};char*args[]={reinterpret_cast<char*>(&api),reinterpret_cast<char*>(&lifecycle)};ui_load_screen(screen,false);if(entry(2,args)){stop();return;}
  poller=lv_timer_create([](lv_timer_t*){if(closing)return;native_app::setup::poll();if(request&&request->done.load(std::memory_order_acquire)){auto r=request;request.reset();response_retry=r->retry;auto cb=callback;auto*u=callback_user;callback=nullptr;callback_user=nullptr;if(cb)cb(r->status,r->body.data(),r->body.size(),u);}},25,nullptr);
 }

@@ -144,3 +144,10 @@ package publication and release rollout are not part of phase 1.
   `.pio/phase3-packages/{esp32,esp32s3}/*.gapp`.
 - Hardware runtime checks, live-provider validation, signing/publication and
   rollout remain phase 4 work. No device was flashed and no package was published.
+
+## Migration parity follow-up (2026-11-14)
+
+The [feature audit](installable-app-parity-audit.md) compares all four migrated
+apps with their retained implementations and records restored features and known
+differences. The corrected packages require API 1.11 firmware: Planes and Transit
+0.3.0, Stocks and Home Assistant 0.2.0.

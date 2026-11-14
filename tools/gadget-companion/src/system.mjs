@@ -43,6 +43,7 @@ export class SystemCollector {
   const encode=a=>a.map(v=>(v<0?255:v).toString(16).padStart(2,'0')).join('');
   // Keep whole-percent history for older apps; one fractional digit per sample
   // adds precision without exceeding the 2 KiB device snapshot limit.
+  out.cpu_cores=encode(cpus.slice(0,64).map((core,i)=>valid&&prev.cpus.length===cpus.length?cpuDelta([prev.cpus[i]],[core]):-1));
   out.cpu_hist=encode(this.cpuHistory);out.ram_hist=encode(this.ramHistory.map(v=>v<0?-1:Math.floor(v/10)));
   out.ram_frac=this.ramHistory.map(v=>v<0?'f':String(v%10)).join('');
   this.previous={cpus,traffic,rows,time:now};

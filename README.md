@@ -173,6 +173,44 @@ pio device monitor -e esp32-color-kit-pro
 For the opt-in Pro display driver experiment and repeatable before/after benchmark,
 see [Color Kit Pro display performance](docs/performance/color-kit-pro-display.md).
 
+## Installable app development
+
+Build and install the current app sources without reflashing Gadget OS:
+
+```bash
+pio run -e color-pro-apps -t upload
+# Color Kit Grande:
+pio run -e color-grande-apps -t upload
+```
+
+Connect USB, close the serial monitor, and leave the device at the home screen
+with Wi-Fi connected. Your computer must be able to reach the device on the local
+network: USB obtains the temporary pairing key; app packages transfer over Wi-Fi.
+The device must already run firmware with the SDK required by the selected apps.
+For unsigned local builds, first enable **Developer mode** under
+**Add apps → Browser installation**, then return home. The command does not
+change Developer mode automatically.
+
+Use `--upload-port /dev/cu.YOUR_PORT` (or a Windows COM port) if auto-detection is
+ambiguous. Build only by omitting `-t upload`. To iterate on selected apps:
+
+```bash
+GADGET_APPS=stocks,system-monitor pio run -e color-pro-apps -t upload
+```
+
+`GADGET_APPS` accepts IDs from `experiments/native-app/apps.json`; its default is
+all apps. Alternatively set `custom_apps` in the deployment environment. Packages
+are written below `.pio/build/<environment>/apps/<chip>/`. Builds are unsigned
+unless `GADGET_APP_SIGNING_KEY` points to the private key matching the trusted
+public key. App versions come from `apps.json`; local installs can replace the
+same version while retaining app settings, caches, and launcher order.
+
+The upload pairs once and checks all selected packages before installing them
+sequentially. It stops on the first installation error; apps already updated stay
+updated, and the failed app retains its previous package. No firmware or
+filesystem image is flashed. Firmware/UI/SDK changes still need the normal
+`esp32-color-kit-pro` or `esp32-color-kit` firmware upload.
+
 ## First-time setup
 
 Configuration is performed on the device under **Settings**:

@@ -164,7 +164,7 @@ void open_location(){if(active&&!session.gate.closing){location_requested=true;r
 int32_t request_http(const gadget_http_request*r,gadget_http_callback cb,void*u){if(!active||session.gate.closing||!cb)return GADGET_HTTP_INVALID;int32_t result=http::start_request(r,cycle);if(!result)session.http_delivery={cycle,cb,u};return result;}
 int32_t start_setup(const void*p,uint32_t n,gadget_setup_callback cb,void*u,char*out,uint32_t cap){if(!active||session.gate.closing)return -1;return setup::start(p,n,cb,u,out,cap);}
 const gadget_services_api service_api={sizeof(service_api),services::environment,services::format_time,services::parse_time,services::json_open,services::json_get,services::json_count,services::json_close,services::cache_read,services::cache_write,open_location,extended_http,[]()->uint32_t{return retry_seconds;},services::json_number,services::json_real,services::format_number,services::monotonic_ms,&services::math_api,settings::config_read,settings::config_write,request_http,start_setup,setup::stop,setup::is_active};
-const gadget_host_api api={sizeof(api),1,10,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string,&service_api,activity_read,companion_channel_read,[]()->uint32_t{return settings_entry?GADGET_LAUNCH_SETTINGS:GADGET_LAUNCH_NORMAL;}};
+const gadget_host_api api={sizeof(api),1,11,log,screen_create,label_create,button_create,label_set,timer_create,request_close,http_get,json_number_scaled,&ui::api,setting_get,setting_set,companion_read,system_read,system_refresh,json_string,&service_api,activity_read,companion_channel_read,[]()->uint32_t{return settings_entry?GADGET_LAUNCH_SETTINGS:GADGET_LAUNCH_NORMAL;}};
 void resources_clear()
 {
     ui::end(); settings::end();services::end();
@@ -246,7 +246,7 @@ void open_now()
     session.gate.enter();
     result=session.elf.entry(2,args);
     session.gate.leave();
-    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>10 || !session.app.shutdown) {
+    if (result || session.app.struct_size!=sizeof(session.app) || session.app.major!=1 || session.app.minor>11 || !session.app.shutdown) {
         show_error("App initialization/API handshake failed"); return;
     }
     AppUsage::native_start(package.manifest.id.c_str(),package.manifest.version.c_str(),package.trusted);

@@ -19,6 +19,7 @@
 #include "ui/UiTrace.h"
 #include "ui/DisplayPreferences.h"
 #include "ui/TouchKeyboard.h"
+#include "ui/LauncherOrder.h"
 #include <cstdlib>
 #include <ArduinoJson.h>
 #include <lvgl.h>
@@ -41,6 +42,9 @@ APP_REGISTER_ID_COLOR_RANK("settings", "Settings", LV_SYMBOL_SETTINGS, settings_
 // ── Shared helpers ────────────────────────────────────────────────────────
 
 static lv_obj_t *route_restore_settings_screen = nullptr;
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+static bool launcher_order_changed=false;
+#endif
 
 static void configure_settings_keyboard(lv_obj_t *keyboard);
 static void make_top_bar(lv_obj_t *scr, const char *title, lv_obj_t *back_target, bool back_to_home);
@@ -375,6 +379,13 @@ static void nav_to_home_screen(lv_event_t *e)
     UI_TRACE("Settings", "nav_to_home target valid=%d", (target_scr && lv_obj_is_valid(target_scr)) ? 1 : 0);
     if (!target_scr || !lv_obj_is_valid(target_scr)) return;
     ui_load_screen(target_scr, true);
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+    if(launcher_order_changed)lv_async_call([](void*){
+      if(launcher_order_changed&&native_launcher_is_active()){
+        launcher_order_changed=false;native_launcher_release();native_launcher_restore();
+      }
+    },nullptr);
+#endif
   }
 }
 
@@ -699,14 +710,14 @@ static void wifi_ta_event(lv_event_t *e)
     if (!wifi_ctx.kb || !lv_obj_is_valid(wifi_ctx.kb)) return;
     if (!wifi_ctx.content || !lv_obj_is_valid(wifi_ctx.content)) return;
     lv_obj_clear_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
-    lv_keyboard_set_textarea(wifi_ctx.kb, ta);
+    attach_touch_keyboard(wifi_ctx.kb, ta);
     lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT - WIFI_KB_HEIGHT);
     lv_obj_scroll_to_view(ta, LV_ANIM_ON);
   } else if (code == LV_EVENT_DEFOCUSED) {
     if (!wifi_ctx.kb || !lv_obj_is_valid(wifi_ctx.kb)) return;
     if (!wifi_ctx.content || !lv_obj_is_valid(wifi_ctx.content)) return;
     lv_obj_add_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
-    lv_keyboard_set_textarea(wifi_ctx.kb, nullptr);
+    attach_touch_keyboard(wifi_ctx.kb, nullptr);
     lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
 }
@@ -719,7 +730,7 @@ static void wifi_kb_event(lv_event_t *e)
     if (!wifi_ctx.content || !lv_obj_is_valid(wifi_ctx.content)) return;
     lv_obj_t *ta = lv_keyboard_get_textarea(wifi_ctx.kb);
     if (ta) lv_obj_clear_state(ta, LV_STATE_FOCUSED);
-    lv_keyboard_set_textarea(wifi_ctx.kb, nullptr);
+    attach_touch_keyboard(wifi_ctx.kb, nullptr);
     lv_obj_add_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
@@ -847,7 +858,7 @@ static void wifi_scan_event(lv_event_t *e)
   if (lv_event_get_code(e) != LV_EVENT_CLICKED || wifi_ctx.scan_in_progress) return;
 
   if (wifi_ctx.kb && lv_obj_is_valid(wifi_ctx.kb)) {
-    lv_keyboard_set_textarea(wifi_ctx.kb, nullptr);
+    attach_touch_keyboard(wifi_ctx.kb, nullptr);
     lv_obj_add_flag(wifi_ctx.kb, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_height(wifi_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
@@ -938,6 +949,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_style_text_color(ssid_label, lv_color_white(), 0);
 
   lv_obj_t *ssid_input = lv_textarea_create(content);
+  configure_text_input(ssid_input);
   lv_obj_set_width(ssid_input, lv_pct(100));
   lv_textarea_set_one_line(ssid_input, true);
   lv_textarea_set_placeholder_text(ssid_input, i18n::tr("Enter SSID"));
@@ -972,6 +984,7 @@ static void open_wifi_screen(lv_event_t *e)
   lv_obj_set_style_text_color(pass_label, lv_color_white(), 0);
 
   lv_obj_t *pass_input = lv_textarea_create(content);
+  configure_text_input(pass_input);
   lv_obj_set_width(pass_input, lv_pct(100));
   lv_textarea_set_one_line(pass_input, true);
   lv_textarea_set_password_mode(pass_input, false);
@@ -1192,14 +1205,14 @@ static void weather_ta_event(lv_event_t *e)
     if (!weather_ctx.kb || !lv_obj_is_valid(weather_ctx.kb)) return;
     if (!weather_ctx.content || !lv_obj_is_valid(weather_ctx.content)) return;
     lv_obj_clear_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
-    lv_keyboard_set_textarea(weather_ctx.kb, ta);
+    attach_touch_keyboard(weather_ctx.kb, ta);
     lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT - WIFI_KB_HEIGHT);
     lv_obj_scroll_to_view(ta, LV_ANIM_ON);
   } else if (code == LV_EVENT_DEFOCUSED) {
     if (!weather_ctx.kb || !lv_obj_is_valid(weather_ctx.kb)) return;
     if (!weather_ctx.content || !lv_obj_is_valid(weather_ctx.content)) return;
     lv_obj_add_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
-    lv_keyboard_set_textarea(weather_ctx.kb, nullptr);
+    attach_touch_keyboard(weather_ctx.kb, nullptr);
     lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
 }
@@ -1212,7 +1225,7 @@ static void weather_kb_event(lv_event_t *e)
     if (!weather_ctx.content || !lv_obj_is_valid(weather_ctx.content)) return;
     lv_obj_t *ta = lv_keyboard_get_textarea(weather_ctx.kb);
     if (ta) lv_obj_clear_state(ta, LV_STATE_FOCUSED);
-    lv_keyboard_set_textarea(weather_ctx.kb, nullptr);
+    attach_touch_keyboard(weather_ctx.kb, nullptr);
     lv_obj_add_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
@@ -1316,7 +1329,7 @@ static void weather_search_event(lv_event_t *e)
   }
   if (weather_ctx.kb && lv_obj_is_valid(weather_ctx.kb)) {
     lv_obj_add_flag(weather_ctx.kb, LV_OBJ_FLAG_HIDDEN);
-    lv_keyboard_set_textarea(weather_ctx.kb, nullptr);
+    attach_touch_keyboard(weather_ctx.kb, nullptr);
     lv_obj_set_height(weather_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
   if (WeatherLocationSearchService::instance().search(query)) {
@@ -1454,6 +1467,7 @@ static void open_weather_screen(lv_event_t *e)
   lv_label_set_text(search_title, i18n::tr("Add a location"));
   lv_obj_set_style_text_color(search_title, lv_color_white(), 0);
   lv_obj_t *search_input = lv_textarea_create(content);
+  configure_text_input(search_input);
   lv_obj_set_width(search_input, lv_pct(100));
   lv_textarea_set_one_line(search_input, true);
   lv_textarea_set_placeholder_text(search_input, i18n::tr("City or postal code"));
@@ -1561,14 +1575,14 @@ static void planes_ta_event(lv_event_t *e)
     if (!planes_ctx.kb || !lv_obj_is_valid(planes_ctx.kb)) return;
     if (!planes_ctx.content || !lv_obj_is_valid(planes_ctx.content)) return;
     lv_obj_clear_flag(planes_ctx.kb, LV_OBJ_FLAG_HIDDEN);
-    lv_keyboard_set_textarea(planes_ctx.kb, ta);
+    attach_touch_keyboard(planes_ctx.kb, ta);
     lv_obj_set_height(planes_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT - WIFI_KB_HEIGHT);
     lv_obj_scroll_to_view(ta, LV_ANIM_ON);
   } else if (code == LV_EVENT_DEFOCUSED) {
     if (!planes_ctx.kb || !lv_obj_is_valid(planes_ctx.kb)) return;
     if (!planes_ctx.content || !lv_obj_is_valid(planes_ctx.content)) return;
     lv_obj_add_flag(planes_ctx.kb, LV_OBJ_FLAG_HIDDEN);
-    lv_keyboard_set_textarea(planes_ctx.kb, nullptr);
+    attach_touch_keyboard(planes_ctx.kb, nullptr);
     lv_obj_set_height(planes_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
 }
@@ -1581,7 +1595,7 @@ static void planes_kb_event(lv_event_t *e)
     if (!planes_ctx.content || !lv_obj_is_valid(planes_ctx.content)) return;
     lv_obj_t *ta = lv_keyboard_get_textarea(planes_ctx.kb);
     if (ta) lv_obj_clear_state(ta, LV_STATE_FOCUSED);
-    lv_keyboard_set_textarea(planes_ctx.kb, nullptr);
+    attach_touch_keyboard(planes_ctx.kb, nullptr);
     lv_obj_add_flag(planes_ctx.kb, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_height(planes_ctx.content, WIFI_SCREEN_H - WIFI_BAR_HEIGHT);
   }
@@ -1641,6 +1655,7 @@ static void open_planes_location_screen(lv_event_t *e)
   lv_obj_set_style_text_color(lat_label, lv_color_white(), 0);
 
   lv_obj_t *lat_input = lv_textarea_create(content);
+  configure_text_input(lat_input);
   lv_obj_set_width(lat_input, lv_pct(100));
   lv_textarea_set_one_line(lat_input, true);
   lv_textarea_set_accepted_chars(lat_input, "0123456789-.,");
@@ -1653,6 +1668,7 @@ static void open_planes_location_screen(lv_event_t *e)
   lv_obj_set_style_text_color(lon_label, lv_color_white(), 0);
 
   lv_obj_t *lon_input = lv_textarea_create(content);
+  configure_text_input(lon_input);
   lv_obj_set_width(lon_input, lv_pct(100));
   lv_textarea_set_one_line(lon_input, true);
   lv_textarea_set_accepted_chars(lon_input, "0123456789-.,");
@@ -1678,6 +1694,7 @@ static void open_planes_location_screen(lv_event_t *e)
   lv_obj_set_style_text_color(range_label, lv_color_white(), 0);
 
   lv_obj_t *range_input = lv_textarea_create(content);
+  configure_text_input(range_input);
   lv_obj_set_width(range_input, lv_pct(100));
   lv_textarea_set_one_line(range_input, true);
   lv_textarea_set_accepted_chars(range_input, "0123456789.,");
@@ -1955,6 +1972,78 @@ static void open_display_screen(lv_event_t *e)
   UiSessionState::set_route("settings_display");
 }
 
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+struct ArrangeAppsContext;
+struct ArrangeAppRow {
+  ArrangeAppsContext *context=nullptr;size_t index=0;
+  lv_obj_t *row=nullptr,*label=nullptr,*up=nullptr,*down=nullptr;
+};
+struct ArrangeAppsContext {
+  std::vector<std::string> ids,names;
+  std::vector<ArrangeAppRow> rows;
+  lv_obj_t *status=nullptr;
+};
+static void refresh_arrange_apps(ArrangeAppsContext &ctx){
+  for(size_t i=0;i<ctx.rows.size();++i){
+    auto &row=ctx.rows[i];
+    lv_label_set_text(row.label,(std::to_string(i+1)+". "+ctx.names[i]).c_str());
+    if(i==0)lv_obj_add_state(row.up,LV_STATE_DISABLED);else lv_obj_remove_state(row.up,LV_STATE_DISABLED);
+    if(i+1==ctx.rows.size())lv_obj_add_state(row.down,LV_STATE_DISABLED);else lv_obj_remove_state(row.down,LV_STATE_DISABLED);
+  }
+}
+static void move_arranged_app(lv_event_t *e){
+  auto &row=*static_cast<ArrangeAppRow*>(lv_event_get_user_data(e));auto &ctx=*row.context;
+  const bool up=lv_event_get_target(e)==row.up;const size_t from=row.index;
+  if((up&&from==0)||(!up&&from+1>=ctx.ids.size()))return;
+  const size_t to=up?from-1:from+1;
+  auto order=ctx.ids;std::swap(order[from],order[to]);
+  auto &cfg=ConfigStoreService::instance();bool saved=cfg.load("launcher");
+  if(saved){cfg.set("order",launcher::serialize(order));saved=cfg.save();}
+  lv_label_set_text(ctx.status,i18n::tr(saved?"Saved":"Could not save settings"));
+  if(!saved){cfg.load("launcher");lv_obj_scroll_to_view(ctx.status,LV_ANIM_OFF);return;}
+  ctx.ids=std::move(order);std::swap(ctx.names[from],ctx.names[to]);launcher_order_changed=true;
+  refresh_arrange_apps(ctx);
+  lv_obj_scroll_to_view(ctx.rows[to].row,LV_ANIM_OFF);
+}
+static void open_arrange_apps(lv_event_t *e){
+  auto *settings=e?static_cast<lv_obj_t*>(lv_event_get_user_data(e)):route_restore_settings_screen;
+  if(!settings||!lv_obj_is_valid(settings))return;
+  auto *ctx=new ArrangeAppsContext;
+  std::vector<std::string> available,names;
+  available.push_back("system:add-apps");names.push_back(i18n::tr("Add apps"));
+  const auto &registry=AppRegistry::instance();
+  for(int i=0;i<registry.count();++i){available.push_back(std::string("builtin:")+registry.apps()[i].id);names.push_back(i18n::tr(registry.apps()[i].name));}
+  for(const auto &app:native_app::store::installed())if(app.launchable){available.push_back("native:"+app.manifest.id);names.push_back(app.manifest.name);}
+  auto &cfg=ConfigStoreService::instance();const bool loaded=cfg.load("launcher");
+  ctx->ids=launcher::reconcile(loaded?cfg.get("order",""):"",available);
+  for(const auto &id:ctx->ids)ctx->names.push_back(names[std::find(available.begin(),available.end(),id)-available.begin()]);
+  ctx->rows.resize(ctx->ids.size());
+  auto *scr=lv_obj_create(nullptr);lv_obj_set_style_bg_color(scr,lv_color_hex(0x1e2030),0);
+  lv_obj_set_style_pad_all(scr,0,0);lv_obj_set_style_border_width(scr,0,0);lv_obj_remove_flag(scr,LV_OBJ_FLAG_SCROLLABLE);
+  make_top_bar(scr,i18n::tr("Arrange apps"),settings,false);
+  lv_obj_add_event_cb(scr,[](lv_event_t *event){delete static_cast<ArrangeAppsContext*>(lv_event_get_user_data(event));},LV_EVENT_DELETE,ctx);
+  auto *list=lv_obj_create(scr);lv_obj_set_pos(list,0,44);lv_obj_set_size(list,lv_pct(100),lv_display_get_vertical_resolution(nullptr)-44);
+  lv_obj_set_style_bg_opa(list,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(list,0,0);lv_obj_set_style_pad_all(list,12,0);lv_obj_set_style_pad_row(list,8,0);
+  lv_obj_set_flex_flow(list,LV_FLEX_FLOW_COLUMN);lv_obj_set_scroll_dir(list,LV_DIR_VER);
+  ctx->status=lv_label_create(list);lv_obj_set_width(ctx->status,lv_pct(100));lv_obj_set_style_text_font(ctx->status,i18n::font14(),0);
+  lv_obj_set_style_text_color(ctx->status,lv_color_hex(0xb7bdd7),0);
+  lv_label_set_text(ctx->status,i18n::tr(loaded?"Move apps up or down. Changes save automatically.":"Could not load settings"));
+  for(size_t i=0;i<ctx->rows.size();++i){
+    auto &row=ctx->rows[i];row.context=ctx;row.index=i;row.row=lv_obj_create(list);
+    lv_obj_set_size(row.row,lv_pct(100),68);lv_obj_remove_flag(row.row,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(row.row,lv_color_hex(0x2a2d42),0);lv_obj_set_style_border_width(row.row,0,0);lv_obj_set_style_pad_all(row.row,6,0);
+    row.label=lv_label_create(row.row);lv_obj_set_size(row.label,164,2*i18n::font14()->line_height);
+    lv_obj_set_style_text_color(row.label,lv_color_white(),0);
+    lv_obj_set_style_text_font(row.label,i18n::font14(),0);lv_label_set_long_mode(row.label,LV_LABEL_LONG_DOT);lv_obj_align(row.label,LV_ALIGN_LEFT_MID,0,0);
+    auto control=[&](const char *symbol,int x){auto *button=lv_button_create(row.row);lv_obj_set_size(button,44,48);lv_obj_align(button,LV_ALIGN_RIGHT_MID,x,0);
+      auto *label=lv_label_create(button);lv_label_set_text(label,symbol);lv_obj_center(label);
+      lv_obj_add_event_cb(button,move_arranged_app,LV_EVENT_CLICKED,&row);return button;};
+    row.up=control(LV_SYMBOL_UP,-50);row.down=control(LV_SYMBOL_DOWN,0);
+  }
+  refresh_arrange_apps(*ctx);ui_load_screen(scr,false);UiSessionState::set_route("settings_arrange_apps");
+}
+#endif
+
 static lv_obj_t *app_settings_list=nullptr;
 bool settings_apps_active(){return app_settings_list && lv_screen_active()==app_settings_list;}
 static lv_obj_t *create_settings_screen(lv_obj_t *home_scr, bool apps_only=false);
@@ -2013,6 +2102,7 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr, bool apps_only)
     return scr;
   }
   settings_row(i18n::tr("Apps"),switch_settings_list,home_scr);
+  settings_row(i18n::tr("Arrange apps"),open_arrange_apps,scr);
 #endif
 
   // Language changes are applied on the next main-loop iteration so this
@@ -2221,6 +2311,11 @@ void settings_launch_with_route(const char *route)
     return;
   }
 
+#if GADGET_OS_NATIVE_APP_LOADER || GADGET_OS_APP_STORE_SIMULATOR
+  if(std::strcmp(route,"settings_arrange_apps")==0){
+    open_arrange_apps(nullptr);route_restore_settings_screen=nullptr;return;
+  }
+#endif
   if (std::strcmp(route, "settings_system") == 0) {
     open_system_screen(nullptr);
   } else if (std::strcmp(route, "settings_wifi") == 0) {

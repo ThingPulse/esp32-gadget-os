@@ -3,6 +3,9 @@
 #include "services/WeatherLocationStore.h"
 #include "services/ConfigStoreService.h"
 #include "services/TimeService.h"
+#include "services/FileSystemService.h"
+#include "../../experiments/native-app/example/planes_cache.h"
+#include <memory>
 #include "services/WifiService.h"
 #include "services/TransitProvider.h"
 #include "ui/I18n.h"
@@ -39,6 +42,7 @@ std::string cache_path;bool opened=false,location_loaded=false;gadget_environmen
 JsonVariantConst at(const char*path){if(!opened||!path||strlen(path)>128)return {};JsonVariantConst v=document.as<JsonVariantConst>();const char*p=path;unsigned depth=0;while(*p){if(++depth>8)return {};char key[49];unsigned n=0;while(*p&&*p!='/'){if(n==48)return {};key[n++]=*p++;}key[n]=0;if(*p)++p;if(!n)return {};if(v.is<JsonArrayConst>()){unsigned i=0;for(unsigned j=0;j<n;++j){if(key[j]<'0'||key[j]>'9'||i>1000)return {};i=i*10+key[j]-'0';}v=v[i];}else v=v[key];}return v;}
 int copy(const std::string&s,char*out,unsigned cap){if(!out||!cap||cap>8193||s.size()>=cap)return -1;memcpy(out,s.c_str(),s.size()+1);return s.size();}
 }
+static void import_plane_airports(const char*id);
 void begin(const char*id){end();if(!id||!*id||strlen(id)>32)return;for(const char*p=id;*p;++p)if(!(*p>='a'&&*p<='z')&&!(*p>='0'&&*p<='9')&&*p!='-')return;
 #ifdef ARDUINO
  LittleFS.mkdir("/apps/cache");cache_path="/apps/cache/";
@@ -46,6 +50,39 @@ void begin(const char*id){end();if(!id||!*id||strlen(id)>32)return;for(const cha
  mkdir(".pio",0700);mkdir(".pio/native-app-cache",0700);cache_path=".pio/native-app-cache/";
 #endif
  cache_path+=std::string(id)+".bin";
+ import_plane_airports(id);
+}
+// Copy the old learned landmarks once; never expose arbitrary files to an app
+// or re-import them after an uninstall. The app validates the saved view again.
+static void import_plane_airports(const char*id){
+ if(strcmp(id,"planes")&&strcmp(id,"planes-preview"))return;
+#ifdef ARDUINO
+ if(LittleFS.exists(cache_path.c_str()))return;
+#else
+ {std::ifstream existing(cache_path);if(existing)return;}
+#endif
+ auto&cfg=ConfigStoreService::instance();if(!cfg.begin()||!cfg.load("planes")||cfg.get_bool("package_airports_migrated",false))return;
+ auto&fs=FileSystemService::instance();std::string raw;JsonDocument doc;
+ if(!fs.begin()||!fs.fs().read("/cache/plane-airports.json",raw)||raw.size()>16384||deserializeJson(doc,raw)||doc["version"]!=1||!doc["airports"].is<JsonArray>()||doc["airports"].size()>64)return;
+ auto cache=std::make_unique<PlanesAirportCache>();cache->magic=0x504c4131;
+ if(!doc["lat"].is<double>()||!doc["lon"].is<double>()||!doc["range"].is<double>())return;
+ cache->lat=doc["lat"];cache->lon=doc["lon"];cache->range=doc["range"];
+ if(!std::isfinite(cache->lat)||!std::isfinite(cache->lon)||!std::isfinite(cache->range)||fabs(cache->lat)>90||fabs(cache->lon)>180||cache->range<=0||cache->range>20000)return;
+ for(JsonObjectConst o:doc["airports"].as<JsonArrayConst>()){
+  const char*code=o["code"]|"";size_t n=strlen(code);if(n<3||n>4||strspn(code,"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")!=n||!o["lat"].is<double>()||!o["lon"].is<double>())continue;
+  double lat=o["lat"],lon=o["lon"];if(!std::isfinite(lat)||!std::isfinite(lon)||fabs(lat)>90||fabs(lon)>180)continue;
+  bool duplicate=false;for(unsigned j=0;j<cache->count;++j)if(!strcmp(cache->airports[j].code,code))duplicate=true;if(duplicate)continue;
+  auto&a=cache->airports[cache->count++];strcpy(a.code,code);a.lat=lat;a.lon=lon;
+ }
+ bool saved=false;
+#ifdef ARDUINO
+ // This one-time bridge must finish before the newly launched app reads its
+ // cache; an asynchronous cache_write would race the first package frame.
+ std::string tmp=cache_path+".tmp";auto f=LittleFS.open(tmp.c_str(),"w");if(f){saved=f.write(reinterpret_cast<const uint8_t*>(cache.get()),sizeof(*cache))==sizeof(*cache);f.close();if(saved)saved=LittleFS.rename(tmp.c_str(),cache_path.c_str());if(!saved)LittleFS.remove(tmp.c_str());}
+#else
+ saved=cache_write(cache.get(),sizeof(*cache))==0;
+#endif
+ if(saved&&cfg.load("planes")){cfg.set("package_airports_migrated",true);cfg.save();}
 }
 void end(){json_close();cache_path.clear();location_loaded=false;}
 int32_t environment(gadget_environment*out){if(!out||out->struct_size<sizeof(*out))return -1;*out={sizeof(*out)};out->epoch=std::time(nullptr);out->clock_ready=out->epoch>=1600000000;out->german=i18n::german();out->use24=TimeService::instance().use_24h();out->online=1;
@@ -61,7 +98,7 @@ uint32_t parse_time(const char*s){if(!s||strlen(s)>40)return 0;auto t=transit::t
 int32_t format_time(uint32_t stamp,uint32_t mode,char*out,uint32_t cap){if(mode>2)return -1;
  if(mode==2){time_t t=stamp;tm utc{};gmtime_r(&t,&utc);char result[40];strftime(result,sizeof(result),i18n::german()?"%d.%m. %H:%M UTC":"%d %b %H:%M UTC",&utc);return copy(result,out,cap);}
  time_t t=stamp,now=time(nullptr);tm a{},b{};localtime_r(&t,&a);localtime_r(&now,&b);char clock[24];strftime(clock,sizeof(clock),TimeService::instance().use_24h()?"%H:%M":"%I:%M %p",&a);if(!mode)return copy(clock,out,cap);char date[40];if(a.tm_year==b.tm_year&&a.tm_yday==b.tm_yday)snprintf(date,sizeof(date),"%s",i18n::tr("Today"));else i18n::date(date,sizeof(date),a);return copy(std::string(date)+" - "+clock,out,cap);}
-int32_t json_open(const char*s,uint32_t n){json_close();if(!s||!n||n>196608||deserializeJson(document,s,n,DeserializationOption::NestingLimit(16))){json_close();return -1;}opened=true;return 0;}
+int32_t json_open(const char*s,uint32_t n){json_close();if(!s||!n||n>262144||deserializeJson(document,s,n,DeserializationOption::NestingLimit(32))){json_close();return -1;}opened=true;return 0;}
 int32_t json_get(const char*path,char*out,uint32_t cap){auto v=at(path);if(v.isNull()||v.is<JsonObjectConst>()||v.is<JsonArrayConst>())return -1;if(v.is<const char*>())return copy(v.as<const char*>(),out,cap);std::string s;serializeJson(v,s);return copy(s,out,cap);}
 int32_t json_count(const char*p){auto v=at(p);return v.is<JsonArrayConst>()?int32_t(v.size()):-1;}
 int32_t json_number(const char*p,int32_t scale,int32_t*out){auto v=at(p);if(!out||scale<1||scale>1000000||!v.is<double>())return -1;double n=std::round(v.as<double>()*scale);if(!std::isfinite(n)||n<INT32_MIN||n>INT32_MAX)return -1;*out=int32_t(n);return 0;}

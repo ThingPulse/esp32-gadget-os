@@ -10,7 +10,7 @@
     {
       "source": "system_monitor",
       "id": "system-monitor",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "description": "Monitor your Mac: CPU, memory, network, top processes and startup disk. Uses your existing Gadget Companion pairing."
     },
     {
@@ -22,25 +22,25 @@
     {
       "source": "stocks",
       "id": "stocks",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Track up to ten Yahoo Finance symbols with quotes, daily charts and an editable watchlist. No computer companion required."
     },
     {
       "source": "transit",
       "id": "transit",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "description": "Find stops, save favourites and follow live departures and route stops with Transitous."
     },
     {
       "source": "planes",
       "id": "planes",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "description": "Nearby aircraft radar with tracking trails, route details and shared or custom location."
     },
     {
       "source": "home_assistant",
       "id": "home-assistant",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Control lights, switches, scenes and scripts. Configure your Home Assistant dashboard from your phone."
     }
   ],

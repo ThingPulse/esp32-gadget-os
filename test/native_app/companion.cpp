@@ -36,8 +36,8 @@ int main(){
     assert(s.read(out,sizeof out,4294967200ULL+604800000ULL)==-1);
     assert(s.read(out,sizeof out,0)==-1);
     s.clear();assert(s.read(out,sizeof out,4294977200ULL)==-1);
-    SystemSnapshot sys;const char *sample=R"({"schema":1,"age":0,"host":"Mac","cpu":38,"ram":68,"cpu_hist":"ff003264","ct0_name":"node","ct0_pid":123,"ct0_value":90,"secret":"never forward","up_bps":-123,"power":99})";
-    assert(sys.update(sample,strlen(sample),1000));assert(sys.read(out,sizeof out,12000)>0);deserializeJson(d,out);assert(d["age"]==11);assert(d["cpu"]==38);assert(d["ct0_name"]=="node");assert(d["up_bps"]==-1);assert(d["power"]==-1);assert(d["secret"].isNull());assert(sys.read(out,2,12000)==-1);assert(!sys.update("{}",2,12000));sys.clear();assert(sys.read(out,sizeof out,12000)==-1);
+    SystemSnapshot sys;const char *sample=R"({"schema":1,"age":0,"host":"Mac","cpu":38,"ram":68,"cpu_hist":"ff003264","cpu_cores":"001964ff","ct0_name":"node","ct0_pid":123,"ct0_value":90,"secret":"never forward","up_bps":-123,"power":99})";
+    assert(sys.update(sample,strlen(sample),1000));assert(sys.read(out,sizeof out,12000)>0);deserializeJson(d,out);assert(d["age"]==11);assert(d["cpu"]==38);assert(d["cpu_cores"]=="001964ff");assert(d["ct0_name"]=="node");assert(d["up_bps"]==-1);assert(d["power"]==-1);assert(d["secret"].isNull());assert(sys.read(out,2,12000)==-1);assert(!sys.update("{}",2,12000));sys.clear();assert(sys.read(out,sizeof out,12000)==-1);
     ActivitySnapshot activity;
     const char *live=R"({"schema":1,"age":0,"enabled":1,"count":1,"total":1,"attention":1,"s0_id":"abc","s0_project":"gadget-os","s0_event":"Approval requested","s0_state":1,"s0_provider":0,"s0_elapsed":20,"s0_age":2,"prompt":"secret"})";
     assert(activity.update(live,strlen(live),1000));assert(activity.read(out,sizeof out,17000)>0);deserializeJson(d,out);assert(d["age"]==16);assert(d["s0_age"]==18);assert(d["s0_elapsed"]==36);assert(d["prompt"].isNull());

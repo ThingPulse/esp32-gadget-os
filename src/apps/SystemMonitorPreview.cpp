@@ -27,7 +27,7 @@ lv_obj_t *screen_obj, *home;
 lv_timer_t *app_timer;
 gadget_app_lifecycle lifecycle;
 bool closing=false;
-const char *sample=R"({"schema":1,"age":2,"host":"My MacBook","cpu":38,"cores":8,"ram":68,"mem_mib":11059,"total_mib":16384,"down_bps":2400000,"up_bps":180000,"battery":82,"power":1,"uptime":273600,"volume":"Macintosh HD","disk_total_mib":512000,"disk_free_mib":188416,"cpu_hist":"20232820251e28272b302c252b2a2c302e242428282b2a262c302d2a2626","ram_hist":"3f4042434241424443424141434443424140424344454443424445444344","ct0_name":"Safari","ct0_pid":1,"ct0_value":142,"ct1_name":"node","ct1_pid":2,"ct1_value":91,"ct2_name":"WindowServer","ct2_pid":3,"ct2_value":64,"ct3_name":"Codex","ct3_pid":4,"ct3_value":48,"ct4_name":"kernel_task","ct4_pid":5,"ct4_value":21,"mt0_name":"Safari","mt0_pid":1,"mt0_value":1638,"mt1_name":"Codex","mt1_pid":4,"mt1_value":1228,"mt2_name":"node","mt2_pid":2,"mt2_value":820,"mt3_name":"WindowServer","mt3_pid":3,"mt3_value":420,"mt4_name":"kernel_task","mt4_pid":5,"mt4_value":300})";
+const char *sample=R"({"schema":1,"age":2,"host":"My MacBook","cpu":38,"cores":8,"cpu_cores":"0a14283c50641923","ram":68,"mem_mib":11059,"total_mib":16384,"down_bps":2400000,"up_bps":180000,"battery":82,"power":1,"uptime":273600,"volume":"Macintosh HD","disk_total_mib":512000,"disk_free_mib":188416,"cpu_hist":"20232820251e28272b302c252b2a2c302e242428282b2a262c302d2a2626","ram_hist":"3f4042434241424443424141434443424140424344454443424445444344","ct0_name":"Safari","ct0_pid":1,"ct0_value":142,"ct1_name":"node","ct1_pid":2,"ct1_value":91,"ct2_name":"WindowServer","ct2_pid":3,"ct2_value":64,"ct3_name":"Codex","ct3_pid":4,"ct3_value":48,"ct4_name":"kernel_task","ct4_pid":5,"ct4_value":21,"mt0_name":"Safari","mt0_pid":1,"mt0_value":1638,"mt1_name":"Codex","mt1_pid":4,"mt1_value":1228,"mt2_name":"node","mt2_pid":2,"mt2_value":820,"mt3_name":"WindowServer","mt3_pid":3,"mt3_value":420,"mt4_name":"kernel_task","mt4_pid":5,"mt4_value":300})";
 void log_message(const char *s){printf("[System Monitor preview] %s\n",s);}
 gadget_handle timer_create(uint32_t ms,gadget_callback cb,void *user){
  struct TimerContext {gadget_callback callback;void *user;};static TimerContext context;context={cb,user};app_timer=lv_timer_create([](lv_timer_t *t){auto *c=static_cast<TimerContext*>(lv_timer_get_user_data(t));if(!closing)c->callback(c->user);},ms,&context);return app_timer;
@@ -58,7 +58,7 @@ void launch(){
  lv_obj_set_flex_flow(screen_obj,LV_FLEX_FLOW_COLUMN);
  lv_obj_set_flex_align(screen_obj,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
  native_app::ui::begin(screen_obj,dispatch);native_app::settings::begin("system-monitor-preview");
- static const gadget_host_api api={sizeof(api),1,7,log_message,nullptr,nullptr,nullptr,nullptr,timer_create,close_app,nullptr,json_number,&native_app::ui::api,setting_get,setting_set,nullptr,nullptr,[]()->int32_t{return 0;},json_string,nullptr,nullptr,channel_read};
+ static const gadget_host_api api={sizeof(api),1,11,log_message,nullptr,nullptr,nullptr,nullptr,timer_create,close_app,nullptr,json_number,&native_app::ui::api,setting_get,setting_set,nullptr,nullptr,[]()->int32_t{return 0;},json_string,nullptr,nullptr,channel_read};
  lifecycle={sizeof(lifecycle),1,2,nullptr};char *args[]={(char*)&api,(char*)&lifecycle};
  ui_load_screen(screen_obj,false);system_source::system_monitor_preview_entry(2,args);
 

@@ -52,7 +52,13 @@ int main(int argc,char **argv){
         assert(!find(home,"System Monitor"));std::cout<<"PASS: persistence across processes and removal\n";return 0;
     }
     assert(native_app::store::installed().empty());
-    click("Add apps");assert(find(lv_screen_active(),"Agent Dashboard"));capture(argv[1],"store-catalog");
+    click("Add apps");assert(find(lv_screen_active(),"Agent Dashboard"));
+    // Pairing must be above the catalogue rather than buried after its cards.
+    auto *pair=find(lv_screen_active(),"Pair computer");assert(pair);
+    assert(lv_obj_get_y(lv_obj_get_parent(pair))<lv_obj_get_y(lv_obj_get_parent(find(lv_screen_active(),"Agent Dashboard"))));
+    capture(argv[1],"store-catalog");
+    click("Pair computer");assert(find(lv_screen_active(),"Connect computer"));
+    click("Back");assert(native_launcher_is_active());click("Add apps");
     click("System Monitor");assert(find(lv_screen_active(),"Install app"));
     assert(find(lv_screen_active(),"Requires Gadget Companion on your computer"));capture(argv[1],"store-details");
     click("Set up computer");assert(find(lv_screen_active(),"Connect computer"));capture(argv[1],"companion-setup");

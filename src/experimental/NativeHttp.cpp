@@ -71,13 +71,13 @@ void worker(void *arg)
 }
 int32_t start(const char *url,uint32_t generation,uint32_t capacity)
 {
- if(!url||strncmp(url,"https://",8)||strlen(url)>2047||capacity>196608)return GADGET_HTTP_INVALID;
+ if(!url||strncmp(url,"https://",8)||strlen(url)>2047||capacity>262144)return GADGET_HTTP_INVALID;
  if(started&&uint32_t(millis()-last_start)<5000)return GADGET_HTTP_RATE_LIMIT;
  gadget_http_request args{sizeof(args),url,"GET","","","",capacity};return start_request(&args,generation);
 }
 int32_t start_request(const gadget_http_request *args,uint32_t generation)
 {
- if(!args||args->struct_size<sizeof(*args)||!args->url||!args->method||!args->body||!args->bearer||!args->ca||args->response_limit<1||args->response_limit>196608)return GADGET_HTTP_INVALID;
+ if(!args||args->struct_size<sizeof(*args)||!args->url||!args->method||!args->body||!args->bearer||!args->ca||args->response_limit<1||args->response_limit>262144)return GADGET_HTTP_INVALID;
  const std::string url=args->url,method=args->method,body=args->body,token=args->bearer,ca=args->ca;
  size_t start=url.compare(0,8,"https://")==0?8:url.compare(0,7,"http://")==0?7:0;
  if(!start||url.size()>2047||url.size()<=start||url.find_first_of("@#")!=std::string::npos||

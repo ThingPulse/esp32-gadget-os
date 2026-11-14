@@ -1,6 +1,7 @@
 #include "experimental/NativeUi.h"
 #include "experimental/NativeSettings.h"
 #include "AppRegistry.h"
+#include "ui/TouchKeyboard.h"
 #include <cassert>
 #include <cstring>
 #include <string>
@@ -30,11 +31,27 @@ int main(int argc,char **argv){assert(argc==2);lv_init();lv_tick_set_cb([](){ret
  lv_sysmon_hide_performance(d);
 #endif
  auto *screen=lv_screen_active();
+ // Shared built-in form behavior: switching fields transfers the steady caret.
+ auto *first=lv_textarea_create(screen),*second=lv_textarea_create(screen);
+ auto *keyboard=lv_keyboard_create(screen);configure_text_input(first);configure_text_input(second);
+ attach_touch_keyboard(keyboard,first);
+ assert(lv_obj_has_state(first,LV_STATE_FOCUSED)&&lv_obj_get_style_border_width(first,LV_PART_CURSOR)==2);
+ assert(lv_obj_get_style_anim_duration(first,LV_PART_CURSOR)==0);
+ attach_touch_keyboard(keyboard,second);
+ assert(!lv_obj_has_state(first,LV_STATE_FOCUSED)&&lv_obj_get_style_border_width(first,LV_PART_CURSOR)==0);
+ assert(lv_obj_has_state(second,LV_STATE_FOCUSED)&&lv_obj_get_style_border_width(second,LV_PART_CURSOR)==2);
+ attach_touch_keyboard(keyboard,nullptr);assert(!lv_obj_has_state(second,LV_STATE_FOCUSED));
+ lv_obj_clean(screen);
+
  for(int cycle=0;cycle<100;++cycle){ui::begin(screen,dispatch);auto root=ui::api.create(nullptr,GADGET_UI_ROOT,nullptr,nullptr,nullptr);assert(root);assert(!ui::api.create(nullptr,GADGET_UI_ROOT,nullptr,nullptr,nullptr));assert(!ui::api.create((void*)123,GADGET_UI_LABEL,"bad",nullptr,nullptr));
  auto graph=ui::api.create(root,GADGET_UI_CHART,nullptr,nullptr,nullptr);int32_t points[]={0,-1,100};assert(ui::api.chart(graph,points,3)==0);assert(ui::api.chart(graph,points,61)==-1);points[0]=101;assert(ui::api.chart(graph,points,3)==-1);assert(ui::api.opacity(graph,101)==-1);
  auto card=ui::api.create(root,GADGET_UI_CONTAINER,nullptr,nullptr,nullptr);auto label=ui::api.create(card,GADGET_UI_LABEL,"test",nullptr,nullptr);auto bar=ui::api.create(card,GADGET_UI_BAR,nullptr,nullptr,nullptr);assert(ui::api.value(bar,101)==-1);assert(ui::api.value(bar,72)==0);assert(ui::api.value(label,1)==-1);assert(ui::api.text(label,std::string(161,'x').c_str())==-1);
  auto button=ui::api.create(card,GADGET_UI_BUTTON,"click",clicked,nullptr);assert(button);auto *caption=find(screen,"click");assert(caption);
  auto *button_obj=lv_obj_get_parent(caption);lv_obj_update_layout(screen);
+ assert(ui::api.style(button,GADGET_STYLE_DISABLED)==0&&lv_obj_has_state(button_obj,LV_STATE_DISABLED));assert(ui::api.style(button,GADGET_STYLE_ENABLED)==0&&!lv_obj_has_state(button_obj,LV_STATE_DISABLED));
+ assert(ui::api.style(label,GADGET_STYLE_MARQUEE)==0&&lv_label_get_long_mode(find(screen,"test"))==LV_LABEL_LONG_SCROLL_CIRCULAR);
+ assert(ui::api.style(graph,GADGET_STYLE_CHART_SMOOTH)==0);points[0]=0;assert(ui::api.chart_fit(graph,points,3)==0);auto*chart=lv_obj_get_child(screen,0);assert(lv_obj_check_type(chart,&lv_chart_class));auto*series=lv_chart_get_series_next(chart,nullptr);auto*values=lv_chart_get_series_y_array(chart,series);unsigned point_count=lv_chart_get_point_count(chart);assert(point_count>3&&point_count<=289&&values[0]==80&&values[point_count-1]==920);for(unsigned j=1;j+1<point_count;++j)assert(values[j]==LV_CHART_POINT_NONE);
+
  const auto normal=lv_obj_get_style_bg_color(button_obj,LV_PART_MAIN);
  lv_obj_add_state(button_obj,LV_STATE_PRESSED);
  assert(!lv_color_eq(normal,lv_obj_get_style_bg_color(button_obj,LV_PART_MAIN)));
@@ -75,6 +92,7 @@ int main(int argc,char **argv){assert(argc==2);lv_init();lv_tick_set_cb([](){ret
  back=find(lv_screen_active(),LV_SYMBOL_LEFT);lv_obj_send_event(lv_obj_get_parent(back),LV_EVENT_CLICKED,nullptr);lv_timer_handler();unsetenv("GADGET_ACTIVITY_SNAPSHOT");
  auto system_launch=system_monitor_simulator_launch;system_launch();capture(argv[1],"system-monitor-overview");assert(find(lv_screen_active(),"38%"));
  auto click_text=[&](const char*t){auto*l=find(lv_screen_active(),t);assert(l);lv_obj_send_event(lv_obj_get_parent(l),LV_EVENT_CLICKED,nullptr);};
+ click_text("CPU");capture(argv[1],"system-monitor-cores");assert(find(lv_screen_active(),"Core 8"));assert(find(lv_screen_active(),"100%"));click_text(LV_SYMBOL_LEFT);assert(find(lv_screen_active(),"38%"));
  click_text("Processes");capture(argv[1],"system-monitor-processes");assert(find(lv_screen_active(),"14.2%"));click_text("Memory");capture(argv[1],"system-monitor-memory");assert(find(lv_screen_active(),"1.6 GB"));
  click_text("Storage");capture(argv[1],"system-monitor-storage");assert(find(lv_screen_active(),"184 GB free"));click_text(LV_SYMBOL_LEFT);lv_timer_handler();
  {std::ofstream f("system.json");f<<R"({"schema":1,"age":0,"host":"My MacBook","cpu":38,"cores":8,"ram":84,"ram10":837,"mem_mib":13713,"total_mib":16384,"ram_hist":"545454545454535353535353","ram_frac":"224466998877"})";}setenv("GADGET_SYSTEM_SNAPSHOT","system.json",1);system_launch();capture(argv[1],"system-monitor-memory-precision");assert(find(lv_screen_active(),"83.7%"));assert(find(lv_screen_active(),"82-86% / 2 min"));click_text(LV_SYMBOL_LEFT);lv_timer_handler();

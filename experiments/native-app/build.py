@@ -5,6 +5,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser()
 p.add_argument('--signing-key', type=pathlib.Path, help='ECDSA P-256 private key; omit only for Developer mode')
 p.add_argument('--public-key', type=pathlib.Path, default=ROOT/'experiments/native-app/signing-public.pem')
+p.add_argument('--quiet', action='store_true', help='Skip the verbose ELF section/relocation listing')
 p.add_argument('--chip', required=True, choices=['esp32', 'esp32s3'])
 p.add_argument('--id', help='Optional package ID for independent launcher discovery')
 p.add_argument('--version', default='0.1.0')
@@ -48,10 +49,11 @@ subprocess.run([str(strip), '--strip-unneeded', '--remove-section=.comment',
     '--remove-section=.got.loc', '--remove-section=.dynamic', '--remove-section=.xt.lit',
     '--remove-section=.xt.prop', '--remove-section=.xtensa.info', str(elf)], check=True)
 manifest = dict(id=app_id, version=a.version, name={'transit':'Transit','planes':'Planes','home_assistant':'Home Assistant','stocks':'Stocks','settings_demo':'Settings Demo','counter':'Native Counter','iss':'ISS Position','iss_tracker':'ISS','system_monitor':'System Monitor','agent_usage':'Agent Dashboard Demo' if a.usage_demo else 'Agent Dashboard'}[a.app], chip=a.chip,
-    api_major=1, api_minor={'transit':10,'planes':10,'home_assistant':10,'stocks':9,'settings_demo':8,'counter':0,'iss':1,'iss_tracker':5,'agent_usage':7,'system_monitor':7}[a.app], executable='app.elf')
+    api_major=1, api_minor={'transit':11,'planes':11,'home_assistant':11,'stocks':11,'settings_demo':8,'counter':0,'iss':1,'iss_tracker':5,'agent_usage':7,'system_monitor':11}[a.app], executable='app.elf')
 if a.app in ('transit','planes','home_assistant','settings_demo','stocks'): manifest['settings']=True
 (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-print(subprocess.check_output([str(readelf), '-hSWr', str(elf)], text=True))
+if not a.quiet:
+ print(subprocess.check_output([str(readelf), '-hSWr', str(elf)], text=True))
 print(json.dumps(dict(chip=a.chip, executable_bytes=elf.stat().st_size,
     package_bytes=sum(f.stat().st_size for f in out.iterdir()),
     sha256=hashlib.sha256(elf.read_bytes()).hexdigest(),
@@ -67,18 +69,18 @@ for y in range(40):
    if (5<=x<35 and (y in (7,8,29,30))) or (y>=7 and y<=30 and x in (5,6,33,34)) or (18<=x<=21 and 31<=y<35) or (12<=x<=27 and y==35): rgb=(99,230,190)
    if 9<=x<=30 and abs(y-(20 if x<15 else 13 if x<20 else 24 if x<25 else 18))<2: rgb=(99,230,190)
   elif a.app=='transit':
-   rgb=(23,33,49)
+   rgb=(35,126,119)
    if (8<=x<=31 and 7<=y<=30):rgb=(99,230,190)
-   if (11<=x<=28 and 10<=y<=21):rgb=(23,33,49)
+   if (11<=x<=28 and 10<=y<=21):rgb=(35,126,119)
    if (11<=x<=15 or 24<=x<=28) and 31<=y<=34:rgb=(99,230,190)
    if (12<=x<=15 or 25<=x<=28) and 25<=y<=27:rgb=(255,255,255)
   elif a.app=='planes':
-   rgb=(23,33,49)
+   rgb=(41,93,181)
    if (18<=x<=21 and 6<=y<=34) or (10<=y<=25 and abs(x-20)<=max(2,y-10)) or (29<=y<=33 and abs(x-20)<=y-27):rgb=(116,192,252)
   elif a.app=='home_assistant':
-   rgb=(23,33,49)
+   rgb=(35,126,119)
    if (abs(x-20)<=14 and abs(y-(8+abs(x-20)))<=2) or (10<=x<=30 and 20<=y<=34):rgb=(99,230,190)
-   if 17<=x<=23 and 25<=y<=34:rgb=(23,33,49)
+   if 17<=x<=23 and 25<=y<=34:rgb=(35,126,119)
   elif a.app=='agent_usage':
    rgb=(23,33,49)
    if (7<=x<13 and 24<=y<34) or (17<=x<23 and 16<=y<34) or (27<=x<33 and 6<=y<34): rgb=(99,230,190)

@@ -1,7 +1,8 @@
-# System Monitor 0.1.0
+# System Monitor 0.3.0
 
 Implements the approved [v1 contract](system-monitor-v1-contract.md) as an installable
-SDK 1.4 app. Use updated Gadget OS firmware and Gadget Companion 0.4.0. Initial
+SDK 1.11 app. Per-core CPU load requires the updated firmware snapshot forwarder
+and Gadget Companion 0.7.1. Initial
 collector support is macOS, without admin access or additional Node packages.
 
 ## Run
@@ -20,6 +21,10 @@ node tools/gadget-companion/src/cli.mjs --no-codex
 
 Open Installed apps → System Monitor. The header's Back closes the app; bottom
 tabs select Overview, Processes and Storage. Processes sorts by CPU or memory.
+Tap the CPU card in Overview to see individual logical-core loads: eight cores
+per page, up to 64 cores. Each bar spans 0–100% of that core, independently of
+the aggregate CPU percentage. Back returns to Overview. An older companion
+shows “Per-core data unavailable”; first samples and gaps show “--”.
 Refresh requests a sample on the next companion poll, including refreshing the
 slower cached metrics. Taps never wait synchronously for network operations.
 
@@ -114,3 +119,9 @@ and that Agent Usage continues to work. Offline/reconnect rendering was tested
 automatically; a physical disconnect observation was not requested from the user.
 The Grande build was compiled, but not flashed for this milestone. No release or
 catalogue was published, and no device backup or restoration was performed.
+
+The optional schema-1 `cpu_cores` field contains up to 64 two-digit lowercase
+hex values in `os.cpus()` order: `00`–`64` are 0–100% and `ff` is unavailable.
+The existing 2 KiB snapshot limit and aggregate CPU history remain unchanged.
+Hosts with more than 64 logical cores are explicitly labeled as showing the
+first 64; aggregate load still covers the entire host.

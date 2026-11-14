@@ -224,6 +224,16 @@ void render(){
         text(content,"Select an app to remove it.",true);
         return;
     }
+    // Local pairing/upload must remain reachable while the catalogue loads,
+    // fails, or grows beyond the first screenful of apps.
+    if(selection<0){
+        button(content,"Pair computer",[](lv_event_t*){pair_requested=true;closing=true;});
+#if defined(ARDUINO)
+        auto *browser=button(content,"Browser installation",[](lv_event_t*){browser_requested=true;closing=true;});
+        lv_obj_set_style_bg_opa(browser,LV_OPA_TRANSP,0);
+        lv_obj_set_style_shadow_width(browser,0,0);
+#endif
+    }
     if(selection<0&&loaded&&!transfer){
         const auto count=std::count_if(items.begin(),items.end(),update_available);
         if(count)text(content,(std::string(i18n::tr("Updates available:"))+" "+std::to_string(count)).c_str(),true);
@@ -279,12 +289,6 @@ void render(){
         if(page)button(content,"Previous apps",[](lv_event_t*){--page;redraw=true;});
         if((page+1)*PageSize<items.size())button(content,"More apps",[](lv_event_t*){++page;redraw=true;});
     }
-    button(content,"Pair computer",[](lv_event_t*){pair_requested=true;closing=true;});
-#if defined(ARDUINO)
-    auto *browser=button(content,"Browser installation",[](lv_event_t*){browser_requested=true;closing=true;});
-    lv_obj_set_style_bg_opa(browser,LV_OPA_TRANSP,0);
-    lv_obj_set_style_shadow_width(browser,0,0);
-#endif
 }
 void show(){
     requested=false;visible=true;selection=-1;page=0;installed_view=false;remove_id.clear();native_launcher_release();

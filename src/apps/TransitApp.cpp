@@ -70,11 +70,11 @@ void render(){
  if(ctx.view==2){
   if(!ctx.submitted){
    label(ctx.body,i18n::tr("Station, city or stop name"),12,10,w-24,Muted);
-   ctx.input=lv_textarea_create(ctx.body);lv_obj_set_pos(ctx.input,12,40);lv_obj_set_size(ctx.input,w-24,46);lv_textarea_set_one_line(ctx.input,true);lv_textarea_set_max_length(ctx.input,80);lv_textarea_set_text(ctx.input,ctx.query.c_str());
+   ctx.input=lv_textarea_create(ctx.body);configure_text_input(ctx.input);lv_obj_set_pos(ctx.input,12,40);lv_obj_set_size(ctx.input,w-24,46);lv_textarea_set_one_line(ctx.input,true);lv_textarea_set_max_length(ctx.input,80);lv_textarea_set_text(ctx.input,ctx.query.c_str());
    lv_obj_set_style_bg_color(ctx.input,lv_color_hex(Card),0);lv_obj_set_style_text_color(ctx.input,lv_color_white(),0);lv_obj_set_style_border_color(ctx.input,lv_color_hex(Mint),LV_PART_CURSOR);lv_obj_set_style_border_width(ctx.input,2,LV_PART_CURSOR);lv_obj_set_style_border_side(ctx.input,LV_BORDER_SIDE_LEFT,LV_PART_CURSOR);lv_obj_add_state(ctx.input,LV_STATE_FOCUSED);
    button(ctx.body,i18n::tr("Search"),12,100,w-24,44,submit,0,0x237a70);
    auto*hint=label(ctx.body,i18n::tr("Tap Search to look up stops"),12,155,w-24,Muted);lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);
-   auto*k=lv_keyboard_create(ctx.body);lv_obj_set_align(k,LV_ALIGN_TOP_LEFT);lv_obj_set_pos(k,0,208);lv_obj_set_size(k,w,std::max(180,h-208));configure_touch_keyboard(k);lv_keyboard_set_textarea(k,ctx.input);return;
+   auto*k=lv_keyboard_create(ctx.body);lv_obj_set_align(k,LV_ALIGN_TOP_LEFT);lv_obj_set_pos(k,0,208);lv_obj_set_size(k,w,std::max(180,h-208));configure_touch_keyboard(k);attach_touch_keyboard(k,ctx.input);return;
   }
   label(ctx.body,ctx.query,12,8,w-24,Mint,true);button(ctx.body,i18n::tr("New search"),12,43,w-24,38,start_search);int y=92;
   auto&r=s.search_result();if(!r.error.empty()){label(ctx.body,r.error,12,y,w-24,Amber);y+=38;}

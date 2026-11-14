@@ -3,6 +3,7 @@
 #include "experimental/NativeSettings.h"
 #include "experimental/NativeServices.h"
 #include "experimental/NativeApp.h"
+#include "experimental/NativeAppStore.h"
 #include "AppRegistry.h"
 #include "services/UpdateService.h"
 #include <Arduino.h>
@@ -71,7 +72,7 @@ void scan() {
     std::sort(entries,entries+count,[](const Entry&a,const Entry&b){return a.manifest.name<b.manifest.name;});
 }
 void list() {
-    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=10;
+    scan();JsonDocument d;d["chip"]=chip();d["maxApps"]=MaxApps;d["maxBytes"]=max_package_bytes;d["developerMode"]=developer_mode();d["catalogUrl"]=GADGET_OS_APP_CATALOG_URL;d["apiMajor"]=1;d["apiMinor"]=11;
     auto apps=d["apps"].to<JsonArray>();
     for(unsigned i=0;i<count;++i){auto a=apps.add<JsonObject>();auto &m=entries[i].manifest;
         a["trusted"]=entries[i].trusted;a["id"]=m.id;a["name"]=m.name;a["version"]=m.version;a["running"]=native_app::running(m.id.c_str());}
@@ -263,11 +264,17 @@ void create_tile(lv_obj_t *grid, const Installed &entry) {
 }
 void launcher_ready(){dirty=false;}
 void create_tiles(lv_obj_t *grid){for(const auto &app:installed())create_tile(grid,app);launcher_ready();}
-void request_manager(){if(native_launcher_is_active()&&!native_app::busy())requested=true;}
-void close_manager(){if(visible)close_requested=true;}
+void request_manager(){
+    if(visible)return;
+    // A host upload command is also valid while the user browses Add apps.
+    // Let that screen finish its teardown before replacing it with pairing.
+    if(app_store::active()){app_store::close();requested=true;}
+    else if(native_launcher_is_active()&&!native_app::busy())requested=true;
+}
+void close_manager(){requested=false;if(visible)close_requested=true;}
 bool managing(){return requested||visible;}
 void poll(){
-    if(requested)show_manager();
+    if(requested&&!app_store::active()&&native_launcher_is_active())show_manager();
     server_poll();
     if(close_requested){close_requested=false;visible=false;notice=nullptr;native_launcher_restore();}
     else if(dirty&&!native_app::busy()&&native_launcher_is_active())native_launcher_restore();

@@ -67,3 +67,28 @@ void configure_touch_keyboard(lv_obj_t *keyboard, bool multiline){
  configure_controls(keyboard);
  lv_obj_add_event_cb(keyboard,[](lv_event_t *e){configure_controls(static_cast<lv_obj_t*>(lv_event_get_target(e)));},LV_EVENT_VALUE_CHANGED,nullptr);
 }
+
+void configure_text_input(lv_obj_t *textarea){
+ // Theme cursor styling is focus-dependent and normally blinks off. Keep a
+ // high-contrast insertion point visible throughout editing, including empty
+ // and single-line numeric fields.
+ for(auto state:{LV_STATE_DEFAULT,LV_STATE_FOCUSED}){
+  const auto selector=lv_style_selector_t(LV_PART_CURSOR)|lv_style_selector_t(state);
+  lv_obj_set_style_border_color(textarea,lv_color_hex(0x63e6be),selector);
+  lv_obj_set_style_border_width(textarea,state==LV_STATE_FOCUSED?2:0,selector);
+  lv_obj_set_style_border_side(textarea,LV_BORDER_SIDE_LEFT,selector);
+  lv_obj_set_style_border_opa(textarea,LV_OPA_COVER,selector);
+  lv_obj_set_style_opa(textarea,LV_OPA_COVER,selector);
+  lv_obj_set_style_pad_left(textarea,0,selector);
+  lv_obj_set_style_anim_duration(textarea,0,selector);
+ }
+}
+void attach_touch_keyboard(lv_obj_t *keyboard,lv_obj_t *textarea){
+ auto *previous=lv_keyboard_get_textarea(keyboard);
+ if(previous&&previous!=textarea)lv_obj_remove_state(previous,LV_STATE_FOCUSED);
+ lv_keyboard_set_textarea(keyboard,textarea);
+ if(textarea){
+  configure_text_input(textarea);
+  lv_obj_add_state(textarea,LV_STATE_FOCUSED);
+ }
+}

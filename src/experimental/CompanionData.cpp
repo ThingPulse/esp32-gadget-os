@@ -81,6 +81,7 @@ bool SystemSnapshot::update(const char *s,size_t n,uint64_t now){
  auto str=[&](const std::string &k,size_t max,bool hex=false){if(!d[k].is<const char*>())return;std::string v=d[k].as<std::string>();if(v.size()>max)return;for(unsigned char x:v)if(x<32||x>126||(hex&&!((x>='0'&&x<='9')||(x>='a'&&x<='f'))))return;if(hex&&v.size()%2)return;c[k]=v;};
  for(auto k:{"cpu","ram","battery"})integer(k,100);integer("power",3);integer("cores",4096);
  for(auto k:{"mem_mib","total_mib","disk_total_mib","disk_free_mib","down_bps","up_bps","uptime"})integer(k,2147483647);
+ str("cpu_cores",128,true);
  str("host",48);str("volume",48);str("cpu_hist",120,true);str("ram_hist",120,true);
  for(auto prefix:{"ct","mt"})for(int i=0;i<5;++i){auto k=std::string(prefix)+std::to_string(i);str(k+"_name",48);integer(k+"_pid",2147483647);integer(k+"_value",prefix[0]=='c'?1000:2147483647);}
  std::string next;serializeJson(c,next);if(next.size()>2048)return false;payload=std::move(next);received_at=now;return true;

@@ -4,12 +4,15 @@
 #include <cstring>
 
 namespace launcher {
-// Older companion-app packages use the dashboard's dark canvas as icon fill.
+// Some app packages use the dashboard's dark canvas as icon fill.
 // Give these launcher tiles visible colors without changing signed packages.
 inline uint16_t icon_tile_color(const char *id, uint16_t background) {
     if(background == 0x1106) {
         if(std::strcmp(id, "agent-usage") == 0) return 0x8318; // Purple
         if(std::strcmp(id, "system-monitor") == 0) return 0x2af6; // Blue
+        if(std::strcmp(id, "home-assistant") == 0) return 0x23ee; // Teal
+        if(std::strcmp(id, "planes") == 0) return 0x2af6; // Blue
+        if(std::strcmp(id, "transit") == 0) return 0x23ee; // Teal
     }
     return background;
 }

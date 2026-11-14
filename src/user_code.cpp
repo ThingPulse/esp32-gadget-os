@@ -976,7 +976,7 @@ static void launch_route(const std::string &route)
     return;
   }
 
-  if (route == "settings_system" || route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes" || route == "settings_display") {
+  if (route == "settings_arrange_apps" || route == "settings_system" || route == "settings_wifi" || route == "settings_time" || route == "settings_weather" || route == "settings_planes" || route == "settings_display") {
     UI_TRACE("Route", "launch settings subroute=%s", route.c_str());
     settings_launch_with_route(route.c_str());
     return;

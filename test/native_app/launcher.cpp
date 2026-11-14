@@ -11,6 +11,7 @@
 #include <cstring>
 #include <iostream>
 #include <fstream>
+#include <sys/stat.h>
 #include "../../experiments/native-app/sdk/gadget_app.h"
 extern "C" {
 #define gadget_app_entry settings_demo_entry
@@ -85,6 +86,31 @@ int main(){
  auto &cfg=ConfigStoreService::instance();assert(cfg.load("launcher"));auto order_before=cfg.get("order","");
  assert(native_app::simulator::install(catalog.front(),error));native_launcher_restore();settle();
  assert(cfg.load("launcher")&&cfg.get("order","")==order_before);
+ // Reorder through the real Settings UI, including a page-boundary move.
+ std::vector<std::string> expected;size_t begin=0;while(begin<order_before.size()){auto end=order_before.find('\n',begin);expected.push_back(order_before.substr(begin,end-begin));if(end==std::string::npos)break;begin=end+1;}
+ settings_launch();settle();click("Arrange apps");capture("arrange-apps");
+ auto arrange_list=lv_obj_get_child(lv_screen_active(),1);
+ auto arrange_row=[&](size_t index){return lv_obj_get_child(arrange_list,index+1);};
+ auto move=[&](size_t index,const char *direction){auto *label=find(arrange_row(index),direction);assert(label);lv_obj_send_event(lv_obj_get_parent(label),LV_EVENT_CLICKED,nullptr);settle();};
+ assert(lv_obj_has_state(lv_obj_get_parent(find(arrange_row(0),LV_SYMBOL_UP)),LV_STATE_DISABLED));
+ assert(lv_obj_has_state(lv_obj_get_parent(find(arrange_row(expected.size()-1),LV_SYMBOL_DOWN)),LV_STATE_DISABLED));
+ move(0,LV_SYMBOL_DOWN);std::swap(expected[0],expected[1]);
+ assert(cfg.load("launcher")&&cfg.get("order","")==launcher::serialize(expected));assert(find(arrange_row(1),"2. Add apps"));
+ move(8,LV_SYMBOL_DOWN);std::swap(expected[8],expected[9]);
+ assert(cfg.load("launcher")&&cfg.get("order","")==launcher::serialize(expected));capture("arrange-apps-page-move");
+ // Failed persistence leaves the displayed order untouched and reports it.
+ std::string path=std::string(getenv("GADGET_OS_DATA_DIR"))+"/config/launcher.json",backup=path+".bak";
+ assert(std::rename(path.c_str(),backup.c_str())==0);assert(mkdir(path.c_str(),0700)==0);
+ move(1,LV_SYMBOL_UP);assert(find(lv_screen_active(),"Could not save settings"));assert(find(arrange_row(1),"2. Add apps"));
+ assert(std::remove(path.c_str())==0);assert(std::rename(backup.c_str(),path.c_str())==0);
+ click(LV_SYMBOL_LEFT);click(LV_SYMBOL_LEFT);settle();assert(native_launcher_is_active());
+ pager=lv_obj_get_child(lv_screen_active(),1);auto *first_grid=lv_obj_get_child(lv_obj_get_child(pager,0),0);
+ assert(find(lv_obj_get_child(first_grid,0),"Weather"));assert(find(lv_obj_get_child(first_grid,1),"Add apps"));
+ assert(lv_obj_get_child_count(first_grid)==page_capacity);
+ settings_launch_with_route("settings_arrange_apps");settle();arrange_list=lv_obj_get_child(lv_screen_active(),1);
+ assert(find(arrange_row(1),"2. Add apps"));move(1,LV_SYMBOL_UP);std::swap(expected[0],expected[1]);
+ move(9,LV_SYMBOL_UP);std::swap(expected[8],expected[9]);assert(launcher::serialize(expected)==order_before);
+ click(LV_SYMBOL_LEFT);click(LV_SYMBOL_LEFT);settle();assert(native_launcher_is_active());
  assert(!native_app::launch_settings_id("agent-usage"));
  settings_launch_with_route("settings_apps");settle();
  assert(settings_apps_active()&&find(lv_screen_active(),"Stocks"));
@@ -104,6 +130,7 @@ int main(){
  pager=lv_obj_get_child(lv_screen_active(),1);lv_obj_update_layout(pager);
  lv_obj_scroll_to_x(pager,lv_obj_get_width(pager),LV_ANIM_OFF);
  native_launcher_release();native_launcher_restore();settle();
+ capture("launcher-second-page");
  for(const auto &item:catalog)assert(native_app::store::uninstall(item.id,error));
  native_launcher_restore();settle();pager=lv_obj_get_child(lv_screen_active(),1);assert(lv_obj_get_child_count(pager)==1);assert(lv_obj_get_scroll_x(pager)==0);
  // Exercise the device's release/recreate path from an app-settings list.

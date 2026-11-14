@@ -141,7 +141,7 @@ void render() {
     if(ctx.view==2) {
         label(ctx.body,i18n::tr("One symbol per line (maximum 10)"),12,8,w-24);
         label(ctx.body,i18n::tr("Reorder lines to reorder your watchlist"),12,29,w-24,Muted);
-        ctx.input=lv_textarea_create(ctx.body);lv_obj_set_pos(ctx.input,12,54);lv_obj_set_size(ctx.input,w-24,110);
+        ctx.input=lv_textarea_create(ctx.body);configure_text_input(ctx.input);lv_obj_set_pos(ctx.input,12,54);lv_obj_set_size(ctx.input,w-24,110);
         lv_textarea_set_max_length(ctx.input,250);lv_textarea_set_text(ctx.input,s.watchlist_text().c_str());
         lv_obj_set_style_bg_color(ctx.input,lv_color_hex(Card),0);lv_obj_set_style_text_color(ctx.input,lv_color_white(),0);
         // Keep the caret visible against the dark editor, including while the
@@ -159,7 +159,7 @@ void render() {
         button(ctx.body,i18n::tr("Save"),12,198,(w-36)/2,38,save);
         button(ctx.body,i18n::tr("Cancel"),24+(w-36)/2,198,(w-36)/2,38,back,0,Card);
         auto *keyboard=lv_keyboard_create(ctx.body);lv_obj_align(keyboard,LV_ALIGN_TOP_LEFT,0,244);lv_obj_set_size(keyboard,w,std::max(150,h-244));
-        configure_touch_keyboard(keyboard,!lv_textarea_get_one_line(ctx.input));lv_keyboard_set_textarea(keyboard,ctx.input);return;
+        configure_touch_keyboard(keyboard,!lv_textarea_get_one_line(ctx.input));attach_touch_keyboard(keyboard,ctx.input);return;
     }
     if(ctx.view==0) {
         label(ctx.body,i18n::tr("Watchlist"),12,10,140,0xffffff,true);
