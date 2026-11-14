@@ -7,6 +7,7 @@
 #include "experimental/Companion.h"
 #include "services/UpdateService.h"
 #include "ui/I18n.h"
+#include "MarketplacePresentation.h"
 #if defined(ARDUINO)
 #include "NativeTrust.h"
 #include <Arduino.h>
@@ -38,10 +39,11 @@ struct Transfer {
 };
 Transfer *transfer=nullptr;
 bool requested=false,visible=false,closing=false,loaded=false,has_new=false;
-bool background_started=false,redraw=false,browser_requested=false,pair_requested=false;
+bool background_started=false,redraw=false,pair_requested=false;
 uint32_t last_check=0;
 int selection=-1;
 size_t page=0;
+int browse_scroll=0;bool rendered_browse=false;
 constexpr size_t PageSize=4;
 std::vector<catalog::Item> items;
 std::vector<store::Installed> installed_apps;
@@ -52,7 +54,7 @@ std::vector<size_t> update_queue;
 size_t update_cursor=0,updated_count=0;
 std::string update_errors;
 bool updating_all(){return !update_queue.empty();}
-lv_obj_t *content=nullptr,*status_label=nullptr,*progress=nullptr,*badge=nullptr,*refresh_button=nullptr;
+lv_obj_t *content=nullptr,*status_label=nullptr,*progress=nullptr,*badge=nullptr,*refresh_button=nullptr,*manage_button=nullptr;
 
 bool ota_busy(){auto s=UpdateService::instance().state();return s==UpdateService::State::Downloading||s==UpdateService::State::ReadyToReboot;}
 #if defined(ARDUINO)
@@ -131,7 +133,7 @@ bool start(bool package=false){
         if(selection<0||size_t(selection)>=items.size())return false;
         success=simulator::install(items[selection],message);
         if(success){
-            message="Installed. Find it on the Installed apps screen.";
+            message="Installed. Find it on your home screens.";
             installed_apps=store::installed();
         }
     }else{items=simulator::catalog();loaded=true;message.clear();remember_catalog(true);}
@@ -184,8 +186,10 @@ lv_obj_t *button(lv_obj_t *parent,const char *value,lv_event_cb_t cb,void *data=
 }
 void render(){
     redraw=false;if(!visible||!content)return;
-    lv_obj_clean(content);progress=nullptr;status_label=nullptr;
+    if(rendered_browse)browse_scroll=lv_obj_get_scroll_y(content);
+    rendered_browse=false;lv_obj_clean(content);progress=nullptr;status_label=nullptr;
     lv_obj_scroll_to_y(content,0,LV_ANIM_OFF);
+    if(manage_button){if((transfer&&transfer->package)||updating_all())lv_obj_add_state(manage_button,LV_STATE_DISABLED);else lv_obj_remove_state(manage_button,LV_STATE_DISABLED);}
     if(refresh_button){if(transfer||updating_all())lv_obj_add_state(refresh_button,LV_STATE_DISABLED);else lv_obj_remove_state(refresh_button,LV_STATE_DISABLED);}
     if(updating_all()){
         const auto &item=items[update_queue[update_cursor]];
@@ -213,85 +217,84 @@ void render(){
         return;
     }
     if(installed_view){
-        text(content,"Installed apps");
+        text(content,"Manage apps");
+        const auto count=std::count_if(items.begin(),items.end(),update_available);
+        text(content,loaded?(std::string(i18n::tr("Updates available:"))+" "+std::to_string(count)).c_str():"Refresh to check for updates.",true);
+        auto *all=button(content,"Update all",[](lv_event_t*){begin_updates();});
+        if(!count||transfer)lv_obj_add_state(all,LV_STATE_DISABLED);
+        text(content,"Installed apps",true);
         if(installed_apps.empty())text(content,"No installed apps.",true);
         for(size_t i=0;i<installed_apps.size();++i){
-            button(content,installed_apps[i].manifest.name.c_str(),[](lv_event_t *e){
+            auto *installed=button(content,installed_apps[i].manifest.name.c_str(),[](lv_event_t *e){
                 const auto index=size_t(intptr_t(lv_event_get_user_data(e)));
                 if(index<installed_apps.size()){remove_id=installed_apps[index].manifest.id;message.clear();redraw=true;}
             },(void*)intptr_t(i));
+            lv_obj_set_style_bg_color(installed,lv_color_hex(0x213247),0);
+            text(content,(std::string("Version ")+installed_apps[i].manifest.version).c_str(),true);
         }
-        text(content,"Select an app to remove it.",true);
+        text(content,"Select an installed app to remove it.",true);
+        text(content,"Pairing and browser uploads are in Settings.",true);
         return;
     }
-    // Local pairing/upload must remain reachable while the catalogue loads,
-    // fails, or grows beyond the first screenful of apps.
-    if(selection<0){
-        button(content,"Pair computer",[](lv_event_t*){pair_requested=true;closing=true;});
-#if defined(ARDUINO)
-        auto *browser=button(content,"Browser installation",[](lv_event_t*){browser_requested=true;closing=true;});
-        lv_obj_set_style_bg_opa(browser,LV_OPA_TRANSP,0);
-        lv_obj_set_style_shadow_width(browser,0,0);
-#endif
-    }
-    if(selection<0&&loaded&&!transfer){
-        const auto count=std::count_if(items.begin(),items.end(),update_available);
-        if(count)text(content,(std::string(i18n::tr("Updates available:"))+" "+std::to_string(count)).c_str(),true);
-        auto *all=button(content,"Update all",[](lv_event_t*){begin_updates();});
-        if(!count)lv_obj_add_state(all,LV_STATE_DISABLED);
-    }
-    if(selection<0)button(content,"Installed apps",[](lv_event_t*){
-        installed_apps=store::installed();installed_view=true;message.clear();redraw=true;
-    });
-    if(transfer){
+    if(transfer&&(transfer->package||!loaded)){
         if(transfer->package){progress=lv_bar_create(content);lv_obj_set_size(progress,lv_pct(100),18);}
         text(content,"You can go back to cancel the download.",true);return;
     }
     if(selection>=0&&size_t(selection)<items.size()){
-        const auto &item=items[selection];text(content,item.name.c_str());text(content,item.description.c_str(),true);
-        text(content,("Version "+item.version).c_str(),true);
-        if(companion_setup::required(item.id)){
-            text(content,"Requires Gadget Companion on your computer",true);
-            button(content,"Set up computer",[](lv_event_t*){pair_requested=true;closing=true;});
-        }else text(content,"Works standalone",true);
+        const auto &item=items[selection];const auto *visual=marketplace::presentation(item.id);
+        text(content,item.name.c_str());
+        auto *hero=lv_obj_create(content);lv_obj_set_size(hero,lv_pct(100),204);lv_obj_set_style_bg_color(hero,lv_color_hex(0x213247),0);lv_obj_set_style_border_width(hero,0,0);lv_obj_set_style_pad_all(hero,8,0);lv_obj_remove_flag(hero,LV_OBJ_FLAG_SCROLLABLE);
+        if(visual){auto *preview=lv_image_create(hero);lv_image_set_src(preview,visual->preview);lv_obj_align(preview,LV_ALIGN_LEFT_MID,0,0);lv_obj_remove_flag(preview,LV_OBJ_FLAG_CLICKABLE);}
+        auto *icon=marketplace::icon(hero,visual,48);lv_obj_set_pos(icon,visual?142:10,8);
+        auto *example=lv_label_create(hero);lv_label_set_text(example,i18n::tr(visual?"Example screen":"Preview unavailable"));lv_obj_set_style_text_font(example,i18n::font14(),0);lv_obj_set_style_text_color(example,lv_color_hex(0xb6c7d8),0);lv_obj_set_width(example,128);lv_obj_set_pos(example,visual?142:10,68);
+        auto *requirement=lv_label_create(hero);lv_label_set_text(requirement,i18n::tr(visual?(visual->computer?"Requires computer":"Standalone"):"Check requirements"));lv_obj_set_width(requirement,128);lv_obj_set_style_text_font(requirement,i18n::font14(),0);lv_obj_set_style_text_color(requirement,lv_color_hex(0x67e6c3),0);lv_obj_set_pos(requirement,visual?142:10,120);
+        text(content,visual?visual->benefit:item.description.c_str(),true);
         const auto *old=find_installed(item.id);
         const bool same=old&&old->trusted&&old->manifest.version==item.version;
         button(content,same?"Open app":old?"Update app":"Install app",[](lv_event_t*){
             const auto &item=items[selection];const auto *old=find_installed(item.id);
             if(old&&old->trusted&&old->manifest.version==item.version){open_id=item.id;closing=true;}else start(true);
         });
-        if(old)button(content,"Remove",[](lv_event_t*){remove_id=items[selection].id;message.clear();redraw=true;});
-        if(!same)text(content,"The app will appear on the Installed apps screen.",true);
+        text(content,"What you need",true);
+        text(content,visual?visual->setup:"Review the app description for setup requirements.",true);
+        if(companion_setup::required(item.id)){
+            text(content,"Requires Gadget Companion on your computer",true);
+            button(content,"Set up computer",[](lv_event_t*){pair_requested=true;closing=true;});
+        }
+        text(content,item.description.c_str(),true);
+        text(content,("Version "+item.version).c_str(),true);
+        if(old)text(content,"Updates and removal are in Manage.",true);
         return;
     }
     if(loaded&&items.empty())text(content,"No compatible apps are available yet.");
     for(size_t index=page*PageSize;index<std::min(items.size(),(page+1)*PageSize);++index){
         auto &item=items[index];auto *card=lv_button_create(content);
-        lv_obj_set_size(card,lv_pct(100),80);
+        const auto *visual=marketplace::presentation(item.id);
+        lv_obj_set_size(card,lv_pct(100),144);
         lv_obj_set_style_bg_color(card,lv_color_hex(0x213247),0);lv_obj_set_style_border_width(card,0,0);
         lv_obj_set_style_shadow_width(card,0,0);lv_obj_set_style_pad_all(card,10,0);
+        auto *icon=marketplace::icon(card,visual,44);lv_obj_set_pos(icon,0,0);
         auto *name=lv_label_create(card);lv_label_set_text(name,item.name.c_str());
-        lv_obj_set_style_text_font(name,i18n::font24(),0);lv_obj_set_width(name,lv_pct(88));
-        lv_obj_set_height(name,30);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
-        lv_obj_align(name,LV_ALIGN_TOP_LEFT,0,0);
+        lv_obj_set_style_text_font(name,i18n::font14(),0);lv_obj_set_size(name,220,22);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);lv_obj_set_pos(name,54,0);
         const auto *old=find_installed(item.id);const bool same=old&&old->trusted&&old->manifest.version==item.version;
-        const char *state=same?"Installed":old?"Update available":new_ids.count(item.id)?"New":"View app";
-        auto *detail=lv_label_create(card);lv_label_set_text(detail,i18n::tr(state));
-        lv_obj_set_style_text_font(detail,i18n::font14(),0);lv_obj_set_style_text_color(detail,lv_color_hex(0x67e6c3),0);
-        lv_obj_align(detail,LV_ALIGN_BOTTOM_LEFT,0,0);
-        auto *arrow=lv_label_create(card);lv_label_set_text(arrow,LV_SYMBOL_RIGHT);lv_obj_align(arrow,LV_ALIGN_RIGHT_MID,0,0);
+        const char *state=same?"Installed":old?"Update available":new_ids.count(item.id)?"New":"Explore";
+        auto *detail=lv_label_create(card);lv_label_set_text(detail,i18n::tr(state));lv_obj_set_style_text_font(detail,i18n::font14(),0);lv_obj_set_style_text_color(detail,lv_color_hex(0x67e6c3),0);lv_obj_set_pos(detail,54,24);
+        auto *benefit=lv_label_create(card);lv_label_set_text(benefit,visual?i18n::tr(visual->benefit):item.description.c_str());lv_obj_set_size(benefit,276,42);lv_obj_set_style_text_font(benefit,i18n::font14(),0);lv_label_set_long_mode(benefit,LV_LABEL_LONG_DOT);lv_obj_set_pos(benefit,0,54);
+        auto *requirement=lv_label_create(card);lv_label_set_text(requirement,i18n::tr(visual?(visual->computer?"Requires computer":"Standalone"):"Check requirements"));lv_obj_set_style_text_font(requirement,i18n::font14(),0);lv_obj_set_style_text_color(requirement,lv_color_hex(0xb6c7d8),0);lv_obj_set_pos(requirement,0,104);
+        auto *arrow=lv_label_create(card);lv_label_set_text(arrow,LV_SYMBOL_RIGHT);lv_obj_align(arrow,LV_ALIGN_BOTTOM_RIGHT,0,0);
         lv_obj_add_event_cb(card,[](lv_event_t *e){
             selection=int(intptr_t(lv_event_get_user_data(e)));message.clear();redraw=true;
         },LV_EVENT_CLICKED,(void*)intptr_t(index));
     }
     if(items.size()>PageSize){
         text(content,("Page "+std::to_string(page+1)+" / "+std::to_string((items.size()+PageSize-1)/PageSize)).c_str(),true);
-        if(page)button(content,"Previous apps",[](lv_event_t*){--page;redraw=true;});
-        if((page+1)*PageSize<items.size())button(content,"More apps",[](lv_event_t*){++page;redraw=true;});
+        if(page)button(content,"Previous apps",[](lv_event_t*){--page;browse_scroll=0;rendered_browse=false;redraw=true;});
+        if((page+1)*PageSize<items.size())button(content,"More apps",[](lv_event_t*){++page;browse_scroll=0;rendered_browse=false;redraw=true;});
     }
+    rendered_browse=true;lv_obj_update_layout(content);lv_obj_scroll_to_y(content,browse_scroll,LV_ANIM_OFF);
 }
 void show(){
-    requested=false;visible=true;selection=-1;page=0;installed_view=false;remove_id.clear();native_launcher_release();
+    requested=false;visible=true;selection=-1;page=0;browse_scroll=0;rendered_browse=false;installed_view=false;remove_id.clear();native_launcher_release();
     auto *screen=lv_screen_active();lv_obj_set_style_bg_color(screen,lv_color_hex(0x172131),0);
     lv_obj_set_style_pad_all(screen,0,0);lv_obj_set_style_border_width(screen,0,0);
     lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
@@ -305,9 +308,12 @@ void show(){
         lv_obj_add_event_cb(b,action,LV_EVENT_CLICKED,nullptr);return b;
     };
     nav(LV_SYMBOL_LEFT,LV_ALIGN_LEFT_MID,[](lv_event_t*){if(updating_all())closing=true;else if(!remove_id.empty()){remove_id.clear();message.clear();redraw=true;}else if(installed_view){installed_view=false;message.clear();redraw=true;}else if(selection>=0&&!transfer){selection=-1;message.clear();redraw=true;}else closing=true;});
-    refresh_button=nav(LV_SYMBOL_REFRESH,LV_ALIGN_RIGHT_MID,[](lv_event_t*){selection=-1;page=0;installed_view=false;remove_id.clear();start();});
+    refresh_button=nav(LV_SYMBOL_REFRESH,LV_ALIGN_RIGHT_MID,[](lv_event_t*){selection=-1;page=0;remove_id.clear();start();});
+    manage_button=lv_button_create(bar);lv_obj_set_size(manage_button,76,36);lv_obj_set_pos(manage_button,182,4);lv_obj_set_style_bg_color(manage_button,lv_color_hex(0x213247),0);
+    auto *manage_label=lv_label_create(manage_button);lv_label_set_text(manage_label,i18n::tr("Manage"));lv_obj_set_style_text_font(manage_label,i18n::font14(),0);lv_obj_center(manage_label);
+    lv_obj_add_event_cb(manage_button,[](lv_event_t*){selection=-1;remove_id.clear();installed_apps=store::installed();installed_view=true;message.clear();redraw=true;},LV_EVENT_CLICKED,nullptr);
     auto *title=lv_label_create(bar);lv_label_set_text(title,i18n::tr("Add apps"));
-    lv_obj_set_style_text_color(title,lv_color_hex(0x63e6be),0);lv_obj_center(title);
+    lv_obj_set_style_text_color(title,lv_color_hex(0x63e6be),0);lv_obj_set_pos(title,54,13);
     content=lv_obj_create(screen);lv_obj_set_pos(content,0,44);
     lv_obj_set_size(content,lv_pct(100),lv_display_get_vertical_resolution(nullptr)-44);
     lv_obj_set_style_pad_all(content,10,0);lv_obj_set_style_pad_row(content,8,0);
@@ -354,11 +360,8 @@ void poll(){
     if(closing){
         update_queue.clear();update_errors.clear();selection=-1;
         closing=false;requested=false;visible=false;if(transfer)transfer->cancelled.store(true);
-        content=status_label=progress=refresh_button=nullptr;native_launcher_restore();
+        content=status_label=progress=refresh_button=manage_button=nullptr;native_launcher_restore();
         if(pair_requested){pair_requested=false;companion_setup::request();}
-#if defined(ARDUINO)
-        if(browser_requested){browser_requested=false;store::request_manager();}
-#endif
         if(!open_id.empty()){auto id=open_id;open_id.clear();native_app::launch_id(id.c_str());}
     }
 #if defined(ARDUINO)
@@ -372,7 +375,7 @@ void poll(){
                 Manifest expected{t->item.id,t->item.version,"app.elf",t->item.name};
                 success=store::install_signed(t->bytes,t->size,expected,message);
                 if(success){
-                    message="Installed. Find it on the Installed apps screen.";installed_apps=store::installed();
+                    message="Installed. Find it on your home screens.";installed_apps=store::installed();
                 }
             }else {
                 std::vector<catalog::Item> next;

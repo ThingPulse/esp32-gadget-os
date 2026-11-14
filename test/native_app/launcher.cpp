@@ -135,5 +135,7 @@ int main(){
  native_launcher_restore();settle();pager=lv_obj_get_child(lv_screen_active(),1);assert(lv_obj_get_child_count(pager)==1);assert(lv_obj_get_scroll_x(pager)==0);
  // Exercise the device's release/recreate path from an app-settings list.
  for(int i=0;i<20;++i){settings_launch_with_route("settings_apps");settle();native_launcher_release();native_launcher_restore();settle();assert(native_launcher_is_active());}
+ settings_launch();settle();assert(find(lv_screen_active(),"Pair computer"));click("Pair computer");native_app::poll();settle();assert(find(lv_screen_active(),"Connect computer"));click("Back");native_app::poll();settle();assert(native_launcher_is_active());
+
  std::cout<<"PASS: unified pagination, stable order, lazy settings discovery, API 1.8 fixture, persistent settings and both Back origins\n";
 }

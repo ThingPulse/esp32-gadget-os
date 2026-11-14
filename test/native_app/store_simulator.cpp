@@ -47,19 +47,16 @@ int main(int argc,char **argv){
     native_launcher_restore();
     if(std::string(argv[2])=="restart"){
         assert(native_app::store::installed().size()==1);assert(find(home,"System Monitor"));
-        click("Add apps");click("Installed apps");click("System Monitor");click("Remove");
+        click("Add apps");click("Manage");click("System Monitor");click("Remove");
         assert(native_app::store::installed().empty());native_app::app_store::close();native_app::poll();
         assert(!find(home,"System Monitor"));std::cout<<"PASS: persistence across processes and removal\n";return 0;
     }
     assert(native_app::store::installed().empty());
     click("Add apps");assert(find(lv_screen_active(),"Agent Dashboard"));
-    // Pairing must be above the catalogue rather than buried after its cards.
-    auto *pair=find(lv_screen_active(),"Pair computer");assert(pair);
-    assert(lv_obj_get_y(lv_obj_get_parent(pair))<lv_obj_get_y(lv_obj_get_parent(find(lv_screen_active(),"Agent Dashboard"))));
-    capture(argv[1],"store-catalog");
-    click("Pair computer");assert(find(lv_screen_active(),"Connect computer"));
-    click("Back");assert(native_launcher_is_active());click("Add apps");
-    click("System Monitor");assert(find(lv_screen_active(),"Install app"));
+    assert(find(lv_screen_active(),"Manage"));assert(!find(lv_screen_active(),"Pair computer"));assert(!find(lv_screen_active(),"Update all"));assert(!find(lv_screen_active(),"Installed apps"));
+    assert(find(lv_screen_active(),"Requires computer"));capture(argv[1],"store-catalog");
+    auto *browse=lv_obj_get_child(lv_screen_active(),1);lv_obj_scroll_to_y(browse,120,LV_ANIM_OFF);const auto browse_position=lv_obj_get_scroll_y(browse);assert(browse_position>0);
+    click("System Monitor");assert(find(lv_screen_active(),"Install app"));click(LV_SYMBOL_LEFT);assert(lv_obj_get_scroll_y(lv_obj_get_child(lv_screen_active(),1))==browse_position);click("System Monitor");
     assert(find(lv_screen_active(),"Requires Gadget Companion on your computer"));capture(argv[1],"store-details");
     click("Set up computer");assert(find(lv_screen_active(),"Connect computer"));capture(argv[1],"companion-setup");
     click("Back");assert(native_launcher_is_active());click("Add apps");click("System Monitor");
@@ -68,19 +65,19 @@ int main(int argc,char **argv){
     assert(find(lv_screen_active(),"Overview"));click(LV_SYMBOL_LEFT);lv_timer_handler();native_app::poll();
     assert(native_launcher_is_active());assert(find(home,"System Monitor"));
     click("System Monitor");assert(native_app::running("system-monitor"));click(LV_SYMBOL_LEFT);lv_timer_handler();native_app::poll();
-    click("Add apps");click("Installed apps");click("System Monitor");click("Cancel");assert(native_app::store::installed().size()==1);
+    click("Add apps");click("Manage");click("System Monitor");click("Cancel");assert(native_app::store::installed().size()==1);
     click("System Monitor");capture(argv[1],"store-remove");click("Remove");assert(native_app::store::installed().empty());
     native_app::app_store::close();native_app::poll();assert(!find(home,"System Monitor"));
     // Repeated lifecycle exercises rebuilding the launcher and deleting tile callbacks.
     for(int i=0;i<10;++i){
-        click("Add apps");click("System Monitor");click("Install app");click("Remove");click("Remove");
+        click("Add apps");click("System Monitor");click("Install app");click("Manage");click("System Monitor");click("Remove");
         native_app::app_store::close();native_app::poll();assert(native_app::store::installed().empty());
     }
     // Every catalog entry can be installed and removed through the shared UI.
     for(const auto &item:native_app::simulator::catalog()){
         click("Add apps");while(!find(lv_screen_active(),item.name.c_str()))click("More apps");click(item.name.c_str());click("Install app");
         native_app::app_store::close();native_app::poll();assert(find(home,item.name.c_str()));
-        click("Add apps");click("Installed apps");click(item.name.c_str());click("Remove");
+        click("Add apps");click("Manage");click(item.name.c_str());click("Remove");
         native_app::app_store::close();native_app::poll();assert(!find(home,item.name.c_str()));
     }
     // Bulk updates include later catalog pages, skip current/uninstalled apps,
@@ -97,7 +94,7 @@ int main(int argc,char **argv){
     seed_updates();
     std::filesystem::create_directories(".pio/native-app-settings");
     {std::ofstream f(".pio/native-app-settings/agent-usage-preview.json");f<<"{\"retained\":true}";}
-    click("Add apps");assert(find(lv_screen_active(),"Updates available: 3"));capture(argv[1],"store-update-all");
+    click("Add apps");click("Manage");assert(find(lv_screen_active(),"Updates available: 3"));capture(argv[1],"store-update-all");
     click("Update all");assert(find(lv_screen_active(),"Updating app 3 / 3"));
     assert(lv_obj_has_state(lv_obj_get_parent(find(lv_screen_active(),LV_SYMBOL_REFRESH)),LV_STATE_DISABLED));
     capture(argv[1],"store-update-progress");native_app::poll();assert(old_count()==0);
@@ -105,13 +102,13 @@ int main(int argc,char **argv){
     assert(lv_obj_has_state(lv_obj_get_parent(find(lv_screen_active(),"Update all")),LV_STATE_DISABLED));
     {std::ifstream f(".pio/native-app-settings/agent-usage-preview.json");std::string saved;std::getline(f,saved);assert(saved=="{\"retained\":true}");}
     native_app::app_store::close();native_app::poll();
-    seed_updates();click("Add apps");click("Update all");assert(old_count()==1);
+    seed_updates();click("Add apps");click("Manage");click("Update all");assert(old_count()==1);
     click(LV_SYMBOL_LEFT);assert(native_launcher_is_active());
     for(int i=0;i<5;++i)native_app::poll();assert(old_count()==1);
     // A real write failure must leave old versions intact and allow the queue
     // to continue once storage becomes writable, then offer failed apps again.
     seed_updates();std::filesystem::create_directories(".pio/simulator-apps.json.tmp/blocker");
-    click("Add apps");click("Update all");assert(old_count()==3);
+    click("Add apps");click("Manage");click("Update all");assert(old_count()==3);
     std::filesystem::remove_all(".pio/simulator-apps.json.tmp");native_app::poll();
     assert(old_count()==2);assert(native_app::store::installed().size()==4);
     const std::string result="Updated apps: 1 / 3.\n"+catalog[0].name+": Could not save installed apps.\n"+catalog[2].name+": Could not save installed apps.";
@@ -120,5 +117,7 @@ int main(int argc,char **argv){
     native_app::app_store::close();native_app::poll();
     for(const auto &app:native_app::store::installed()){std::string why;assert(native_app::store::uninstall(app.manifest.id,why));}
     click("Add apps");click("System Monitor");click("Install app");native_app::app_store::close();native_app::poll();
-    assert(find(home,"System Monitor"));std::cout<<"PASS: shared store UI, bulk updates, cancellation, failed-write recovery, settings retention and repeated lifecycle\n";
+    assert(find(home,"System Monitor"));
+    assert(i18n::set_language("de"));native_launcher_restore();click(i18n::tr("Add apps"));capture(argv[1],"store-catalog-german");click("System Monitor");capture(argv[1],"store-details-german");native_app::app_store::close();native_app::poll();assert(i18n::set_language("en"));
+    std::cout<<"PASS: shared store UI, bulk updates, cancellation, failed-write recovery, settings retention and repeated lifecycle\n";
 }

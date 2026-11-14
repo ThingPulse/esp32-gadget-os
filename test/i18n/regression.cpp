@@ -5,12 +5,12 @@
 #include "ui/AsciiFold.h"
 #include "../../src/apps/SettingsApp.cpp"
 // Both app implementations share this test translation unit.
-#pragma push_macro("APP_REGISTER_COLOR_RANK")
-#undef APP_REGISTER_COLOR_RANK
-#define APP_REGISTER_COLOR_RANK(name, symbol, fn, color, rank) \
+#pragma push_macro("APP_REGISTER_ID_COLOR_RANK")
+#undef APP_REGISTER_ID_COLOR_RANK
+#define APP_REGISTER_ID_COLOR_RANK(id, name, symbol, fn, color, rank) \
  static bool calculator_test_registration = AppRegistry::instance().registerApp(App{name, symbol, fn, color, rank})
 #include "../../src/apps/CalculatorApp.cpp"
-#pragma pop_macro("APP_REGISTER_COLOR_RANK")
+#pragma pop_macro("APP_REGISTER_ID_COLOR_RANK")
 #include <limits>
 struct Message {const char *en,*de;};
 #include "../../src/ui/GermanMessages.inc"

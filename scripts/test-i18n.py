@@ -17,8 +17,8 @@ for library in build.glob('lib*'):
 with tempfile.TemporaryDirectory(prefix='language-test-') as temporary:
     binary = Path(temporary) / 'regression'
     flags = shlex.split(subprocess.check_output(['sdl2-config', '--libs'], text=True))
-    subprocess.run(['c++', '-std=c++14', '-fsanitize=address', '-pthread',
-                    '-DLV_CONF_SKIP', '-DLV_USE_SYSMON=0', '-DLV_FONT_MONTSERRAT_24=1',
+    subprocess.run(['c++', '-std=c++17', '-fsanitize=address', '-pthread',
+                    '-DLV_CONF_SKIP', '-DLV_USE_SYSMON=1', '-DLV_USE_PERF_MONITOR=1', '-DLV_FONT_MONTSERRAT_24=1', '-DLV_FONT_MONTSERRAT_32=1', '-DGADGET_OS_APP_STORE_SIMULATOR=1',
                     '-Iinclude', '-I.pio/libdeps/native/lvgl', '-I.pio/libdeps/native/ArduinoJson/src', 'test/i18n/regression.cpp',
                     *map(str, objects), *flags, '-o', str(binary)], check=True)
     environment=dict(os.environ, ASAN_OPTIONS='detect_leaks=0', GADGET_OS_DATA_DIR=temporary)

@@ -1,5 +1,6 @@
 #include "experimental/NativeApp.h"
 #include "experimental/NativeStore.h"
+#include "experimental/CompanionSetup.h"
 #include "services/AppUsage.h"
 #include "ui/I18n.h"
 #include "apps/SettingsApp.h"
@@ -2103,6 +2104,32 @@ static lv_obj_t *create_settings_screen(lv_obj_t *home_scr, bool apps_only)
   }
   settings_row(i18n::tr("Apps"),switch_settings_list,home_scr);
   settings_row(i18n::tr("Arrange apps"),open_arrange_apps,scr);
+  struct ConnectionAction {lv_obj_t *home,*settings;bool browser;};
+  auto connect=[](lv_event_t *e){
+    auto *action=static_cast<ConnectionAction *>(lv_event_get_user_data(e));
+    auto *pending=new ConnectionAction(*action);
+    lv_async_call([](void *data){
+      auto *action=static_cast<ConnectionAction *>(data);
+      if(lv_screen_active()==action->settings&&lv_obj_is_valid(action->home)&&!native_app::busy()){
+        ui_load_screen(action->home,true);UiSessionState::set_route("home");
+#if GADGET_OS_NATIVE_APP_LOADER
+        if(action->browser)native_app::store::request_manager();else
+#endif
+        native_app::companion_setup::request();
+      }
+      delete action;
+    },pending);
+  };
+  auto connection_row=[&](const char *title,bool browser){
+    auto *action=new ConnectionAction{home_scr,scr,browser};
+    auto *row=settings_row(i18n::tr(title),connect,action);
+    lv_obj_add_event_cb(row,[](lv_event_t *e){delete static_cast<ConnectionAction *>(lv_event_get_user_data(e));},LV_EVENT_DELETE,action);
+  };
+  connection_row("Pair computer",false);
+#if GADGET_OS_NATIVE_APP_LOADER
+  connection_row("Browser installation",true);
+#endif
+
 #endif
 
   // Language changes are applied on the next main-loop iteration so this
